@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
@@ -42,9 +42,9 @@ class FirebaseRemoteRepository:
         preview_blob.upload_from_filename(str(public_dir / "preview.png"), content_type="image/png")
         qr_blob.upload_from_filename(str(public_dir / "qr.png"), content_type="image/png")
 
-        svg_url = svg_blob.generate_signed_url(version="v4", expiration=timedelta(days=365 * 5), method="GET")
-        preview_url = preview_blob.generate_signed_url(version="v4", expiration=timedelta(days=365 * 5), method="GET")
-        qr_url = qr_blob.generate_signed_url(version="v4", expiration=timedelta(days=365 * 5), method="GET")
+        svg_url = self._public_storage_url(f"{remote_root}/artwork.svg")
+        preview_url = self._public_storage_url(f"{remote_root}/preview.png")
+        qr_url = self._public_storage_url(f"{remote_root}/qr.png")
 
         record.public_status = PublicStatus.PUBLISHED
         record.plot_status = PlotStatus.PENDING
@@ -173,6 +173,10 @@ class FirebaseRemoteRepository:
     def download_asset(self, storage_path: str, destination: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         self._bucket.blob(storage_path).download_to_filename(str(destination))
+
+    def _public_storage_url(self, storage_path: str) -> str:
+        encoded_path = quote(storage_path, safe="")
+        return f"https://firebasestorage.googleapis.com/v0/b/{self.settings.storage_bucket}/o/{encoded_path}?alt=media"
 
 
 def recorded_datetime(value: str | None):
