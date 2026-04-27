@@ -12,6 +12,8 @@
 build/
 coverage/
 runtime/
+sessions_raw/*
+!sessions_raw/.gitkeep
 sessions_public/
 spool/
 public_gallery/build/
