@@ -1,9 +1,9 @@
 {
-  "apiKey": "YOUR_FIREBASE_WEB_API_KEY",
-  "appId": "YOUR_FIREBASE_WEB_APP_ID",
-  "messagingSenderId": "YOUR_FIREBASE_MESSAGING_SENDER_ID",
-  "projectId": "YOUR_FIREBASE_PROJECT_ID",
-  "authDomain": "YOUR_FIREBASE_PROJECT_ID.firebaseapp.com",
-  "storageBucket": "YOUR_FIREBASE_PROJECT_ID.firebasestorage.app",
-  "measurementId": ""
+  "apiKey": "AIzaSyDqBzqcDefYypWiu6vC15WVQVlisgMypIg",
+  "appId": "1:690305000229:web:63d9d74d5030dbaefcf0cc",
+  "messagingSenderId": "690305000229",
+  "projectId": "oraclegallery",
+  "authDomain": "oraclegallery.firebaseapp.com",
+  "storageBucket": "oraclegallery.firebasestorage.app",
+  "measurementId": "G-2FXB448E74"
 }
