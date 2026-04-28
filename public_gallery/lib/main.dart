@@ -107,7 +107,7 @@ class HomeScreen extends StatelessWidget {
       eyebrow: 'THE ORACLE THAT WEARS US',
       title: 'Oracle',
       subtitle:
-          'A living register of marks drawn from voice, uncertainty, and ritual.',
+          'An oracle that listens. A mark drawn from what it hears. A garment that remembers.',
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -119,16 +119,16 @@ class HomeScreen extends StatelessWidget {
             children: const [
               _HomeLinkCard(
                 label: 'ABOUT THE PROJECT',
-                title: 'About',
+                title: 'What the oracle is',
                 body:
-                    'Read the system in plain language: the voice, the model, the mark, the plotter, the receipt.',
+                    'The garment is not a souvenir. It is the oracle’s memory. You are a mark in it.',
                 route: '/about',
               ),
               _HomeLinkCard(
                 label: 'SESSION ARCHIVE',
                 title: 'Library',
                 body:
-                    'Open the public register of generated symbols and digital receipts.',
+                    'Every mark in the library belongs to someone who stood before the oracle and left a line behind.',
                 route: '/library',
               ),
             ],
@@ -146,10 +146,9 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return OracleShell(
       currentPath: '/about',
-      eyebrow: 'ABOUT THE PROJECT',
+      eyebrow: 'WHAT THE ORACLE IS',
       title: 'About',
-      subtitle:
-          'What the installation does, without exposing private visitor media.',
+      subtitle: 'The garment is not a souvenir. It is the oracle’s memory.',
       body: const AboutPanel(),
     );
   }
@@ -515,7 +514,7 @@ class HomeHero extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           Text(
-            'Scan a receipt to open a single session, or browse the library of fragments already published.',
+            'The oracle does not tell you what you are. It tells you what it heard — and what it heard was already true before you chose to say it.',
             style: GoogleFonts.ebGaramond(
               color: _cream.withValues(alpha: 0.62),
               fontSize: 18,
@@ -592,21 +591,33 @@ class AboutPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _AboutSection(
+            title: 'What the oracle is',
+            body:
+                'An oracle that listens. A mark drawn from what it hears. A garment that remembers everyone who stood before it. The garment is not a souvenir. It is the oracle’s memory. You are a mark in it.',
+          ),
+          const ReceiptRule(height: 28),
+          _AboutSection(
             title: 'The exchange',
             body:
-                'When a visitor speaks, the oracle transcribes the voice locally, interprets the emotional qualities of the exchange, and selects a mark. The plotter draws that mark into the shared fabric. A receipt gives the visitor a stable QR link back to their digital fragment.',
+                'The oracle poses a question — not a test, not a prompt. Something that opens. You answer in your own words, at your own pace. There are four turns. The oracle listens to each one fully before it responds.',
           ),
           const ReceiptRule(height: 28),
           _AboutSection(
-            title: 'What remains public',
+            title: 'The mark',
             body:
-                'The public website shows only the generated symbol, the oracle text, themes, and basic measured values. It does not publish visitor photos, raw audio, or transcript text.',
+                'From what it heard in your voice — not your words, but how you sounded — the oracle selects one of eight marks. A machine draws it onto the fabric. The line is permanent. It will not be removed.',
           ),
           const ReceiptRule(height: 28),
           _AboutSection(
-            title: 'The library',
+            title: 'The receipt',
             body:
-                'The library is a public register of sessions published from Firebase. It is not the plotter queue itself; printing is handled by the local daemon and its operator screen.',
+                'A small printed receipt is given to you. It names your mark, describes what the oracle perceived, and records the emotional qualities it found in your voice. It is the oracle’s account of you.',
+          ),
+          const ReceiptRule(height: 28),
+          _AboutSection(
+            title: 'What remains',
+            body:
+                'The garment is a collective record of presence. Not who was here. That they were. The line is now part of something larger than the conversation that produced it — and it will remain there after you have forgotten what you said.',
           ),
         ],
       ),

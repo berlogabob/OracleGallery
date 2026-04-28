@@ -62,7 +62,8 @@ class FirebaseRemoteRepository:
             content_type="application/json",
         )
 
-        self._db.collection("sessions").document(record.session_id).set(
+        session_ref = self._db.collection("sessions").document(record.session_id)
+        session_ref.set(
             {
                 "sessionId": record.session_id,
                 "createdAt": record.created_at.isoformat(),
@@ -93,7 +94,15 @@ class FirebaseRemoteRepository:
             },
             merge=True,
         )
-        self._db.collection("plot_jobs").document(record.session_id).set(
+        session_ref.update(
+            {
+                "previewUrl": firestore.DELETE_FIELD,
+                "assetUrls.preview": firestore.DELETE_FIELD,
+                "assetPaths.preview": firestore.DELETE_FIELD,
+            }
+        )
+        plot_job_ref = self._db.collection("plot_jobs").document(record.session_id)
+        plot_job_ref.set(
             {
                 "sessionId": record.session_id,
                 "title": record.title,
@@ -111,6 +120,7 @@ class FirebaseRemoteRepository:
             },
             merge=True,
         )
+        plot_job_ref.update({"previewUrl": firestore.DELETE_FIELD})
 
         return PublicationResult(
             public_status=PublicStatus.PUBLISHED,
