@@ -839,6 +839,11 @@ class SymbolView extends StatelessWidget {
       svgUrl,
       fit: BoxFit.contain,
       colorFilter: const ColorFilter.mode(_charcoal, BlendMode.srcIn),
+      errorBuilder: (context, error, stackTrace) => Text(
+        'SYMBOL LOAD ERROR',
+        textAlign: TextAlign.center,
+        style: GoogleFonts.cinzel(color: _rust, fontSize: 10, letterSpacing: 3),
+      ),
       placeholderBuilder: (context) => const SizedBox(
         width: 24,
         height: 24,
