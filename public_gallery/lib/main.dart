@@ -36,10 +36,12 @@ class OracleGalleryApp extends StatelessWidget {
 
   late final GoRouter _router = GoRouter(
     routes: [
+      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      GoRoute(path: '/about', builder: (context, state) => const AboutScreen()),
       GoRoute(
-        path: '/',
+        path: '/library',
         builder: (context, state) =>
-            SessionListScreen(firebaseReady: firebaseReady),
+            SessionLibraryScreen(firebaseReady: firebaseReady),
       ),
       GoRoute(
         path: '/session/:sessionId',
@@ -95,8 +97,66 @@ class OracleGalleryApp extends StatelessWidget {
   }
 }
 
-class SessionListScreen extends StatelessWidget {
-  const SessionListScreen({super.key, required this.firebaseReady});
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return OracleShell(
+      currentPath: '/',
+      eyebrow: 'THE ORACLE THAT WEARS US',
+      title: 'Oracle',
+      subtitle:
+          'A living register of marks drawn from voice, uncertainty, and ritual.',
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const HomeHero(),
+          const SizedBox(height: 28),
+          Wrap(
+            spacing: 16,
+            runSpacing: 16,
+            children: const [
+              _HomeLinkCard(
+                label: 'ABOUT THE PROJECT',
+                title: 'About',
+                body:
+                    'Read the system in plain language: the voice, the model, the mark, the plotter, the receipt.',
+                route: '/about',
+              ),
+              _HomeLinkCard(
+                label: 'SESSION ARCHIVE',
+                title: 'Library',
+                body:
+                    'Open the public register of generated symbols and digital receipts.',
+                route: '/library',
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return OracleShell(
+      currentPath: '/about',
+      eyebrow: 'ABOUT THE PROJECT',
+      title: 'About',
+      subtitle:
+          'What the installation does, without exposing private visitor media.',
+      body: const AboutPanel(),
+    );
+  }
+}
+
+class SessionLibraryScreen extends StatelessWidget {
+  const SessionLibraryScreen({super.key, required this.firebaseReady});
 
   final bool firebaseReady;
 
@@ -104,8 +164,9 @@ class SessionListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!firebaseReady) {
       return const OracleShell(
+        currentPath: '/library',
         eyebrow: 'CONFIGURATION',
-        title: 'Oracle',
+        title: 'Library',
         subtitle: 'Firebase config is missing in the build.',
         body: ConfigHelpCard(),
       );
@@ -117,8 +178,9 @@ class SessionListScreen extends StatelessWidget {
         .snapshots();
 
     return OracleShell(
+      currentPath: '/library',
       eyebrow: 'THE PUBLIC REGISTER',
-      title: 'Oracle',
+      title: 'Library',
       subtitle: 'Every published mark appears here without visitor photos.',
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: stream,
@@ -165,6 +227,7 @@ class SessionDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!firebaseReady) {
       return const OracleShell(
+        currentPath: '',
         eyebrow: 'CONFIGURATION',
         title: 'Session',
         subtitle: 'Firebase config is missing in the build.',
@@ -178,6 +241,7 @@ class SessionDetailScreen extends StatelessWidget {
         .snapshots();
 
     return OracleShell(
+      currentPath: '',
       eyebrow: 'THE FRAGMENT REMAINS',
       title: 'Receipt',
       subtitle: 'A digital copy of the mark named by the oracle.',
@@ -263,12 +327,14 @@ class SessionData {
 class OracleShell extends StatelessWidget {
   const OracleShell({
     super.key,
+    required this.currentPath,
     required this.eyebrow,
     required this.title,
     required this.subtitle,
     required this.body,
   });
 
+  final String currentPath;
   final String eyebrow;
   final String title;
   final String subtitle;
@@ -288,7 +354,12 @@ class OracleShell extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _Header(eyebrow: eyebrow, title: title, subtitle: subtitle),
+                    _Header(
+                      currentPath: currentPath,
+                      eyebrow: eyebrow,
+                      title: title,
+                      subtitle: subtitle,
+                    ),
                     const SizedBox(height: 28),
                     body,
                   ],
@@ -304,60 +375,266 @@ class OracleShell extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   const _Header({
+    required this.currentPath,
     required this.eyebrow,
     required this.title,
     required this.subtitle,
   });
 
+  final String currentPath;
   final String eyebrow;
   final String title;
   final String subtitle;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: () => GoRouter.of(context).go('/'),
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: _void,
-              border: Border.all(color: _goldDim, width: 0.6),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              'O',
-              style: GoogleFonts.cinzel(
-                color: _gold,
-                fontSize: 18,
-                letterSpacing: 2,
+        Wrap(
+          spacing: 18,
+          runSpacing: 14,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            InkWell(
+              onTap: () => GoRouter.of(context).go('/'),
+              child: Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: _void,
+                  border: Border.all(color: _goldDim, width: 0.6),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  'O',
+                  style: GoogleFonts.cinzel(
+                    color: _gold,
+                    fontSize: 18,
+                    letterSpacing: 2,
+                  ),
+                ),
               ),
             ),
+            _NavLink(label: 'HOME', route: '/', active: currentPath == '/'),
+            _NavLink(
+              label: 'ABOUT',
+              route: '/about',
+              active: currentPath == '/about',
+            ),
+            _NavLink(
+              label: 'LIBRARY',
+              route: '/library',
+              active: currentPath == '/library',
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+        Text(
+          eyebrow,
+          style: GoogleFonts.cinzel(
+            color: _rust,
+            fontSize: 9,
+            letterSpacing: 4,
           ),
         ),
-        const SizedBox(width: 18),
-        Expanded(
+        const SizedBox(height: 6),
+        Text(title, style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 4),
+        Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    );
+  }
+}
+
+class _NavLink extends StatelessWidget {
+  const _NavLink({
+    required this.label,
+    required this.route,
+    required this.active,
+  });
+
+  final String label;
+  final String route;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => GoRouter.of(context).go(route),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Text(
+          label,
+          style: GoogleFonts.cinzel(
+            color: active ? _rust : _charcoal,
+            fontSize: 11,
+            letterSpacing: 3.2,
+            decoration: active ? TextDecoration.underline : TextDecoration.none,
+            decorationColor: _rust,
+            decorationThickness: 0.8,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class HomeHero extends StatelessWidget {
+  const HomeHero({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 42),
+      decoration: BoxDecoration(
+        color: _void,
+        border: Border.all(color: _goldDim.withValues(alpha: 0.35), width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'THE ORACLE',
+            style: GoogleFonts.cinzel(
+              color: _gold,
+              fontSize: 24,
+              letterSpacing: 8,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'A voice enters. A system listens. A mark remains.',
+            style: GoogleFonts.ebGaramond(
+              color: _cream,
+              fontSize: 30,
+              height: 1.25,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Scan a receipt to open a single session, or browse the library of fragments already published.',
+            style: GoogleFonts.ebGaramond(
+              color: _cream.withValues(alpha: 0.62),
+              fontSize: 18,
+              height: 1.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeLinkCard extends StatelessWidget {
+  const _HomeLinkCard({
+    required this.label,
+    required this.title,
+    required this.body,
+    required this.route,
+  });
+
+  final String label;
+  final String title;
+  final String body;
+  final String route;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 360,
+      child: InkWell(
+        onTap: () => GoRouter.of(context).go(route),
+        child: Ink(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: _paper,
+            border: Border.all(color: _rule, width: 0.7),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _TinyLabel(text: label),
+              const SizedBox(height: 16),
               Text(
-                eyebrow,
+                title,
                 style: GoogleFonts.cinzel(
-                  color: _rust,
-                  fontSize: 9,
+                  color: _charcoal,
+                  fontSize: 20,
                   letterSpacing: 4,
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(title, style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 4),
-              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 12),
+              Text(body, style: Theme.of(context).textTheme.bodyLarge),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class AboutPanel extends StatelessWidget {
+  const AboutPanel({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 820),
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: _paper,
+        border: Border.all(color: _rule, width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AboutSection(
+            title: 'The exchange',
+            body:
+                'When a visitor speaks, the oracle transcribes the voice locally, interprets the emotional qualities of the exchange, and selects a mark. The plotter draws that mark into the shared fabric. A receipt gives the visitor a stable QR link back to their digital fragment.',
+          ),
+          const ReceiptRule(height: 28),
+          _AboutSection(
+            title: 'What remains public',
+            body:
+                'The public website shows only the generated symbol, the oracle text, themes, and basic measured values. It does not publish visitor photos, raw audio, or transcript text.',
+          ),
+          const ReceiptRule(height: 28),
+          _AboutSection(
+            title: 'The library',
+            body:
+                'The library is a public register of sessions published from Firebase. It is not the plotter queue itself; printing is handled by the local daemon and its operator screen.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AboutSection extends StatelessWidget {
+  const _AboutSection({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title.toUpperCase(),
+          style: GoogleFonts.cinzel(
+            color: _rust,
+            fontSize: 11,
+            letterSpacing: 4,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(body, style: Theme.of(context).textTheme.bodyLarge),
       ],
     );
   }
