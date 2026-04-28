@@ -76,7 +76,7 @@ class SessionUploader:
         return (time.time() - newest_mtime) >= self.settings.stability_seconds
 
     def _has_required_assets(self, session_dir: Path) -> bool:
-        return (session_dir / "artwork.svg").exists() and (session_dir / "preview.png").exists()
+        return self._resolve_svg_source(session_dir) is not None and self._resolve_preview_source(session_dir) is not None
 
     def _load_metadata(self, session_dir: Path) -> dict[str, Any]:
         for candidate in ("metadata.json", "session.json"):
@@ -90,8 +90,11 @@ class SessionUploader:
         public_dir = self.settings.public_root / session_id
         ensure_dir(public_dir)
 
-        svg_source = session_dir / "artwork.svg"
-        preview_source = session_dir / "preview.png"
+        svg_source = self._resolve_svg_source(session_dir)
+        preview_source = self._resolve_preview_source(session_dir)
+        if svg_source is None or preview_source is None:
+            raise FileNotFoundError(f"Missing SVG or preview asset in {session_dir}")
+
         svg_target = public_dir / "artwork.svg"
         preview_target = public_dir / "preview.png"
         shutil.copy2(svg_source, svg_target)
@@ -118,6 +121,24 @@ class SessionUploader:
         )
         self._write_manifest(record)
         return record
+
+    def _resolve_svg_source(self, session_dir: Path) -> Path | None:
+        candidates = [
+            session_dir / "artwork.svg",
+            session_dir / f"{session_dir.name}_plotter.svg",
+        ]
+        candidates.extend(sorted(session_dir.glob("*_plotter.svg")))
+        candidates.extend(sorted(session_dir.glob("*.svg")))
+        return next((path for path in candidates if path.exists()), None)
+
+    def _resolve_preview_source(self, session_dir: Path) -> Path | None:
+        candidates = [
+            session_dir / "preview.png",
+            session_dir / f"{session_dir.name}_visitor.png",
+        ]
+        candidates.extend(sorted(session_dir.glob("*_visitor.png")))
+        candidates.extend(sorted(session_dir.glob("*.png")))
+        return next((path for path in candidates if path.exists()), None)
 
     def _resolve_created_at(self, session_dir: Path, metadata: dict[str, Any]) -> datetime:
         raw = metadata.get("created_at")

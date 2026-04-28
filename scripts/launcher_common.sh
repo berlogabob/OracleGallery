@@ -7,9 +7,13 @@ typeset -g LAUNCHER_REPO_DIR=""
 typeset -g LAUNCHER_UV_BIN=""
 
 launcher_source_if_exists() {
-  local path="$1"
-  if [[ -f "$path" ]]; then
-    source "$path"
+  local profile_file="$1"
+  if [[ -f "$profile_file" ]]; then
+    local original_path="$PATH"
+    source "$profile_file" >/dev/null 2>&1 || true
+    if ! command -v tr >/dev/null 2>&1 || ! command -v mv >/dev/null 2>&1; then
+      PATH="$original_path"
+    fi
   fi
 }
 
@@ -93,9 +97,9 @@ launcher_require_existing_dir_var() {
   local hint="$2"
   launcher_require_var "$var_name" "$hint"
 
-  local path="${(P)var_name}"
-  if [[ ! -d "$path" ]]; then
-    launcher_fail "$var_name points to a missing folder: $path"
+  local resolved_path="${(P)var_name}"
+  if [[ ! -d "$resolved_path" ]]; then
+    launcher_fail "$var_name points to a missing folder: $resolved_path"
   fi
 }
 
@@ -104,9 +108,9 @@ launcher_require_existing_file_var() {
   local hint="$2"
   launcher_require_var "$var_name" "$hint"
 
-  local path="${(P)var_name}"
-  if [[ ! -f "$path" ]]; then
-    launcher_fail "$var_name points to a missing file: $path"
+  local resolved_path="${(P)var_name}"
+  if [[ ! -f "$resolved_path" ]]; then
+    launcher_fail "$var_name points to a missing file: $resolved_path"
   fi
 }
 
@@ -115,8 +119,8 @@ launcher_ensure_dir_var() {
   local hint="$2"
   launcher_require_var "$var_name" "$hint"
 
-  local path="${(P)var_name}"
-  mkdir -p "$path" || launcher_fail "Cannot create folder for $var_name: $path"
+  local resolved_path="${(P)var_name}"
+  mkdir -p "$resolved_path" || launcher_fail "Cannot create folder for $var_name: $resolved_path"
 }
 
 launcher_require_svg_bank() {
@@ -124,11 +128,11 @@ launcher_require_svg_bank() {
   local hint="$2"
   launcher_require_existing_dir_var "$var_name" "$hint"
 
-  local path="${(P)var_name}"
+  local resolved_path="${(P)var_name}"
   local -a svg_files
-  svg_files=("$path"/*.svg(N))
+  svg_files=("$resolved_path"/*.svg(N))
   if (( ${#svg_files} == 0 )); then
-    launcher_fail "No placeholder SVG files found in $path"
+    launcher_fail "No placeholder SVG files found in $resolved_path"
   fi
 }
 

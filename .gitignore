@@ -16,6 +16,9 @@ sessions_raw/*
 !sessions_raw/.gitkeep
 sessions_public/
 spool/
+assets/sessions/*
+!assets/sessions/SETUP_ORACLE_UPLOADER.command
+!assets/sessions/START_ORACLE_UPLOADER.command
 public_gallery/build/
 public_gallery/.dart_tool/
 public_gallery/.flutter-plugins

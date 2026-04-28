@@ -120,3 +120,36 @@ def test_published_session_is_not_imported_twice_after_restart(tmp_path: Path) -
     manifest = (public_root / "20260426_130000" / "manifest.json").read_text(encoding="utf-8")
     assert '"public_status": "published"' in manifest
     assert '"plot_status": "pending"' in manifest
+
+
+def test_touchdesigner_plotter_and_visitor_assets_are_imported(tmp_path: Path) -> None:
+    session_root = tmp_path / "sessions_raw"
+    public_root = tmp_path / "sessions_public"
+    session_id = "20260427_115941"
+    session_dir = session_root / session_id
+    session_dir.mkdir(parents=True)
+    _write_svg(session_dir / f"{session_id}_plotter.svg")
+    _write_png_placeholder(session_dir / f"{session_id}_visitor.png")
+
+    settings = UploaderSettings(
+        session_root=session_root,
+        public_root=public_root,
+        db_path=tmp_path / "runtime" / "uploader.sqlite3",
+        poll_seconds=0.0,
+        stability_seconds=0.0,
+        ready_marker_name="READY",
+        require_ready_marker=False,
+    )
+    firebase_settings = FirebaseSettings(
+        project_id="demo",
+        storage_bucket="demo.appspot.com",
+        credentials_path=tmp_path / "missing.json",
+        gallery_base_url="https://example.github.io/gallery",
+    )
+    store = UploaderStore(settings.db_path)
+    remote = FakeRemoteRepository()
+    uploader = SessionUploader(settings, firebase_settings, store, remote)
+
+    assert uploader.scan_once() == [session_id]
+    assert (public_root / session_id / "artwork.svg").exists()
+    assert (public_root / session_id / "preview.png").exists()
