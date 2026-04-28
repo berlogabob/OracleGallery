@@ -34,25 +34,26 @@ class FirebaseRemoteRepository:
     def publish_session(self, record: SessionRecord, public_dir: Path) -> PublicationResult:
         remote_root = f"sessions/{record.session_id}"
         svg_blob = self._bucket.blob(f"{remote_root}/artwork.svg")
-        preview_blob = self._bucket.blob(f"{remote_root}/preview.png")
+        receipt_blob = self._bucket.blob(f"{remote_root}/receipt.txt")
         qr_blob = self._bucket.blob(f"{remote_root}/qr.png")
         manifest_blob = self._bucket.blob(f"{remote_root}/manifest.json")
 
         svg_blob.upload_from_filename(str(public_dir / "artwork.svg"), content_type="image/svg+xml")
-        preview_blob.upload_from_filename(str(public_dir / "preview.png"), content_type="image/png")
+        receipt_blob.upload_from_filename(str(public_dir / "receipt.txt"), content_type="text/plain; charset=utf-8")
         qr_blob.upload_from_filename(str(public_dir / "qr.png"), content_type="image/png")
 
         svg_url = self._public_storage_url(f"{remote_root}/artwork.svg")
-        preview_url = self._public_storage_url(f"{remote_root}/preview.png")
+        receipt_url = self._public_storage_url(f"{remote_root}/receipt.txt")
         qr_url = self._public_storage_url(f"{remote_root}/qr.png")
 
         record.public_status = PublicStatus.PUBLISHED
         record.plot_status = PlotStatus.PENDING
         record.public_svg_path = f"{remote_root}/artwork.svg"
-        record.public_preview_path = f"{remote_root}/preview.png"
+        record.public_receipt_path = f"{remote_root}/receipt.txt"
         record.public_qr_path = f"{remote_root}/qr.png"
+        record.public_manifest_path = f"{remote_root}/manifest.json"
         record.public_svg_url = svg_url
-        record.public_preview_url = preview_url
+        record.public_receipt_url = receipt_url
         record.public_qr_url = qr_url
         record.last_error = ""
 
@@ -71,17 +72,21 @@ class FirebaseRemoteRepository:
                 "plotStatus": PlotStatus.PENDING.value,
                 "priority": record.priority,
                 "qrUrl": record.qr_url,
-                "previewUrl": preview_url,
                 "svgUrl": svg_url,
+                "receiptUrl": receipt_url,
+                "markName": record.mark_name,
+                "oracleText": record.oracle_text,
+                "themes": record.themes,
+                "measures": record.measures,
                 "assetUrls": {
-                    "preview": preview_url,
                     "svg": svg_url,
                     "qr": qr_url,
+                    "receipt": receipt_url,
                 },
                 "assetPaths": {
-                    "preview": f"{remote_root}/preview.png",
                     "svg": f"{remote_root}/artwork.svg",
                     "qr": f"{remote_root}/qr.png",
+                    "receipt": f"{remote_root}/receipt.txt",
                     "manifest": f"{remote_root}/manifest.json",
                 },
                 "metadata": record.extra_metadata,
@@ -96,12 +101,13 @@ class FirebaseRemoteRepository:
                 "createdAt": record.created_at.isoformat(),
                 "status": PlotStatus.PENDING.value,
                 "priority": record.priority,
+                "queue": "user",
                 "consumerId": "",
                 "sheetId": "",
+                "sheetIndex": -1,
                 "error": "",
                 "svgStoragePath": f"{remote_root}/artwork.svg",
                 "svgUrl": svg_url,
-                "previewUrl": preview_url,
             },
             merge=True,
         )
@@ -109,10 +115,11 @@ class FirebaseRemoteRepository:
         return PublicationResult(
             public_status=PublicStatus.PUBLISHED,
             public_svg_path=f"{remote_root}/artwork.svg",
-            public_preview_path=f"{remote_root}/preview.png",
+            public_receipt_path=f"{remote_root}/receipt.txt",
             public_qr_path=f"{remote_root}/qr.png",
+            public_manifest_path=f"{remote_root}/manifest.json",
             public_svg_url=svg_url,
-            public_preview_url=preview_url,
+            public_receipt_url=receipt_url,
             public_qr_url=qr_url,
         )
 
@@ -148,25 +155,40 @@ class FirebaseRemoteRepository:
             summary=payload.get("summary", ""),
             created_at=recorded_datetime(payload.get("createdAt")),
             priority=payload.get("priority", "user"),
+            queue=payload.get("queue", "user"),
             svg_storage_path=payload.get("svgStoragePath", ""),
             svg_url=payload.get("svgUrl", ""),
-            preview_url=payload.get("previewUrl", ""),
         )
 
-    def update_plot_job(self, session_id: str, status: PlotStatus, *, sheet_id: str = "", error: str = "") -> None:
+    def update_plot_job(
+        self,
+        session_id: str,
+        status: PlotStatus,
+        *,
+        sheet_id: str = "",
+        sheet_index: int | None = None,
+        error: str = "",
+    ) -> None:
+        update_payload = {
+            "status": status.value,
+            "sheetId": sheet_id,
+            "error": error,
+            "updatedAt": firestore.SERVER_TIMESTAMP,
+        }
+        session_payload = {
+            "plotStatus": status.value,
+        }
+        if sheet_index is not None:
+            update_payload["sheetIndex"] = sheet_index
+            session_payload["sheetIndex"] = sheet_index
+        if sheet_id:
+            session_payload["sheetId"] = sheet_id
         self._db.collection("plot_jobs").document(session_id).set(
-            {
-                "status": status.value,
-                "sheetId": sheet_id,
-                "error": error,
-                "updatedAt": firestore.SERVER_TIMESTAMP,
-            },
+            update_payload,
             merge=True,
         )
         self._db.collection("sessions").document(session_id).set(
-            {
-                "plotStatus": status.value,
-            },
+            session_payload,
             merge=True,
         )
 

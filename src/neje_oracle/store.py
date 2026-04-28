@@ -44,18 +44,35 @@ class UploaderStore(_SQLiteStore):
               summary TEXT NOT NULL,
               public_status TEXT NOT NULL,
               plot_status TEXT NOT NULL,
+              mark_name TEXT NOT NULL,
+              oracle_text TEXT NOT NULL,
+              themes_json TEXT NOT NULL,
+              measures_json TEXT NOT NULL,
               priority TEXT NOT NULL,
               qr_url TEXT NOT NULL,
               public_svg_path TEXT NOT NULL,
-              public_preview_path TEXT NOT NULL,
+              public_receipt_path TEXT NOT NULL,
               public_qr_path TEXT NOT NULL,
+              public_manifest_path TEXT NOT NULL,
               public_svg_url TEXT NOT NULL,
-              public_preview_url TEXT NOT NULL,
+              public_receipt_url TEXT NOT NULL,
               public_qr_url TEXT NOT NULL,
               last_error TEXT NOT NULL,
               updated_at TEXT NOT NULL
             )
             """
+        )
+        self._ensure_columns(
+            "sessions",
+            {
+                "mark_name": "TEXT NOT NULL DEFAULT ''",
+                "oracle_text": "TEXT NOT NULL DEFAULT ''",
+                "themes_json": "TEXT NOT NULL DEFAULT '[]'",
+                "measures_json": "TEXT NOT NULL DEFAULT '{}'",
+                "public_receipt_path": "TEXT NOT NULL DEFAULT ''",
+                "public_manifest_path": "TEXT NOT NULL DEFAULT ''",
+                "public_receipt_url": "TEXT NOT NULL DEFAULT ''",
+            },
         )
 
     def get_session(self, session_id: str) -> sqlite3.Row | None:
@@ -69,9 +86,10 @@ class UploaderStore(_SQLiteStore):
             """
             INSERT INTO sessions (
               session_id, source_dir, created_at, title, summary, public_status, plot_status,
-              priority, qr_url, public_svg_path, public_preview_path, public_qr_path,
-              public_svg_url, public_preview_url, public_qr_url, last_error, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              mark_name, oracle_text, themes_json, measures_json, priority, qr_url,
+              public_svg_path, public_receipt_path, public_qr_path, public_manifest_path,
+              public_svg_url, public_receipt_url, public_qr_url, last_error, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
               source_dir=excluded.source_dir,
               created_at=excluded.created_at,
@@ -79,13 +97,18 @@ class UploaderStore(_SQLiteStore):
               summary=excluded.summary,
               public_status=excluded.public_status,
               plot_status=excluded.plot_status,
+              mark_name=excluded.mark_name,
+              oracle_text=excluded.oracle_text,
+              themes_json=excluded.themes_json,
+              measures_json=excluded.measures_json,
               priority=excluded.priority,
               qr_url=excluded.qr_url,
               public_svg_path=excluded.public_svg_path,
-              public_preview_path=excluded.public_preview_path,
+              public_receipt_path=excluded.public_receipt_path,
               public_qr_path=excluded.public_qr_path,
+              public_manifest_path=excluded.public_manifest_path,
               public_svg_url=excluded.public_svg_url,
-              public_preview_url=excluded.public_preview_url,
+              public_receipt_url=excluded.public_receipt_url,
               public_qr_url=excluded.public_qr_url,
               last_error=excluded.last_error,
               updated_at=excluded.updated_at
@@ -98,18 +121,32 @@ class UploaderStore(_SQLiteStore):
                 record.summary,
                 record.public_status.value,
                 record.plot_status.value,
+                record.mark_name,
+                record.oracle_text,
+                json.dumps(record.themes, ensure_ascii=False),
+                json.dumps(record.measures, ensure_ascii=False),
                 record.priority,
                 record.qr_url,
                 record.public_svg_path,
-                record.public_preview_path,
+                record.public_receipt_path,
                 record.public_qr_path,
+                record.public_manifest_path,
                 record.public_svg_url,
-                record.public_preview_url,
+                record.public_receipt_url,
                 record.public_qr_url,
                 record.last_error,
                 datetime.now(tz=UTC).isoformat(),
             ),
         )
+
+    def _ensure_columns(self, table: str, columns: dict[str, str]) -> None:
+        existing = {
+            row["name"]
+            for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for name, definition in columns.items():
+            if name not in existing:
+                self._execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
 
 class PlotterStore(_SQLiteStore):
@@ -164,4 +201,3 @@ class PlotterStore(_SQLiteStore):
         if not row:
             return PlotterRuntimeState()
         return PlotterRuntimeState.from_dict(json.loads(row["value"]))
-

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .config import PlotterSettings, ensure_dir
 from .firebase_io import FirebaseRemoteRepository
-from .layout import build_hex_layout
+from .layout import build_sheet_layout, calculate_layout_capacity
 from .models import PlotJobLease, PlotStatus, PlotterRuntimeState, RuntimeStatus, SheetItem
 from .store import PlotterStore
 from .svg_gcode import generate_sheet_gcode
@@ -68,20 +68,33 @@ class PlotterDaemon:
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
 
+        layout_capacity = calculate_layout_capacity(
+            mode=self.settings.layout_mode,
+            sheet_width_mm=self.settings.sheet_width_mm,
+            sheet_height_mm=self.settings.sheet_height_mm,
+            margin_mm=self.settings.sheet_margin_mm,
+            diameter_mm=self.settings.cell_diameter_mm,
+        )
+        sheet_limit = min(self.settings.sheet_capacity or layout_capacity, layout_capacity)
+        if sheet_limit <= 0:
+            self._set_state(RuntimeStatus.ERROR, "Sheet layout has no printable cells")
+            return
+
         try:
-            user_jobs = self._claim_user_jobs(self.settings.sheet_capacity)
+            user_jobs = self._claim_user_jobs(sheet_limit)
         except Exception as exc:  # noqa: BLE001
             user_jobs = []
             self._set_state(RuntimeStatus.ERROR, f"Remote queue unavailable: {exc}")
 
-        items = self._materialize_sheet_items(user_jobs)
+        items = self._materialize_sheet_items(user_jobs, sheet_limit)
         if not items:
             self._set_state(RuntimeStatus.IDLE, "No user jobs or placeholders available")
             return
 
         sheet_id = datetime.now(tz=UTC).strftime("sheet_%Y%m%d_%H%M%S")
-        placements = build_hex_layout(
+        placements = build_sheet_layout(
             len(items),
+            mode=self.settings.layout_mode,
             sheet_width_mm=self.settings.sheet_width_mm,
             sheet_height_mm=self.settings.sheet_height_mm,
             margin_mm=self.settings.sheet_margin_mm,
@@ -90,14 +103,20 @@ class PlotterDaemon:
         if len(placements) < len(items):
             raise RuntimeError("Sheet layout capacity is smaller than the selected items.")
 
-        for job in user_jobs:
-            self.remote.update_plot_job(job.session_id, PlotStatus.PLOTTING, sheet_id=sheet_id)
+        for sheet_index, job in enumerate(user_jobs):
+            self.remote.update_plot_job(
+                job.session_id,
+                PlotStatus.PLOTTING,
+                sheet_id=sheet_id,
+                sheet_index=sheet_index,
+            )
             self.store.record_job_status(job.session_id, PlotStatus.PLOTTING, sheet_id=sheet_id)
 
         gcode = generate_sheet_gcode(
             items,
             placements,
             sample_step_mm=self.settings.sample_step_mm,
+            mark_diameter_mm=self.settings.mark_diameter_mm,
             travel_rate=self.settings.travel_rate,
             draw_rate=self.settings.draw_rate,
             pen_up_command=self.settings.pen_up_command,
@@ -113,9 +132,15 @@ class PlotterDaemon:
                             "session_id": item.session_id,
                             "source_kind": item.source_kind,
                             "svg_path": str(item.svg_path),
+                            "sheet_index": index,
+                            "center_x_mm": placements[index].center_x_mm,
+                            "center_y_mm": placements[index].center_y_mm,
+                            "cell_diameter_mm": placements[index].diameter_mm,
                         }
-                        for item in items
+                        for index, item in enumerate(items)
                     ],
+                    "layout_mode": self.settings.layout_mode,
+                    "mark_diameter_mm": self.settings.mark_diameter_mm,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -133,8 +158,13 @@ class PlotterDaemon:
             self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed: {exc}", sheet_id=sheet_id)
             return
 
-        for job in user_jobs:
-            self.remote.update_plot_job(job.session_id, PlotStatus.PRINTED, sheet_id=sheet_id)
+        for sheet_index, job in enumerate(user_jobs):
+            self.remote.update_plot_job(
+                job.session_id,
+                PlotStatus.PRINTED,
+                sheet_id=sheet_id,
+                sheet_index=sheet_index,
+            )
             self.store.record_job_status(job.session_id, PlotStatus.PRINTED, sheet_id=sheet_id)
 
         with self.state_lock:
@@ -155,7 +185,7 @@ class PlotterDaemon:
             jobs.append(job)
         return jobs
 
-    def _materialize_sheet_items(self, user_jobs: list[PlotJobLease]) -> list[SheetItem]:
+    def _materialize_sheet_items(self, user_jobs: list[PlotJobLease], sheet_limit: int) -> list[SheetItem]:
         items: list[SheetItem] = []
         cache_dir = self.settings.spool_root / "cache"
         ensure_dir(cache_dir)
@@ -169,11 +199,10 @@ class PlotterDaemon:
                     session_id=job.session_id,
                     title=job.title,
                     svg_path=local_svg,
-                    preview_url=job.preview_url,
                 )
             )
 
-        remaining = self.settings.sheet_capacity - len(items)
+        remaining = sheet_limit - len(items)
         if remaining <= 0:
             return items
 

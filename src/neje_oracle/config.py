@@ -57,13 +57,18 @@ class UploaderSettings:
 @dataclass(frozen=True)
 class PlotterSettings:
     db_path: Path = Path(os.getenv("NEJE_PLOTTER_DB_PATH", str(_repo_root() / "runtime" / "plotter.sqlite3")))
-    placeholder_root: Path = Path(os.getenv("NEJE_PLOTTER_PLACEHOLDER_ROOT", str(_repo_root() / "placeholders")))
+    placeholder_root: Path = Path(os.getenv("NEJE_PLOTTER_PLACEHOLDER_ROOT", str(_repo_root() / "assets" / "symbols")))
     spool_root: Path = Path(os.getenv("NEJE_PLOTTER_SPOOL_ROOT", str(_repo_root() / "spool")))
     poll_seconds: float = _env_float("NEJE_PLOTTER_POLL_SECONDS", 4.0)
     sheet_width_mm: float = _env_float("NEJE_PLOTTER_SHEET_WIDTH_MM", 594.0)
     sheet_height_mm: float = _env_float("NEJE_PLOTTER_SHEET_HEIGHT_MM", 841.0)
     sheet_margin_mm: float = _env_float("NEJE_PLOTTER_SHEET_MARGIN_MM", 24.0)
     cell_diameter_mm: float = _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 160.0)
+    mark_diameter_mm: float = _env_float(
+        "NEJE_PLOTTER_MARK_DIAMETER_MM",
+        _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 160.0) * 0.86,
+    )
+    layout_mode: str = os.getenv("NEJE_PLOTTER_LAYOUT_MODE", "hex")
     sheet_capacity: int = _env_int("NEJE_PLOTTER_SHEET_CAPACITY", 7)
     sample_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_STEP_MM", 3.0)
     travel_rate: float = _env_float("NEJE_PLOTTER_TRAVEL_RATE", 5000.0)
@@ -83,4 +88,3 @@ def ensure_parent(path: Path) -> None:
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
-

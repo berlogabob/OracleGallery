@@ -12,6 +12,7 @@ def generate_sheet_gcode(
     placements: list[SheetPlacement],
     *,
     sample_step_mm: float,
+    mark_diameter_mm: float,
     travel_rate: float,
     draw_rate: float,
     pen_up_command: str,
@@ -28,7 +29,7 @@ def generate_sheet_gcode(
 
     for item, placement in zip(items, placements, strict=True):
         lines.append(f"; item {item.session_id} ({item.source_kind})")
-        for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm):
+        for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm, mark_diameter_mm):
             start_x, start_y = polyline[0]
             lines.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
             lines.append(pen_down_command)
@@ -40,7 +41,12 @@ def generate_sheet_gcode(
     return "\n".join(lines) + "\n"
 
 
-def _svg_to_polylines(svg_path: Path, placement: SheetPlacement, sample_step_mm: float) -> list[list[tuple[float, float]]]:
+def _svg_to_polylines(
+    svg_path: Path,
+    placement: SheetPlacement,
+    sample_step_mm: float,
+    mark_diameter_mm: float,
+) -> list[list[tuple[float, float]]]:
     paths, _, _ = svg2paths2(str(svg_path))
     non_empty_paths = [path for path in paths if path.length(error=1e-4) > 0]
     if not non_empty_paths:
@@ -53,7 +59,7 @@ def _svg_to_polylines(svg_path: Path, placement: SheetPlacement, sample_step_mm:
 
     width = max(max_x - min_x, 1.0)
     height = max(max_y - min_y, 1.0)
-    scale = (placement.diameter_mm * 0.86) / max(width, height)
+    scale = mark_diameter_mm / max(width, height)
     mid_x = (min_x + max_x) / 2.0
     mid_y = (min_y + max_y) / 2.0
 
@@ -82,4 +88,3 @@ def _dedupe_points(points: list[tuple[float, float]]) -> list[tuple[float, float
         if point != deduped[-1]:
             deduped.append(point)
     return deduped
-

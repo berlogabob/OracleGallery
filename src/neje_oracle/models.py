@@ -43,18 +43,23 @@ class SessionRecord:
     summary: str
     source_dir: Path
     svg_file: Path
-    preview_file: Path
+    receipt_file: Path
     qr_file: Path
     qr_url: str
     public_status: PublicStatus
     plot_status: PlotStatus
+    mark_name: str = ""
+    oracle_text: str = ""
+    themes: list[str] = field(default_factory=list)
+    measures: dict[str, float] = field(default_factory=dict)
     priority: str = "user"
     extra_metadata: dict[str, Any] = field(default_factory=dict)
     public_svg_path: str = ""
-    public_preview_path: str = ""
+    public_receipt_path: str = ""
     public_qr_path: str = ""
+    public_manifest_path: str = ""
     public_svg_url: str = ""
-    public_preview_url: str = ""
+    public_receipt_url: str = ""
     public_qr_url: str = ""
     last_error: str = ""
 
@@ -63,7 +68,7 @@ class SessionRecord:
         payload["created_at"] = self.created_at.isoformat()
         payload["source_dir"] = str(self.source_dir)
         payload["svg_file"] = str(self.svg_file)
-        payload["preview_file"] = str(self.preview_file)
+        payload["receipt_file"] = str(self.receipt_file)
         payload["qr_file"] = str(self.qr_file)
         payload["public_status"] = self.public_status.value
         payload["plot_status"] = self.plot_status.value
@@ -74,10 +79,11 @@ class SessionRecord:
 class PublicationResult:
     public_status: PublicStatus
     public_svg_path: str = ""
-    public_preview_path: str = ""
+    public_receipt_path: str = ""
     public_qr_path: str = ""
+    public_manifest_path: str = ""
     public_svg_url: str = ""
-    public_preview_url: str = ""
+    public_receipt_url: str = ""
     public_qr_url: str = ""
     error: str = ""
 
@@ -89,9 +95,9 @@ class PlotJobLease:
     summary: str
     created_at: datetime
     priority: str
+    queue: str
     svg_storage_path: str
     svg_url: str
-    preview_url: str
 
 
 @dataclass
@@ -108,7 +114,6 @@ class SheetItem:
     session_id: str
     title: str
     svg_path: Path
-    preview_url: str = ""
 
 
 @dataclass
@@ -156,4 +161,3 @@ class HealthResponse(BaseModel):
 class ReloadResponse(BaseModel):
     ok: bool
     status: str
-

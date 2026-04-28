@@ -3,7 +3,7 @@
 This repository implements the split architecture for the exhibition system:
 
 - `neje-uploader` runs on the TouchDesigner machine and only watches/export-publishes session folders to Firebase.
-- `neje-plotter` runs on the MacBook and pulls print jobs from Firestore, fills sheets with placeholders, composes hex layouts, generates G-code, and exposes a tiny operator dashboard.
+- `neje-plotter` runs on the MacBook and pulls user print jobs from Firestore, fills sheets with local idle symbols from `assets/symbols`, composes `hex` or `grid` layouts, generates G-code, and exposes a tiny operator dashboard.
 - `public_gallery/` is a Flutter Web app meant for GitHub Pages from the root `docs/` folder and read-only session display via Firebase.
 
 The TouchDesigner machine does not do plot orchestration anymore. It only emits finished session folders, and the uploader publishes them.
@@ -14,13 +14,13 @@ Each finished TouchDesigner session folder must look like:
 
 ```text
 sessions_raw/<session_id>/
-  artwork.svg
-  preview.png
+  <session_id>_plotter.svg
+  <session_id>_receipt.txt
   metadata.json   # optional
   READY           # optional but recommended
 ```
 
-`metadata.json` can contain `title`, `summary`, `created_at`, and any extra JSON payload. Only `artwork.svg`, `preview.png`, QR, and a generated `manifest.json` are published.
+`metadata.json` can contain safe public metadata. The uploader also reads `session_log.csv` from the sessions root for `intensity`, `instability`, and `confidence`; it does not publish transcript, visitor photo, audio, or `*_visitor.png`. Only `artwork.svg`, `receipt.txt`, QR, and a generated `manifest.json` are published.
 
 ## Python services
 
@@ -71,6 +71,7 @@ If you want machine-specific templates, start from:
 - `public_gallery/` Flutter Web public gallery for GitHub Pages.
 - `docs/` built Flutter Web output served by GitHub Pages from `main`.
 - `firebase/` Firestore/Storage rules and Firestore indexes.
+- `assets/symbols/` eight local idle/filling SVG symbols used by the plotter daemon.
 - `archive/` old briefing artifacts and reference files that are not part of the runtime system.
 
 ## GitHub Pages

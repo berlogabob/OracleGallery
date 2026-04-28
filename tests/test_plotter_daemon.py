@@ -30,7 +30,15 @@ class FakeRemoteRepository:
             return None
         return self.jobs.pop(0)
 
-    def update_plot_job(self, session_id: str, status: PlotStatus, *, sheet_id: str = "", error: str = "") -> None:
+    def update_plot_job(
+        self,
+        session_id: str,
+        status: PlotStatus,
+        *,
+        sheet_id: str = "",
+        sheet_index: int | None = None,
+        error: str = "",
+    ) -> None:
         self.updates.append((session_id, status.value, sheet_id))
 
     def download_asset(self, storage_path: str, destination: Path) -> None:
@@ -47,6 +55,8 @@ def _settings(tmp_path: Path) -> PlotterSettings:
         sheet_height_mm=841,
         sheet_margin_mm=24,
         cell_diameter_mm=160,
+        mark_diameter_mm=120,
+        layout_mode="hex",
         sheet_capacity=3,
         sample_step_mm=8.0,
         travel_rate=5000,
@@ -73,9 +83,9 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
             summary="",
             created_at=datetime.now(tz=UTC),
             priority="user",
+            queue="user",
             svg_storage_path="sessions/a/artwork.svg",
             svg_url="",
-            preview_url="",
         ),
         PlotJobLease(
             session_id="session_b",
@@ -83,9 +93,9 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
             summary="",
             created_at=datetime.now(tz=UTC),
             priority="user",
+            queue="user",
             svg_storage_path="sessions/b/artwork.svg",
             svg_url="",
-            preview_url="",
         ),
     ]
     settings = _settings(tmp_path)

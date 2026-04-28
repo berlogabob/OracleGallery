@@ -4,8 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_config.dart';
+
+const _cream = Color(0xFFF7F4EF);
+const _paper = Color(0xFFFBF8F1);
+const _charcoal = Color(0xFF1A1A1A);
+const _charcoalMid = Color(0xFF3A3A3A);
+const _charcoalMuted = Color(0xFF6A6A6A);
+const _rust = Color(0xFF8B4513);
+const _gold = Color(0xFFC9A84C);
+const _goldDim = Color(0xFF8A6F2E);
+const _rule = Color(0xFFCCC5B8);
+const _void = Color(0xFF0A0A12);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,38 +53,43 @@ class OracleGalleryApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ThemeData(
-      useMaterial3: true,
-      scaffoldBackgroundColor: const Color(0xFFF5EFE3),
-      colorScheme: const ColorScheme.light(
-        primary: Color(0xFF1E1B18),
-        secondary: Color(0xFF9F5A26),
-        surface: Colors.white,
-      ),
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(
-          fontSize: 54,
-          fontWeight: FontWeight.w700,
-          height: 0.95,
-          color: Color(0xFF1E1B18),
-        ),
-        headlineMedium: TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF1E1B18),
-        ),
-        bodyLarge: TextStyle(
-          fontSize: 16,
-          height: 1.45,
-          color: Color(0xFF3A332D),
-        ),
-      ),
-    );
-
+    final bodyFont = GoogleFonts.ebGaramondTextTheme();
     return MaterialApp.router(
       title: 'Oracle Gallery',
       debugShowCheckedModeBanner: false,
-      theme: theme,
+      theme: ThemeData(
+        useMaterial3: true,
+        scaffoldBackgroundColor: _cream,
+        colorScheme: const ColorScheme.light(
+          primary: _charcoal,
+          secondary: _rust,
+          surface: _paper,
+        ),
+        textTheme: bodyFont.copyWith(
+          displayLarge: GoogleFonts.cinzel(
+            fontSize: 42,
+            letterSpacing: 8,
+            color: _charcoal,
+            fontWeight: FontWeight.w400,
+          ),
+          headlineMedium: GoogleFonts.cinzel(
+            fontSize: 18,
+            letterSpacing: 4,
+            color: _charcoal,
+            fontWeight: FontWeight.w400,
+          ),
+          bodyLarge: GoogleFonts.ebGaramond(
+            fontSize: 18,
+            height: 1.55,
+            color: _charcoalMid,
+          ),
+          bodyMedium: GoogleFonts.ebGaramond(
+            fontSize: 15,
+            height: 1.45,
+            color: _charcoalMuted,
+          ),
+        ),
+      ),
       routerConfig: _router,
     );
   }
@@ -86,8 +103,9 @@ class SessionListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!firebaseReady) {
-      return const GalleryShell(
-        title: 'Oracle Gallery',
+      return const OracleShell(
+        eyebrow: 'CONFIGURATION',
+        title: 'Oracle',
         subtitle: 'Firebase config is missing in the build.',
         body: ConfigHelpCard(),
       );
@@ -98,10 +116,10 @@ class SessionListScreen extends StatelessWidget {
         .orderBy('createdAt', descending: true)
         .snapshots();
 
-    return GalleryShell(
-      title: 'Digital Oracle',
-      subtitle:
-          'Every session appears here as soon as the uploader publishes it.',
+    return OracleShell(
+      eyebrow: 'THE PUBLIC REGISTER',
+      title: 'Oracle',
+      subtitle: 'Every published mark appears here without visitor photos.',
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
@@ -114,26 +132,18 @@ class SessionListScreen extends StatelessWidget {
           final docs = snapshot.data!.docs;
           if (docs.isEmpty) {
             return const EmptyState(
-              title: 'No sessions yet',
+              title: 'No marks yet',
               subtitle:
-                  'As soon as a visitor finishes a dialogue, their artifact will appear here.',
+                  'The register will fill when the uploader publishes sessions.',
             );
           }
 
           return Wrap(
-            spacing: 20,
-            runSpacing: 20,
-            children: docs.map((doc) {
-              final data = doc.data();
-              return SessionCard(
-                sessionId: data['sessionId'] as String? ?? doc.id,
-                title: data['title'] as String? ?? doc.id,
-                summary: data['summary'] as String? ?? '',
-                previewUrl: data['previewUrl'] as String? ?? '',
-                status: data['status'] as String? ?? 'publishing',
-                createdAt: data['createdAt'] as String? ?? '',
-              );
-            }).toList(),
+            spacing: 18,
+            runSpacing: 18,
+            children: docs
+                .map((doc) => SessionCard(session: SessionData.fromDoc(doc)))
+                .toList(),
           );
         },
       ),
@@ -154,8 +164,9 @@ class SessionDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!firebaseReady) {
-      return const GalleryShell(
-        title: 'Session unavailable',
+      return const OracleShell(
+        eyebrow: 'CONFIGURATION',
+        title: 'Session',
         subtitle: 'Firebase config is missing in the build.',
         body: ConfigHelpCard(),
       );
@@ -165,9 +176,11 @@ class SessionDetailScreen extends StatelessWidget {
         .collection('sessions')
         .doc(sessionId)
         .snapshots();
-    return GalleryShell(
-      title: 'Session Artifact',
-      subtitle: 'This page is stable even if the session is still publishing.',
+
+    return OracleShell(
+      eyebrow: 'THE FRAGMENT REMAINS',
+      title: 'Receipt',
+      subtitle: 'A digital copy of the mark named by the oracle.',
       body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: stream,
         builder: (context, snapshot) {
@@ -181,79 +194,82 @@ class SessionDetailScreen extends StatelessWidget {
           if (!doc.exists) {
             return PublishingState(sessionId: sessionId);
           }
-          final data = doc.data()!;
-          final status = data['status'] as String? ?? 'publishing';
-          if (status != 'published') {
+          final session = SessionData.fromDoc(doc);
+          if (session.status != 'published') {
             return PublishingState(sessionId: sessionId);
           }
-
-          final assetUrls =
-              (data['assetUrls'] as Map<String, dynamic>?) ?? const {};
-          final previewUrl =
-              assetUrls['preview'] as String? ??
-              data['previewUrl'] as String? ??
-              '';
-          final svgUrl =
-              assetUrls['svg'] as String? ?? data['svgUrl'] as String? ?? '';
-          final qrUrl = data['qrUrl'] as String? ?? '';
-
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                data['title'] as String? ?? sessionId,
-                style: Theme.of(context).textTheme.displayLarge,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                data['summary'] as String? ?? '',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
-              const SizedBox(height: 28),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final isWide = constraints.maxWidth >= 980;
-                  final preview = PreviewPanel(
-                    previewUrl: previewUrl,
-                    svgUrl: svgUrl,
-                  );
-                  final meta = SessionMetaPanel(
-                    sessionId: sessionId,
-                    createdAt: data['createdAt'] as String? ?? '',
-                    plotStatus: data['plotStatus'] as String? ?? 'pending',
-                    qrUrl: qrUrl,
-                  );
-                  if (isWide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 3, child: preview),
-                        const SizedBox(width: 24),
-                        Expanded(flex: 2, child: meta),
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [preview, const SizedBox(height: 24), meta],
-                  );
-                },
-              ),
-            ],
-          );
+          return Center(child: ReceiptCard(session: session));
         },
       ),
     );
   }
 }
 
-class GalleryShell extends StatelessWidget {
-  const GalleryShell({
+class SessionData {
+  const SessionData({
+    required this.sessionId,
+    required this.createdAt,
+    required this.status,
+    required this.plotStatus,
+    required this.markName,
+    required this.oracleText,
+    required this.themes,
+    required this.measures,
+    required this.svgUrl,
+    required this.receiptUrl,
+    required this.qrUrl,
+  });
+
+  final String sessionId;
+  final Object? createdAt;
+  final String status;
+  final String plotStatus;
+  final String markName;
+  final String oracleText;
+  final List<String> themes;
+  final Map<String, double> measures;
+  final String svgUrl;
+  final String receiptUrl;
+  final String qrUrl;
+
+  factory SessionData.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    final assetUrls = (data['assetUrls'] as Map<String, dynamic>?) ?? const {};
+    return SessionData(
+      sessionId: data['sessionId'] as String? ?? doc.id,
+      createdAt: data['createdAt'],
+      status: data['status'] as String? ?? 'publishing',
+      plotStatus: data['plotStatus'] as String? ?? 'pending',
+      markName:
+          data['markName'] as String? ??
+          data['title'] as String? ??
+          doc.id.replaceAll('_', ' '),
+      oracleText:
+          data['oracleText'] as String? ??
+          data['summary'] as String? ??
+          'The oracle has not spoken yet.',
+      themes: _stringList(data['themes']),
+      measures: _measuresMap(data['measures']),
+      svgUrl: assetUrls['svg'] as String? ?? data['svgUrl'] as String? ?? '',
+      receiptUrl:
+          assetUrls['receipt'] as String? ??
+          data['receiptUrl'] as String? ??
+          '',
+      qrUrl: data['qrUrl'] as String? ?? '',
+    );
+  }
+}
+
+class OracleShell extends StatelessWidget {
+  const OracleShell({
     super.key,
+    required this.eyebrow,
     required this.title,
     required this.subtitle,
     required this.body,
   });
 
+  final String eyebrow;
   final String title;
   final String subtitle;
   final Widget body;
@@ -262,178 +278,142 @@ class GalleryShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF5EFE3), Color(0xFFE6D5B6)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Stack(
-          children: [
-            const Positioned(
-              top: -120,
-              right: -100,
-              child: _Orb(size: 320, color: Color(0x33C36E2F)),
-            ),
-            const Positioned(
-              left: -80,
-              bottom: -60,
-              child: _Orb(size: 260, color: Color(0x229E7D4F)),
-            ),
-            SafeArea(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1280),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap: () => GoRouter.of(context).go('/'),
-                              child: Container(
-                                width: 64,
-                                height: 64,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E1B18),
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    '⟡',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 28,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 18),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    title,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.headlineMedium,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    subtitle,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-                        body,
-                      ],
-                    ),
-                  ),
+        decoration: const BoxDecoration(color: _cream),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1180),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Header(eyebrow: eyebrow, title: title, subtitle: subtitle),
+                    const SizedBox(height: 28),
+                    body,
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({
+    required this.eyebrow,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final String eyebrow;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => GoRouter.of(context).go('/'),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: _void,
+              border: Border.all(color: _goldDim, width: 0.6),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              'O',
+              style: GoogleFonts.cinzel(
+                color: _gold,
+                fontSize: 18,
+                letterSpacing: 2,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 18),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                eyebrow,
+                style: GoogleFonts.cinzel(
+                  color: _rust,
+                  fontSize: 9,
+                  letterSpacing: 4,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(title, style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 4),
+              Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
 class SessionCard extends StatelessWidget {
-  const SessionCard({
-    super.key,
-    required this.sessionId,
-    required this.title,
-    required this.summary,
-    required this.previewUrl,
-    required this.status,
-    required this.createdAt,
-  });
+  const SessionCard({super.key, required this.session});
 
-  final String sessionId;
-  final String title;
-  final String summary;
-  final String previewUrl;
-  final String status;
-  final String createdAt;
+  final SessionData session;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 340,
+      width: 350,
       child: InkWell(
-        borderRadius: BorderRadius.circular(28),
-        onTap: () => GoRouter.of(context).go('/session/$sessionId'),
+        onTap: () => GoRouter.of(context).go('/session/${session.sessionId}'),
         child: Ink(
+          padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 32,
-                offset: Offset(0, 18),
-              ),
-            ],
+            color: _paper,
+            border: Border.all(color: _rule, width: 0.6),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-                child: SizedBox(
-                  height: 240,
-                  width: double.infinity,
-                  child: previewUrl.isEmpty
-                      ? const _PreviewFallback()
-                      : Image.network(previewUrl, fit: BoxFit.cover),
+              _TinyLabel(text: _formatOracleDate(session.createdAt)),
+              const SizedBox(height: 14),
+              SizedBox(
+                height: 120,
+                child: Center(child: SymbolView(svgUrl: session.svgUrl)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                session.markName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.cinzel(
+                  fontSize: 17,
+                  letterSpacing: 3,
+                  color: _charcoal,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _StatusChip(status: status),
-                    const SizedBox(height: 12),
-                    Text(
-                      title,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineMedium?.copyWith(fontSize: 24),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      summary.isEmpty ? 'Oracle session $sessionId' : summary,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      createdAt,
-                      style: const TextStyle(
-                        color: Color(0xFF6B6258),
-                        fontSize: 13,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 10),
+              Text(
+                session.oracleText,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.ebGaramond(
+                  fontSize: 17,
+                  height: 1.35,
+                  fontStyle: FontStyle.italic,
+                  color: _charcoalMid,
                 ),
               ),
+              const SizedBox(height: 16),
+              _StatusLine(status: session.plotStatus),
             ],
           ),
         ),
@@ -442,116 +422,240 @@ class SessionCard extends StatelessWidget {
   }
 }
 
-class PreviewPanel extends StatelessWidget {
-  const PreviewPanel({
-    super.key,
-    required this.previewUrl,
-    required this.svgUrl,
-  });
+class ReceiptCard extends StatelessWidget {
+  const ReceiptCard({super.key, required this.session});
 
-  final String previewUrl;
-  final String svgUrl;
+  final SessionData session;
 
   @override
   Widget build(BuildContext context) {
+    final dateText = _formatOracleDate(session.createdAt);
     return Container(
-      padding: const EdgeInsets.all(18),
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 560),
+      padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 44),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        color: _paper,
+        border: Border.all(color: _rule, width: 0.8),
         boxShadow: const [
           BoxShadow(
             color: Color(0x14000000),
-            blurRadius: 32,
+            blurRadius: 34,
             offset: Offset(0, 18),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Preview',
-            style: TextStyle(
-              fontSize: 14,
-              letterSpacing: 1.1,
-              color: Color(0xFF6B6258),
+          Text(
+            'THE ORACLE',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              color: _goldDim,
+              fontSize: 20,
+              letterSpacing: 8,
             ),
           ),
-          const SizedBox(height: 12),
-          AspectRatio(
-            aspectRatio: 1.1,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: previewUrl.isEmpty
-                  ? const _PreviewFallback()
-                  : Image.network(previewUrl, fit: BoxFit.cover),
+          const SizedBox(height: 10),
+          Text(
+            dateText,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              color: _charcoalMuted,
+              fontSize: 11,
+              letterSpacing: 5,
             ),
           ),
+          const ReceiptRule(height: 34),
+          const _TinyLabel(text: 'THE MARK'),
           const SizedBox(height: 18),
-          if (svgUrl.isNotEmpty)
-            Container(
-              constraints: const BoxConstraints(minHeight: 320),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                color: const Color(0xFFF7F5EF),
-              ),
-              child: SvgPicture.network(
-                svgUrl,
-                fit: BoxFit.contain,
-                placeholderBuilder: (context) =>
-                    const Center(child: CircularProgressIndicator()),
-              ),
+          SizedBox(
+            height: 125,
+            child: Center(child: SymbolView(svgUrl: session.svgUrl)),
+          ),
+          const SizedBox(height: 28),
+          Text(
+            session.markName,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              color: _charcoal,
+              fontSize: 23,
+              letterSpacing: 4.5,
             ),
+          ),
+          const ReceiptRule(height: 34),
+          const _TinyLabel(text: 'WHAT THE ORACLE PERCEIVED'),
+          const SizedBox(height: 12),
+          Text(
+            session.oracleText,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.ebGaramond(
+              color: _charcoal,
+              fontSize: 20,
+              fontStyle: FontStyle.italic,
+              height: 1.45,
+            ),
+          ),
+          const ReceiptRule(height: 34),
+          const _TinyLabel(text: 'WHAT THE SYSTEM MEASURED'),
+          const SizedBox(height: 16),
+          _MeasureRows(measures: session.measures),
+          const ReceiptRule(height: 34),
+          const _TinyLabel(text: 'THEMES'),
+          const SizedBox(height: 12),
+          Text(
+            _themesText(session.themes),
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              color: _charcoal,
+              fontSize: 16,
+              letterSpacing: 4,
+            ),
+          ),
+          const ReceiptRule(height: 34),
+          _StatusLine(status: session.plotStatus),
+          const SizedBox(height: 18),
+          Text(
+            'This fragment remains.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.ebGaramond(
+              color: _goldDim,
+              fontSize: 18,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class SessionMetaPanel extends StatelessWidget {
-  const SessionMetaPanel({
-    super.key,
-    required this.sessionId,
-    required this.createdAt,
-    required this.plotStatus,
-    required this.qrUrl,
-  });
+class SymbolView extends StatelessWidget {
+  const SymbolView({super.key, required this.svgUrl});
 
-  final String sessionId;
-  final String createdAt;
-  final String plotStatus;
-  final String qrUrl;
+  final String svgUrl;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1B18),
-        borderRadius: BorderRadius.circular(30),
+    if (svgUrl.isEmpty) {
+      return Text(
+        'SYMBOL PUBLISHING',
+        style: GoogleFonts.cinzel(
+          color: _charcoalMuted,
+          fontSize: 10,
+          letterSpacing: 3,
+        ),
+      );
+    }
+    return SvgPicture.network(
+      svgUrl,
+      fit: BoxFit.contain,
+      colorFilter: const ColorFilter.mode(_charcoal, BlendMode.srcIn),
+      placeholderBuilder: (context) => const SizedBox(
+        width: 24,
+        height: 24,
+        child: CircularProgressIndicator(strokeWidth: 1.2),
       ),
-      child: DefaultTextStyle(
-        style: const TextStyle(
-          color: Color(0xFFF7F1E6),
-          fontSize: 16,
-          height: 1.4,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Session metadata',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+    );
+  }
+}
+
+class _MeasureRows extends StatelessWidget {
+  const _MeasureRows({required this.measures});
+
+  final Map<String, double> measures;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = [
+      ('VOICE INTENSITY', measures['intensity']),
+      ('INSTABILITY', measures['instability']),
+      ('CONFIDENCE', measures['confidence']),
+    ];
+    return Column(
+      children: rows
+          .map(
+            (row) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 170,
+                    child: Text(
+                      row.$1,
+                      textAlign: TextAlign.right,
+                      style: GoogleFonts.cinzel(
+                        color: _charcoal,
+                        fontSize: 12,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  SizedBox(
+                    width: 54,
+                    child: Text(
+                      row.$2 == null ? '-' : row.$2!.toStringAsFixed(2),
+                      style: GoogleFonts.cinzel(
+                        color: _charcoal,
+                        fontSize: 12,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 18),
-            _MetaLine(label: 'Session ID', value: sessionId),
-            _MetaLine(label: 'Created', value: createdAt),
-            _MetaLine(label: 'Plot status', value: plotStatus),
-            _MetaLine(label: 'QR target', value: qrUrl),
-          ],
-        ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ReceiptRule extends StatelessWidget {
+  const ReceiptRule({super.key, required this.height});
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: height / 2),
+      child: Container(height: 0.7, color: _rule),
+    );
+  }
+}
+
+class _TinyLabel extends StatelessWidget {
+  const _TinyLabel({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: GoogleFonts.cinzel(color: _rust, fontSize: 11, letterSpacing: 5),
+    );
+  }
+}
+
+class _StatusLine extends StatelessWidget {
+  const _StatusLine({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'PRINT STATUS: ${status.toUpperCase()}',
+      textAlign: TextAlign.center,
+      style: GoogleFonts.cinzel(
+        color: _charcoalMuted,
+        fontSize: 10,
+        letterSpacing: 3,
       ),
     );
   }
@@ -564,27 +668,30 @@ class PublishingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(32),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Session $sessionId is still publishing',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'The QR code is already valid. This page will start showing the artifact as soon as Firebase receives the public files.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 18),
-          const LinearProgressIndicator(minHeight: 8),
-        ],
+    return Center(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 560),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: _paper,
+          border: Border.all(color: _rule, width: 0.7),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Session $sessionId is still publishing',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'The QR code is already valid. This page will fill itself when Firebase receives the SVG and receipt text.',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 18),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+        ),
       ),
     );
   }
@@ -599,10 +706,11 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 620),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        color: _paper,
+        border: Border.all(color: _rule, width: 0.7),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -624,15 +732,11 @@ class ConfigHelpCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        color: _paper,
+        border: Border.all(color: _rule, width: 0.7),
       ),
       child: const SelectableText(
-        'Build the gallery with the required --dart-define Firebase values.\n\n'
-        'Example:\n'
-        'flutter build web --dart-define=FIREBASE_API_KEY=... --dart-define=FIREBASE_APP_ID=... '
-        '--dart-define=FIREBASE_MESSAGING_SENDER_ID=... --dart-define=FIREBASE_PROJECT_ID=... '
-        '--dart-define=FIREBASE_AUTH_DOMAIN=... --dart-define=FIREBASE_STORAGE_BUCKET=...',
+        'Firebase config is loaded from web/firebase-config.json in development and docs/firebase-config.json in the published GitHub Pages build.',
       ),
     );
   }
@@ -648,112 +752,60 @@ class ErrorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        color: _paper,
+        border: Border.all(color: _rule, width: 0.7),
       ),
       child: Text(message, style: Theme.of(context).textTheme.bodyLarge),
     );
   }
 }
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
-
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    final isPublished = status == 'published';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isPublished ? const Color(0xFFE9F2E3) : const Color(0xFFFFE8D7),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: isPublished
-              ? const Color(0xFF325B28)
-              : const Color(0xFF9F5A26),
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+List<String> _stringList(Object? value) {
+  if (value is Iterable) {
+    return value
+        .map((item) => item.toString())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
+  return const [];
 }
 
-class _MetaLine extends StatelessWidget {
-  const _MetaLine({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Color(0xFFBCA88E),
-              fontSize: 13,
-              letterSpacing: 0.8,
-            ),
-          ),
-          const SizedBox(height: 4),
-          SelectableText(value.isEmpty ? '-' : value),
-        ],
-      ),
-    );
+Map<String, double> _measuresMap(Object? value) {
+  if (value is! Map) {
+    return const {};
   }
+  final parsed = <String, double>{};
+  for (final entry in value.entries) {
+    final rawValue = entry.value;
+    final measure = rawValue is num
+        ? rawValue.toDouble()
+        : double.tryParse(rawValue.toString());
+    if (measure != null) {
+      parsed[entry.key.toString()] = measure;
+    }
+  }
+  return parsed;
 }
 
-class _PreviewFallback extends StatelessWidget {
-  const _PreviewFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFEBD8B1), Color(0xFFDDB37E)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: const Center(
-        child: Text(
-          'No Preview',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF5B4531),
-          ),
-        ),
-      ),
-    );
+String _themesText(List<String> themes) {
+  if (themes.isEmpty) {
+    return '-';
   }
+  return themes.map((theme) => theme.toUpperCase()).join(' . ');
 }
 
-class _Orb extends StatelessWidget {
-  const _Orb({required this.size, required this.color});
-
-  final double size;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [color, Colors.transparent]),
-      ),
-    );
+String _formatOracleDate(Object? value) {
+  DateTime? date;
+  if (value is Timestamp) {
+    date = value.toDate();
+  } else if (value is String) {
+    date = DateTime.tryParse(value);
   }
+  if (date == null) {
+    return '-';
+  }
+  final local = date.toLocal();
+  return '${_two(local.day)} . ${_two(local.month)} . ${local.year} . ${_two(local.hour)}:${_two(local.minute)}';
 }
+
+String _two(int value) => value.toString().padLeft(2, '0');

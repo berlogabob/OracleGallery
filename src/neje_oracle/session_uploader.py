@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import csv
 import json
 import shutil
 import time
@@ -35,7 +37,7 @@ class SessionUploader:
         imported: list[str] = []
         for session_dir in sorted(path for path in self.settings.session_root.iterdir() if path.is_dir()):
             row = self.store.get_session_by_source(session_dir)
-            if row and row["public_status"] == PublicStatus.PUBLISHED.value:
+            if row and row["public_status"] == PublicStatus.PUBLISHED.value and row["public_receipt_path"]:
                 continue
             if not self._is_ready(session_dir):
                 continue
@@ -50,10 +52,11 @@ class SessionUploader:
             publication = self.remote.publish_session(staged_record, staged_record.qr_file.parent)
             staged_record.public_status = publication.public_status
             staged_record.public_svg_path = publication.public_svg_path
-            staged_record.public_preview_path = publication.public_preview_path
+            staged_record.public_receipt_path = publication.public_receipt_path
             staged_record.public_qr_path = publication.public_qr_path
+            staged_record.public_manifest_path = publication.public_manifest_path
             staged_record.public_svg_url = publication.public_svg_url
-            staged_record.public_preview_url = publication.public_preview_url
+            staged_record.public_receipt_url = publication.public_receipt_url
             staged_record.public_qr_url = publication.public_qr_url
             staged_record.plot_status = PlotStatus.PENDING
             staged_record.last_error = ""
@@ -76,7 +79,7 @@ class SessionUploader:
         return (time.time() - newest_mtime) >= self.settings.stability_seconds
 
     def _has_required_assets(self, session_dir: Path) -> bool:
-        return self._resolve_svg_source(session_dir) is not None and self._resolve_preview_source(session_dir) is not None
+        return self._resolve_svg_source(session_dir) is not None and self._resolve_receipt_source(session_dir) is not None
 
     def _load_metadata(self, session_dir: Path) -> dict[str, Any]:
         for candidate in ("metadata.json", "session.json"):
@@ -91,59 +94,69 @@ class SessionUploader:
         ensure_dir(public_dir)
 
         svg_source = self._resolve_svg_source(session_dir)
-        preview_source = self._resolve_preview_source(session_dir)
-        if svg_source is None or preview_source is None:
-            raise FileNotFoundError(f"Missing SVG or preview asset in {session_dir}")
+        receipt_source = self._resolve_receipt_source(session_dir)
+        if svg_source is None or receipt_source is None:
+            raise FileNotFoundError(f"Missing SVG or receipt TXT asset in {session_dir}")
 
         svg_target = public_dir / "artwork.svg"
-        preview_target = public_dir / "preview.png"
+        receipt_target = public_dir / "receipt.txt"
         shutil.copy2(svg_source, svg_target)
-        shutil.copy2(preview_source, preview_target)
+        shutil.copy2(receipt_source, receipt_target)
 
         qr_url = f"{self.firebase_settings.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
         qr_target = public_dir / "qr.png"
         qrcode.make(qr_url).save(qr_target)
 
-        created_at = self._resolve_created_at(session_dir, metadata)
+        receipt_data = self._parse_receipt_txt(receipt_source)
+        csv_data = self._load_csv_metadata(session_id)
+        safe_metadata = self._safe_metadata(metadata, receipt_data, csv_data)
+        created_at = self._resolve_created_at(session_dir, safe_metadata)
+        mark_name = receipt_data.get("mark_name") or csv_data.get("mark_name") or ""
+        oracle_text = receipt_data.get("oracle_text") or csv_data.get("oracle_text") or ""
+        themes = self._resolve_themes(receipt_data, csv_data)
+        measures = self._resolve_measures(csv_data)
         record = SessionRecord(
             session_id=session_id,
             created_at=created_at,
-            title=metadata.get("title") or session_id.replace("_", " "),
-            summary=metadata.get("summary") or "",
+            title=mark_name or safe_metadata.get("title") or session_id.replace("_", " "),
+            summary=oracle_text or safe_metadata.get("summary") or "",
             source_dir=session_dir,
             svg_file=svg_target,
-            preview_file=preview_target,
+            receipt_file=receipt_target,
             qr_file=qr_target,
             qr_url=qr_url,
             public_status=PublicStatus.PUBLISHING,
             plot_status=PlotStatus.PENDING,
-            extra_metadata=metadata,
+            mark_name=mark_name,
+            oracle_text=oracle_text,
+            themes=themes,
+            measures=measures,
+            extra_metadata=safe_metadata,
         )
         self._write_manifest(record)
         return record
 
     def _resolve_svg_source(self, session_dir: Path) -> Path | None:
         candidates = [
-            session_dir / "artwork.svg",
             session_dir / f"{session_dir.name}_plotter.svg",
         ]
         candidates.extend(sorted(session_dir.glob("*_plotter.svg")))
-        candidates.extend(sorted(session_dir.glob("*.svg")))
         return next((path for path in candidates if path.exists()), None)
 
-    def _resolve_preview_source(self, session_dir: Path) -> Path | None:
+    def _resolve_receipt_source(self, session_dir: Path) -> Path | None:
         candidates = [
-            session_dir / "preview.png",
-            session_dir / f"{session_dir.name}_visitor.png",
+            session_dir / f"{session_dir.name}_receipt.txt",
         ]
-        candidates.extend(sorted(session_dir.glob("*_visitor.png")))
-        candidates.extend(sorted(session_dir.glob("*.png")))
+        candidates.extend(sorted(session_dir.glob("*_receipt.txt")))
         return next((path for path in candidates if path.exists()), None)
 
     def _resolve_created_at(self, session_dir: Path, metadata: dict[str, Any]) -> datetime:
-        raw = metadata.get("created_at")
+        raw = metadata.get("created_at") or metadata.get("timestamp")
         if raw:
-            return datetime.fromisoformat(raw)
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=UTC)
+            return parsed
         return datetime.fromtimestamp(session_dir.stat().st_mtime, tz=UTC)
 
     def _write_manifest(self, record: SessionRecord) -> None:
@@ -151,3 +164,89 @@ class SessionUploader:
             record_to_json(record),
             encoding="utf-8",
         )
+
+    def _parse_receipt_txt(self, receipt_path: Path) -> dict[str, Any]:
+        data: dict[str, Any] = {"mark_name": "", "oracle_text": "", "themes": []}
+        for raw_line in receipt_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith(("╔", "║", "╠", "╚")):
+                continue
+            if line.lower().startswith("your symbol:"):
+                data["mark_name"] = line.split(":", 1)[1].strip()
+                continue
+            if line.lower().startswith("themes:"):
+                data["themes"] = self._parse_themes(line.split(":", 1)[1].strip())
+                continue
+            if not data["oracle_text"]:
+                data["oracle_text"] = line
+        return data
+
+    def _load_csv_metadata(self, session_id: str) -> dict[str, Any]:
+        csv_path = self.settings.session_root / "session_log.csv"
+        if not csv_path.exists():
+            return {}
+        with csv_path.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                if row.get("session_id") == session_id:
+                    return {
+                        "timestamp": row.get("timestamp", ""),
+                        "mark_name": (row.get("symbol") or "").strip().upper(),
+                        "oracle_text": (row.get("reply_text") or "").strip(),
+                        "themes": self._parse_themes(row.get("keywords", "")),
+                        "intensity": row.get("intensity", ""),
+                        "instability": row.get("instability", ""),
+                        "confidence": row.get("confidence", ""),
+                    }
+        return {}
+
+    def _safe_metadata(
+        self,
+        metadata: dict[str, Any],
+        receipt_data: dict[str, Any],
+        csv_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        safe = {
+            key: value
+            for key, value in metadata.items()
+            if key not in {"transcript", "visitor", "audio", "visitor_image", "visitor_photo"}
+        }
+        safe.update(
+            {
+                "markName": receipt_data.get("mark_name") or csv_data.get("mark_name", ""),
+                "oracleText": receipt_data.get("oracle_text") or csv_data.get("oracle_text", ""),
+                "themes": self._resolve_themes(receipt_data, csv_data),
+                "measures": self._resolve_measures(csv_data),
+            }
+        )
+        if csv_data.get("timestamp"):
+            safe["timestamp"] = csv_data["timestamp"]
+        return safe
+
+    def _resolve_themes(self, receipt_data: dict[str, Any], csv_data: dict[str, Any]) -> list[str]:
+        themes = receipt_data.get("themes") or csv_data.get("themes") or []
+        return [str(theme).strip() for theme in themes if str(theme).strip()]
+
+    def _resolve_measures(self, csv_data: dict[str, Any]) -> dict[str, float]:
+        measures: dict[str, float] = {}
+        for key in ("intensity", "instability", "confidence"):
+            value = csv_data.get(key)
+            if value in (None, ""):
+                continue
+            try:
+                measures[key] = float(value)
+            except ValueError:
+                continue
+        return measures
+
+    def _parse_themes(self, raw: Any) -> list[str]:
+        if not raw:
+            return []
+        if isinstance(raw, list):
+            return [str(item).strip() for item in raw if str(item).strip()]
+        try:
+            parsed = ast.literal_eval(str(raw))
+        except (SyntaxError, ValueError):
+            parsed = [part.strip() for part in str(raw).split(",")]
+        if isinstance(parsed, list):
+            return [str(item).strip().strip("'\"") for item in parsed if str(item).strip()]
+        return [str(parsed).strip()]
