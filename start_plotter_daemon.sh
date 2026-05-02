@@ -6,7 +6,11 @@ source "$SCRIPT_DIR/scripts/launcher_common.sh" || exit 1
 launcher_bootstrap "Plotter Daemon" "$SCRIPT_DIR"
 
 if [[ -z "${NEJE_PLOTTER_PLACEHOLDER_ROOT:-}" || "$NEJE_PLOTTER_PLACEHOLDER_ROOT" == "$SCRIPT_DIR/placeholders" ]]; then
-  export NEJE_PLOTTER_PLACEHOLDER_ROOT="$SCRIPT_DIR/assets/symbols"
+  if [[ -d "$SCRIPT_DIR/assets/generated_idle_symbols" ]] && ls "$SCRIPT_DIR/assets/generated_idle_symbols"/*.svg >/dev/null 2>&1; then
+    export NEJE_PLOTTER_PLACEHOLDER_ROOT="$SCRIPT_DIR/assets/generated_idle_symbols"
+  else
+    export NEJE_PLOTTER_PLACEHOLDER_ROOT="$SCRIPT_DIR/assets/symbols"
+  fi
 fi
 
 launcher_require_var "NEJE_FIREBASE_PROJECT_ID" "Set it in .env on the MacBook."

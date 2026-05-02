@@ -1,0 +1,461 @@
+from __future__ import annotations
+
+import json
+import random
+from base64 import b64encode
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from .config import SYMBOL_FIT_RATIO, PlotterSettings, UploaderSettings, _repo_root, ensure_dir, ensure_parent
+from .layout import build_sheet_layout, calculate_layout_capacity
+from .models import PlotterControlState, RuntimeStatus, SheetItem
+from .session_generator import build_variant_svg, generate_idle_symbols, generate_user_sessions
+from .store import PlotterStore
+from .svg_gcode import generate_sheet_gcode, symbol_diameter_for_cell
+
+
+@dataclass
+class GuiSettings:
+    layout_mode: str = "hex"
+    sheet_width_mm: float = 250.0
+    sheet_height_mm: float = 440.0
+    sheet_margin_mm: float = 0.0
+    cell_diameter_mm: float = 80.0
+    gap_mm: float = 0.0
+    run_mode: str = "exhibition"
+    dry_run: bool = True
+    global_scale: float = 1.0
+    randomness: float = 35.0
+    randomness_fine: float = 0.0
+    include_rings: bool = True
+    user_count: int = 1
+    live_interval_seconds: float = 12.0
+    idle_count: int = 8
+    idle_variations_per_symbol: int = 2
+    selected_symbol: str = "__cycle__"
+
+    @classmethod
+    def from_plotter_settings(cls, settings: PlotterSettings) -> "GuiSettings":
+        return cls(
+            layout_mode=settings.layout_mode,
+            sheet_width_mm=settings.sheet_width_mm,
+            sheet_height_mm=settings.sheet_height_mm,
+            sheet_margin_mm=settings.sheet_margin_mm,
+            cell_diameter_mm=settings.cell_diameter_mm,
+            gap_mm=settings.cell_gap_mm,
+            dry_run=settings.dry_run,
+        )
+
+
+def default_gui_settings_path() -> Path:
+    return _repo_root() / "runtime" / "gui_settings.json"
+
+
+def default_scale_config_path() -> Path:
+    return _repo_root() / "assets" / "symbols" / "symbol_scales.json"
+
+
+def default_symbol_root() -> Path:
+    return _repo_root() / "assets" / "symbols"
+
+
+def default_idle_root() -> Path:
+    return _repo_root() / "assets" / "generated_idle_symbols"
+
+
+def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSettings | None = None) -> GuiSettings:
+    settings_path = path or default_gui_settings_path()
+    base = GuiSettings.from_plotter_settings(plotter_settings or PlotterSettings())
+    if not settings_path.exists():
+        return base
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    merged = asdict(base)
+    merged.update({key: value for key, value in payload.items() if key in merged})
+    return GuiSettings(**merged)
+
+
+def save_gui_settings(settings: GuiSettings, path: Path | None = None) -> None:
+    settings_path = path or default_gui_settings_path()
+    ensure_parent(settings_path)
+    settings_path.write_text(json.dumps(asdict(settings), indent=2), encoding="utf-8")
+
+
+def list_base_symbols(symbol_root: Path | None = None) -> list[Path]:
+    root = symbol_root or default_symbol_root()
+    return sorted(path for path in root.glob("*.svg") if path.is_file())
+
+
+def load_symbol_scales(scale_path: Path | None = None, symbol_root: Path | None = None) -> dict[str, float]:
+    symbols = list_base_symbols(symbol_root)
+    path = scale_path or default_scale_config_path()
+    payload: dict[str, Any] = {}
+    if path.exists():
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    return {symbol.name: float(payload.get(symbol.name, 1.0)) for symbol in symbols}
+
+
+def save_symbol_scales(scales: dict[str, float], scale_path: Path | None = None, symbol_root: Path | None = None) -> None:
+    symbols = list_base_symbols(symbol_root)
+    payload = {symbol.name: float(scales.get(symbol.name, 1.0)) for symbol in symbols}
+    path = scale_path or default_scale_config_path()
+    ensure_parent(path)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def layout_capacity(settings: GuiSettings) -> int:
+    return calculate_layout_capacity(
+        mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        margin_mm=settings.sheet_margin_mm,
+        diameter_mm=max(settings.cell_diameter_mm, 1.0),
+        gap_mm=max(settings.gap_mm, 0.0),
+    )
+
+
+def build_preview_svg(
+    settings: GuiSettings,
+    *,
+    user_count: int = 2,
+    idle_count: int | None = None,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+) -> str:
+    capacity = layout_capacity(settings)
+    if capacity <= 0:
+        return _empty_preview_svg(settings, "No printable cells")
+    item_count = capacity
+    user_count = max(0, min(user_count, item_count))
+    idle_count = max(0, item_count - user_count) if idle_count is None else max(0, min(idle_count, item_count - user_count))
+    placements = build_sheet_layout(
+        user_count + idle_count,
+        mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        margin_mm=settings.sheet_margin_mm,
+        diameter_mm=max(settings.cell_diameter_mm, 1.0),
+        gap_mm=max(settings.gap_mm, 0.0),
+    )
+    scale = _preview_scale(settings)
+    width = settings.sheet_width_mm * scale
+    height = settings.sheet_height_mm * scale
+    circles: list[str] = []
+    symbol_images = _preview_symbol_images(settings, symbol_root=symbol_root, scale_path=scale_path)
+    for index, placement in enumerate(placements):
+        kind = "user" if index < user_count else "idle"
+        stroke = "#9a5b24" if kind == "user" else "#1f1a17"
+        fill = "#f9f4ea" if kind == "user" else "#f3eadb"
+        cx = placement.center_x_mm * scale
+        cy = placement.center_y_mm * scale
+        cell_radius = placement.diameter_mm * scale / 2.0
+        mark_size = symbol_diameter_for_cell(placement.diameter_mm) * scale
+        circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{cell_radius:.2f}" fill="{fill}" stroke="#d8c7aa" stroke-width="1.0"/>')
+        if settings.include_rings:
+            circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" stroke="{stroke}" stroke-width="1.4" data-ring="outer"/>')
+            if kind == "idle":
+                circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" stroke="{stroke}" stroke-width="0.9" data-ring="inner"/>')
+        if symbol_images:
+            href = symbol_images[index % len(symbol_images)]
+            image_size = mark_size * 0.68
+            circles.append(
+                f'<image href="{href}" x="{cx - image_size / 2.0:.2f}" y="{cy - image_size / 2.0:.2f}" '
+                f'width="{image_size:.2f}" height="{image_size:.2f}" preserveAspectRatio="xMidYMid meet"/>'
+            )
+        else:
+            circles.append(
+                f'<text x="{cx:.2f}" y="{cy + 4:.2f}" text-anchor="middle" font-size="12" '
+                f'fill="{stroke}" font-family="monospace">{index + 1}</text>'
+            )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}" '
+        f'width="{width:.0f}" height="{height:.0f}">'
+        '<rect width="100%" height="100%" fill="#fbf7ef"/>'
+        f'<rect x="{settings.sheet_margin_mm * scale:.2f}" y="{settings.sheet_margin_mm * scale:.2f}" '
+        f'width="{(settings.sheet_width_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
+        f'height="{(settings.sheet_height_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
+        'fill="none" stroke="#d4c3a5" stroke-width="1"/>'
+        + "".join(circles)
+        + "</svg>"
+    )
+
+
+def build_symbol_preview_svg(
+    symbol_path: Path,
+    *,
+    marker_kind: str,
+    scale: float,
+    include_rings: bool,
+    randomness: float,
+) -> str:
+    # Preview SVGs are displayed much smaller than the 800px source canvas, so the
+    # UI uses amplified jitter to make the Randomness slider visually legible.
+    jitter_px = max(0.0, min(randomness, 100.0)) / 100.0 * 80.0
+    return build_variant_svg(
+        symbol_path,
+        marker_kind=marker_kind,
+        scale=scale,
+        rng=random.Random(1),
+        jitter_px=jitter_px,
+        include_rings=include_rings,
+    )
+
+
+def _preview_symbol_images(
+    settings: GuiSettings,
+    *,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+) -> list[str]:
+    symbols = list_base_symbols(symbol_root)
+    if not symbols:
+        return []
+    scales = load_symbol_scales(scale_path, symbol_root)
+    images: list[str] = []
+    for symbol in symbols:
+        svg = build_symbol_preview_svg(
+            symbol,
+            marker_kind="user",
+            scale=scales.get(symbol.name, 1.0) * settings.global_scale,
+            include_rings=False,
+            randomness=effective_randomness(settings),
+        )
+        encoded = b64encode(svg.encode("utf-8")).decode("ascii")
+        images.append(f"data:image/svg+xml;base64,{encoded}")
+    return images
+
+
+def create_user_sessions_from_gui(
+    settings: GuiSettings,
+    *,
+    output_root: Path | None = None,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+    start_index: int = 0,
+) -> list[Path]:
+    destination = output_root or UploaderSettings().session_root
+    generated = generate_user_sessions(
+        source_root=symbol_root or default_symbol_root(),
+        output_root=destination,
+        scale_config=scale_path or default_scale_config_path(),
+        count=settings.user_count,
+        jitter_px=effective_randomness(settings) / 100.0 * 8.0,
+        symbol_name=settings.selected_symbol,
+        global_scale=settings.global_scale,
+        include_rings=settings.include_rings,
+        start_index=start_index,
+    )
+    return [session.session_dir for session in generated]
+
+
+def create_idle_bank_from_gui(
+    settings: GuiSettings,
+    *,
+    output_root: Path | None = None,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+) -> list[Path]:
+    symbol_count = len(list_base_symbols(symbol_root))
+    count = max(settings.idle_count, symbol_count * max(settings.idle_variations_per_symbol, 1))
+    destination = output_root or default_idle_root()
+    if destination.exists():
+        for old_svg in destination.glob("*.svg"):
+            old_svg.unlink()
+    return generate_idle_symbols(
+        source_root=symbol_root or default_symbol_root(),
+        output_root=destination,
+        scale_config=scale_path or default_scale_config_path(),
+        count=count,
+        jitter_px=effective_randomness(settings) / 100.0 * 6.0,
+        global_scale=settings.global_scale,
+        include_rings=settings.include_rings,
+    )
+
+
+def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = None) -> dict[str, Any]:
+    plotter_settings = PlotterSettings()
+    resolved_db_path = db_path or plotter_settings.db_path
+    latest_manifest = latest_spool_manifest(spool_root or plotter_settings.spool_root)
+    item_counts = _manifest_item_counts(latest_manifest)
+    if not resolved_db_path.exists():
+        return {
+            "status": "daemon_not_started",
+            "message": "Plotter daemon has not created runtime state yet",
+            "current_sheet_id": "",
+            "last_sheet_path": "",
+            "pending_reload": False,
+            "print_enabled": False,
+            "operator_paused": True,
+            "run_mode": "exhibition",
+            "dry_run": True,
+            "updated_at": "",
+            "latest_manifest": str(latest_manifest) if latest_manifest else "",
+            "user_count": item_counts["user"],
+            "idle_count": item_counts["idle"],
+            "processed_symbols": item_counts["total"],
+        }
+    store = PlotterStore(resolved_db_path)
+    state = store.load_runtime_state()
+    control = store.load_control_state()
+    return {
+        "status": state.status.value,
+        "message": state.message,
+        "current_sheet_id": state.current_sheet_id,
+        "last_sheet_path": state.last_sheet_path,
+        "pending_reload": state.pending_reload,
+        "print_enabled": control.print_enabled,
+        "operator_paused": control.operator_paused,
+        "run_mode": control.run_mode,
+        "dry_run": control.dry_run,
+        "updated_at": state.updated_at.isoformat(),
+        "latest_manifest": str(latest_manifest) if latest_manifest else "",
+        "user_count": item_counts["user"],
+        "idle_count": item_counts["idle"],
+        "processed_symbols": item_counts["total"],
+    }
+
+
+def confirm_plotter_reload(db_path: Path | None = None) -> bool:
+    plotter_settings = PlotterSettings()
+    store = PlotterStore(db_path or plotter_settings.db_path)
+    state = store.load_runtime_state()
+    if not state.pending_reload:
+        return False
+    state.pending_reload = False
+    state.status = RuntimeStatus.IDLE
+    state.message = "Operator confirmed reload from GUI"
+    state.updated_at = datetime.now(tz=UTC)
+    store.save_runtime_state(state)
+    return True
+
+
+def set_plotter_control(
+    *,
+    print_enabled: bool | None = None,
+    run_mode: str | None = None,
+    dry_run: bool | None = None,
+    db_path: Path | None = None,
+) -> PlotterControlState:
+    plotter_settings = PlotterSettings()
+    store = PlotterStore(db_path or plotter_settings.db_path)
+    state = store.load_control_state()
+    if print_enabled is not None:
+        state.print_enabled = print_enabled
+        state.operator_paused = not print_enabled
+    if run_mode is not None:
+        state.run_mode = run_mode
+    if dry_run is not None:
+        state.dry_run = dry_run
+    state.updated_at = datetime.now(tz=UTC)
+    store.save_control_state(state)
+    return state
+
+
+def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = None, symbol_root: Path | None = None) -> dict[str, Path]:
+    output_root = spool_root or PlotterSettings().spool_root
+    ensure_dir(output_root)
+    symbols = list_base_symbols(symbol_root)
+    if not symbols:
+        raise FileNotFoundError("No symbols available for dry-run sheet generation")
+    capacity = layout_capacity(settings)
+    count = capacity
+    placements = build_sheet_layout(
+        count,
+        mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        margin_mm=settings.sheet_margin_mm,
+        diameter_mm=max(settings.cell_diameter_mm, 1.0),
+        gap_mm=max(settings.gap_mm, 0.0),
+    )
+    items = [
+        SheetItem(
+            source_kind="placeholder",
+            session_id=f"gui_dry_run_{index + 1:03d}",
+            title=symbols[index % len(symbols)].stem,
+            svg_path=symbols[index % len(symbols)],
+        )
+        for index in range(len(placements))
+    ]
+    sheet_id = datetime.now(tz=UTC).strftime("gui_sheet_%Y%m%d_%H%M%S")
+    gcode = generate_sheet_gcode(
+        items,
+        placements,
+        sample_step_mm=PlotterSettings().sample_step_mm,
+        cell_diameter_mm=settings.cell_diameter_mm,
+        travel_rate=PlotterSettings().travel_rate,
+        draw_rate=PlotterSettings().draw_rate,
+        pen_up_command=PlotterSettings().pen_up_command,
+        pen_down_command=PlotterSettings().pen_down_command,
+    )
+    gcode_path = output_root / f"{sheet_id}.gcode"
+    manifest_path = output_root / f"{sheet_id}.json"
+    gcode_path.write_text(gcode, encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "sheet_id": sheet_id,
+                "generated_by": "neje-gui",
+                "layout_mode": settings.layout_mode,
+                "cell_diameter_mm": settings.cell_diameter_mm,
+                "gap_mm": settings.gap_mm,
+                "symbol_fit_ratio": SYMBOL_FIT_RATIO,
+                "items": [
+                    {
+                        "session_id": item.session_id,
+                        "source_kind": item.source_kind,
+                        "svg_path": str(item.svg_path),
+                        "sheet_index": index,
+                        "center_x_mm": placements[index].center_x_mm,
+                        "center_y_mm": placements[index].center_y_mm,
+                        "cell_diameter_mm": placements[index].diameter_mm,
+                    }
+                    for index, item in enumerate(items)
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return {"gcode": gcode_path, "manifest": manifest_path}
+
+
+def latest_spool_manifest(spool_root: Path) -> Path | None:
+    if not spool_root.exists():
+        return None
+    manifests = sorted(spool_root.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return manifests[0] if manifests else None
+
+
+def effective_randomness(settings: GuiSettings) -> float:
+    return max(0.0, min(settings.randomness + settings.randomness_fine, 100.0))
+
+
+def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:
+    if not manifest_path or not manifest_path.exists():
+        return {"user": 0, "idle": 0, "total": 0}
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    items = payload.get("items", [])
+    user = sum(1 for item in items if item.get("source_kind") == "user")
+    idle = len(items) - user
+    return {"user": user, "idle": idle, "total": len(items)}
+
+
+def _preview_scale(settings: GuiSettings) -> float:
+    longest = max(settings.sheet_width_mm, settings.sheet_height_mm, 1.0)
+    return min(900.0 / longest, 1.2)
+
+
+def _empty_preview_svg(settings: GuiSettings, message: str) -> str:
+    scale = _preview_scale(settings)
+    width = max(settings.sheet_width_mm * scale, 300)
+    height = max(settings.sheet_height_mm * scale, 200)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}" '
+        f'width="{width:.0f}" height="{height:.0f}">'
+        '<rect width="100%" height="100%" fill="#fbf7ef"/>'
+        f'<text x="{width / 2:.2f}" y="{height / 2:.2f}" text-anchor="middle" '
+        f'font-size="18" fill="#8f4f2b">{message}</text></svg>'
+    )

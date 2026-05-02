@@ -4,7 +4,7 @@ from neje_oracle.models import SheetItem, SheetPlacement
 from neje_oracle.svg_gcode import generate_sheet_gcode
 
 
-def test_gcode_uses_mark_diameter_independent_from_cell_size(tmp_path: Path) -> None:
+def test_gcode_fits_symbol_inside_cell_with_internal_safety_ratio(tmp_path: Path) -> None:
     svg_path = tmp_path / "mark.svg"
     svg_path.write_text(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
@@ -17,7 +17,7 @@ def test_gcode_uses_mark_diameter_independent_from_cell_size(tmp_path: Path) -> 
         [SheetItem(source_kind="user", session_id="a", title="A", svg_path=svg_path)],
         [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)],
         sample_step_mm=20,
-        mark_diameter_mm=40,
+        cell_diameter_mm=40,
         travel_rate=5000,
         draw_rate=1800,
         pen_up_command="M5",

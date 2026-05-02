@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oracle — Website Brief</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream:          #f7f4ef;
+  --charcoal:       #1a1a1a;
+  --charcoal-mid:   #3a3a3a;
+  --charcoal-muted: #6a6a6a;
+  --rust:           #8B4513;
+  --rust-light:     #c4752a;
+  --rule:           #ccc5b8;
+  --void:           #0a0a12;
+  --gold:           #c9a84c;
+  --gold-dim:       #8a6f2e;
+  --font-body:      'EB Garamond', Georgia, serif;
+  --font-display:   'Cinzel', serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+/* ── COVER ── */
+.cover {
+  background: var(--void);
+  padding: 80px 64px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.cover-eyebrow {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.5em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  margin-bottom: 40px;
+}
+.cover-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: var(--cream);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.cover-subtitle {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-style: italic;
+  color: rgba(247,244,239,0.4);
+  margin-bottom: 48px;
+}
+.cover-rule { width: 48px; height: 0.5px; background: var(--gold-dim); margin-bottom: 40px; }
+.cover-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  max-width: 640px;
+}
+.cover-meta-item {}
+.cover-meta-label {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.4em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 4px;
+}
+.cover-meta-value {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: rgba(247,244,239,0.55);
+  font-style: italic;
+}
+
+/* ── LAYOUT ── */
+.doc { max-width: 860px; margin: 0 auto; }
+.section { padding: 64px 64px 56px; border-bottom: 0.5px solid var(--rule); }
+.section:last-child { border-bottom: none; }
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  margin-bottom: 36px;
+}
+.section-num {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.4em;
+  color: var(--rust);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.section-title {
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 400;
+  color: var(--charcoal);
+}
+.section-rule { flex: 1; height: 0.5px; background: var(--rule); }
+
+p.body { font-size: 16px; line-height: 1.8; color: var(--charcoal); margin-bottom: 16px; }
+p.body:last-child { margin-bottom: 0; }
+p.note {
+  font-size: 14px;
+  font-style: italic;
+  color: var(--charcoal-muted);
+  margin-bottom: 14px;
+  padding-left: 16px;
+  border-left: 2px solid var(--rule);
+  line-height: 1.7;
+}
+
+/* ── PAGE CARDS ── */
+.pages { display: flex; flex-direction: column; gap: 2px; margin: 32px 0; }
+
+.page-card {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 0;
+  border: 0.5px solid var(--rule);
+}
+.page-card.priority-high { border-left: 3px solid var(--rust); }
+.page-card.priority-med  { border-left: 3px solid var(--gold-dim); }
+.page-card.priority-low  { border-left: 3px solid var(--rule); }
+
+.page-meta {
+  background: #f0ece4;
+  padding: 24px 24px;
+  border-right: 0.5px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.page-num {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.35em;
+  color: var(--charcoal-muted);
+  text-transform: uppercase;
+}
+.page-name {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--charcoal);
+  line-height: 1.4;
+}
+.page-url {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--rust);
+}
+.page-priority {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.priority-high .page-priority { color: var(--rust); }
+.priority-med  .page-priority { color: var(--gold-dim); }
+.priority-low  .page-priority { color: var(--charcoal-muted); }
+
+.page-content { padding: 24px 28px; }
+.page-purpose {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--charcoal);
+  margin-bottom: 16px;
+}
+.page-visitor {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--charcoal-muted);
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.sections-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.section-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--charcoal-mid);
+}
+.section-item::before {
+  content: '—';
+  color: var(--rule);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.section-item strong {
+  color: var(--charcoal);
+  font-weight: 400;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* ── FEATURE HIGHLIGHT ── */
+.feature-box {
+  background: var(--void);
+  padding: 32px 36px;
+  margin: 28px 0;
+}
+.feature-box-label {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.45em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.feature-box-title {
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-style: italic;
+  color: var(--cream);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+.feature-box-desc {
+  font-size: 14px;
+  line-height: 1.75;
+  color: rgba(247,244,239,0.55);
+}
+.feature-box-tech {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 0.5px solid rgba(201,168,76,0.15);
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--gold-dim);
+  line-height: 1.7;
+}
+
+/* ── COPY BLOCKS ── */
+.copy-block {
+  background: #f0ece4;
+  border: 0.5px solid var(--rule);
+  border-left: 3px solid var(--rust);
+  padding: 20px 24px;
+  margin: 20px 0;
+}
+.copy-block-label {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.4em;
+  color: var(--rust);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.copy-block-text {
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-style: italic;
+  color: var(--charcoal-mid);
+  line-height: 1.8;
+}
+
+/* ── CONSTRAINTS TABLE ── */
+table.brief-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 24px 0;
+}
+table.brief-table th {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.3em;
+  color: var(--cream);
+  background: var(--charcoal);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+table.brief-table td {
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--rule);
+  color: var(--charcoal-mid);
+  vertical-align: top;
+  line-height: 1.6;
+}
+table.brief-table tr:last-child td { border-bottom: none; }
+table.brief-table td:first-child {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  color: var(--charcoal);
+  white-space: nowrap;
+}
+table.brief-table td code {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--rust);
+  background: #f0ece4;
+  padding: 1px 5px;
+}
+
+/* ── VISITOR TYPES ── */
+.visitor-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 28px 0;
+}
+.visitor-card {
+  padding: 24px 28px;
+  border: 0.5px solid var(--rule);
+}
+.visitor-card.primary { background: var(--void); border-color: rgba(201,168,76,0.15); }
+.visitor-card.secondary { background: #f0ece4; }
+.visitor-type {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.visitor-card.primary .visitor-type { color: var(--gold); }
+.visitor-card.secondary .visitor-type { color: var(--rust); }
+.visitor-name {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-style: italic;
+  margin-bottom: 10px;
+}
+.visitor-card.primary .visitor-name { color: var(--cream); }
+.visitor-card.secondary .visitor-name { color: var(--charcoal); }
+.visitor-desc {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.visitor-card.primary .visitor-desc { color: rgba(247,244,239,0.5); }
+.visitor-card.secondary .visitor-desc { color: var(--charcoal-muted); }
+.visitor-need {
+  margin-top: 14px;
+  padding-top: 12px;
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.6;
+}
+.visitor-card.primary .visitor-need {
+  border-top: 0.5px solid rgba(201,168,76,0.15);
+  color: var(--gold);
+}
+.visitor-card.secondary .visitor-need {
+  border-top: 0.5px solid var(--rule);
+  color: var(--rust);
+}
+
+/* ── NAV DIAGRAM ── */
+.nav-diagram {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 28px 0;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.nav-node {
+  background: var(--void);
+  padding: 12px 18px;
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.nav-node.active { background: var(--rust); color: var(--cream); }
+.nav-arrow {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--rule);
+  padding: 0 4px;
+}
+
+/* ── FOOTER ── */
+.doc-footer {
+  background: var(--void);
+  padding: 40px 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.footer-left {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.4em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+}
+.footer-right {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(247,244,239,0.2);
+}
+</style>
+</head>
+<body>
+<div class="doc">
+
+<!-- COVER -->
+<div class="cover">
+  <span class="cover-eyebrow">Oracle · The Oracle That Wears Us · IADE M-CCIA</span>
+  <h1 class="cover-title">Website Brief</h1>
+  <p class="cover-subtitle">For wireframing and development handover · April 2026</p>
+  <div class="cover-rule"></div>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Prepared for</span>
+      <span class="cover-meta-value">Andrey Dyakov</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Design system</span>
+      <span class="cover-meta-value">oracle_design_system.html</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Target live</span>
+      <span class="cover-meta-value">May 20, 2026</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- 0. HOW TO USE THIS DOCUMENT -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">How to use this document</span>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">This brief tells you what pages the Oracle website needs, what each page is for, and what content goes on it. It is written for someone who will use an AI agent to help build the site — so each section is specific enough to prompt from directly.</p>
+
+  <p class="body">Read this document alongside the Oracle Design System (<code style="font-family:monospace;font-size:13px;color:var(--rust);">oracle_design_system.html</code>), which defines all colours, fonts, component states, and motion rules. The design system is the visual authority. This document is the structural authority. Together they are everything you need.</p>
+
+  <p class="note">The narrative content — the text that describes the oracle, explains each symbol, and frames the project — is in <code style="font-family:monospace;font-size:13px;">oracle_narrative.html</code>. Do not rewrite it. Copy it directly into the site. The language has been carefully considered.</p>
+</div>
+
+
+<!-- 1. WHO THIS SITE IS FOR -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">01</span>
+    <h2 class="section-title">Who this site is for</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">The website serves two different visitors. Both matter. The site must work for each of them without either feeling like an afterthought.</p>
+
+  <div class="visitor-pair">
+    <div class="visitor-card primary">
+      <div class="visitor-type">Primary visitor</div>
+      <div class="visitor-name">Someone who just left the installation</div>
+      <div class="visitor-desc">They scanned the QR code on their receipt. They are holding a printed slip that names their mark. They had an experience 5 minutes ago and want to understand it more deeply — and find themselves in the collective cloth.</div>
+      <div class="visitor-need">They need: their mark explained, their session found in the cloth, a reason to linger and share.</div>
+    </div>
+    <div class="visitor-card secondary">
+      <div class="visitor-type">Secondary visitor</div>
+      <div class="visitor-name">Someone arriving cold</div>
+      <div class="visitor-desc">A friend sent them the link. They saw it on social media. They are a jury member, a professor, or a curious stranger. They have no prior context and need the project explained to them clearly and impressively.</div>
+      <div class="visitor-need">They need: an immediate sense of what this is, the full story, and access to the same depth as the receipt visitor.</div>
+    </div>
+  </div>
+
+  <p class="note">The site opens in the Document Register (cream background). The Installation Register (void, gold) appears only in hero sections and the cloth viewer. See the design system register guide for details.</p>
+</div>
+
+
+<!-- 2. SITE STRUCTURE -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">02</span>
+    <h2 class="section-title">Site structure — four pages</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">The site has four pages. The navigation is simple and persistent. Every page links to every other page.</p>
+
+  <div class="nav-diagram">
+    <div class="nav-node active">Home</div>
+    <div class="nav-arrow">→</div>
+    <div class="nav-node">The Cloth</div>
+    <div class="nav-arrow">→</div>
+    <div class="nav-node">The Marks</div>
+    <div class="nav-arrow">→</div>
+    <div class="nav-node">About</div>
+  </div>
+
+  <div class="pages">
+
+    <!-- HOME -->
+    <div class="page-card priority-high">
+      <div class="page-meta">
+        <span class="page-num">Page 01</span>
+        <span class="page-name">Home</span>
+        <span class="page-url">/</span>
+        <span class="page-priority">Build first</span>
+      </div>
+      <div class="page-content">
+        <p class="page-purpose">The entry point. Sets the atmosphere, explains what the oracle is, and immediately offers the receipt visitor a path to find their session. The cold visitor gets the story. The receipt visitor gets the lookup.</p>
+        <p class="page-visitor">QR code on receipt points here.</p>
+        <div class="sections-list">
+          <div class="section-item"><strong>Hero</strong> Oracle portrait full-bleed on void. Project name. One-sentence description. Two buttons: "Find my mark" (scrolls to session lookup) and "Learn more" (scrolls to about text).</div>
+          <div class="section-item"><strong>Session lookup</strong> A single text input. The visitor types their session ID from the receipt. On submit, they are taken to The Cloth page with their session highlighted. This is the most important interaction on the entire site.</div>
+          <div class="section-item"><strong>What the oracle is</strong> Three short paragraphs from the narrative document, Chapter I. Cream background. No images needed here — the text carries it.</div>
+          <div class="section-item"><strong>The exchange — summary</strong> The six exchange steps from the narrative document, Chapter II. Shown as a simple numbered sequence. Links to The Marks page at the end.</div>
+          <div class="section-item"><strong>The cloth — preview</strong> A small static preview of the collective cloth, with a prompt to visit The Cloth page. Gold accent. Void background.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THE CLOTH -->
+    <div class="page-card priority-high">
+      <div class="page-meta">
+        <span class="page-num">Page 02</span>
+        <span class="page-name">The Cloth</span>
+        <span class="page-url">/cloth</span>
+        <span class="page-priority">Core feature</span>
+      </div>
+      <div class="page-content">
+        <p class="page-purpose">The live record of the installation. A digital rendering of the fabric that shows every mark drawn so far, in real time. Visitors can find their own session and see exactly where their mark sits in the collective pattern.</p>
+        <p class="page-visitor">This is the page receipt visitors most want to reach.</p>
+        <div class="sections-list">
+          <div class="section-item"><strong>Session lookup</strong> Repeated here — visitors arriving via QR code may land directly on this page if linked from the receipt. Same input as home page. On submit, highlights the visitor's mark in the cloth.</div>
+          <div class="section-item"><strong>The cloth viewer</strong> A live-updating digital rendering of the fabric. Each mark is drawn as its SVG at the position it was plotted. When a session is found, that mark is highlighted in gold — all others dim slightly. See technical note below.</div>
+          <div class="section-item"><strong>Mark count</strong> A simple live counter: "47 marks drawn." Updates from Firebase. Small, not prominent.</div>
+          <div class="section-item"><strong>Share prompt</strong> After a session is found and highlighted, a share button appears. "Share your mark" — generates a simple image or link showing the visitor's mark name and SVG, shareable to social media. This is the social media entry point for cold visitors.</div>
+          <div class="section-item"><strong>About the cloth</strong> Two short paragraphs from Chapter V of the narrative document. Below the viewer. Explains what the fabric is and why it matters.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THE MARKS -->
+    <div class="page-card priority-med">
+      <div class="page-meta">
+        <span class="page-num">Page 03</span>
+        <span class="page-name">The Marks</span>
+        <span class="page-url">/marks</span>
+        <span class="page-priority">Second priority</span>
+      </div>
+      <div class="page-content">
+        <p class="page-purpose">A dedicated page for all eight marks. Each mark is shown large with its SVG, its name, its emotion, and its description from the narrative document. Receipt visitors use this to read about their specific mark in depth.</p>
+        <p class="page-visitor">A receipt visitor who wants to understand their mark in full will come here. A cold visitor who is curious about the system will browse all eight.</p>
+        <div class="sections-list">
+          <div class="section-item"><strong>Hobo origin intro</strong> The single framing sentence from Chapter IV of the narrative: "These signs were once used by itinerant workers to leave messages for those who came after — the oracle has learned to read them differently." Nothing more.</div>
+          <div class="section-item"><strong>Eight mark cards</strong> One card per mark. Each card: the SVG drawn large on void, the emotion label in rust, the mark name in gold Cinzel, and the description paragraph from the narrative. The oracle's reading ("The oracle heard...") in italics below. Use the exact content from oracle_narrative.html Chapter IV.</div>
+          <div class="section-item"><strong>AI transparency note</strong> A short section below the marks explaining that the mark selection is made by a neural network trained on the RAVDESS audio dataset. Plain language. No jargon. See copy block below.</div>
+        </div>
+
+        <div class="copy-block">
+          <div class="copy-block-label">Copy — AI transparency note</div>
+          <div class="copy-block-text">The mark the oracle selects is not a guess. It is the output of a small neural network trained on thousands of recorded voices — a system that has learned to map the acoustic properties of speech to emotional dimensions. It reads pitch, energy, rhythm, and the texture of breath between words. It cannot be misled by careful phrasing. Two people who speak the same words will receive different marks if they sound different when they say them.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABOUT -->
+    <div class="page-card priority-low">
+      <div class="page-meta">
+        <span class="page-num">Page 04</span>
+        <span class="page-name">About</span>
+        <span class="page-url">/about</span>
+        <span class="page-priority">Third priority</span>
+      </div>
+      <div class="page-content">
+        <p class="page-purpose">Context for the project: who made it, what course it is part of, and a plain-language explanation of the technical pipeline for the curious or technically minded visitor.</p>
+        <p class="page-visitor">Jury members, professors, and press will read this page. Keep it honest and direct.</p>
+        <div class="sections-list">
+          <div class="section-item"><strong>The project</strong> One paragraph: what Oracle is, what course it belongs to, when and where it was shown. Factual, not promotional.</div>
+          <div class="section-item"><strong>The team</strong> Three names, three roles. No photographs needed. Simple list.</div>
+          <div class="section-item"><strong>How it works — plain language</strong> A short technical overview written for a non-engineer. Covers: voice detection, speech-to-text, the LLM conversation, the emotion model, the plotter, the receipt. Each step in one sentence. See copy block below.</div>
+          <div class="section-item"><strong>The AI systems</strong> Names the models and datasets used: Vosk (speech-to-text), Ollama (LLM), RAVDESS dataset, ONNX emotion model, KittenTTS. A sentence on each. This is the academic transparency layer.</div>
+        </div>
+
+        <div class="copy-block">
+          <div class="copy-block-label">Copy — How it works (plain language)</div>
+          <div class="copy-block-text">When a visitor speaks, the oracle uses voice activity detection to know when they have finished. Their speech is transcribed locally — nothing is sent to an external server. A language model generates the oracle's response and determines the emotional qualities of what it heard. A separately trained neural network maps those qualities to one of eight marks. A CNC plotter arm draws that mark onto a shared piece of fabric. A thermal printer produces the visitor's receipt. The session ends. The oracle resets.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- 3. THE CLOTH VIEWER — TECHNICAL NOTE -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">03</span>
+    <h2 class="section-title">The cloth viewer — technical note</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">This is the most technically complex feature on the site. It is also the most important one. It is what makes the website worth visiting after the installation rather than just a project description page.</p>
+
+  <div class="feature-box">
+    <div class="feature-box-label">The core interaction</div>
+    <div class="feature-box-title">A visitor types their session ID. Their mark appears, highlighted, in the collective cloth.</div>
+    <div class="feature-box-desc">The cloth is a canvas or SVG element showing all marks drawn during the installation period, arranged in sequence. Each mark is an SVG drawn at a position on the canvas corresponding to where it was physically plotted on the fabric. When a session ID is entered, that mark highlights in gold. All others fade slightly. A label appears: the mark name, the session timestamp.</div>
+    <div class="feature-box-tech">
+      Data source: Firebase (same database used by the plotter pipeline)<br>
+      Each session record needs: session_id · mark_name · svg_path · timestamp · x_position · y_position<br>
+      The cloth viewer reads all records and renders them on load, then listens for new records in real time.<br>
+      Session lookup: queries Firebase by session_id, returns the matching record, highlights it on canvas.
+    </div>
+  </div>
+
+  <p class="body">The arrangement of marks on screen should reflect the physical fabric — left to right, top to bottom, in the order they were drawn. The canvas dimensions should approximate the fabric's aspect ratio.</p>
+
+  <p class="note">If the cloth viewer is not ready by the site launch date, the page can launch with a static image of the fabric and a "coming soon" placeholder for the session lookup. The rest of the site does not depend on this feature.</p>
+</div>
+
+
+<!-- 4. SOCIAL SHARING -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">04</span>
+    <h2 class="section-title">Social sharing</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">After a visitor finds their session in the cloth, a share prompt appears. The goal is to bring cold visitors to the site through people who had the experience — the receipt visitor becomes an ambassador.</p>
+
+  <table class="brief-table">
+    <thead>
+      <tr><th>Element</th><th>Detail</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Share card image</td>
+        <td>Auto-generated image: void background, the mark SVG centred in gold, mark name in Cinzel below it, "The Oracle That Wears Us · oracle.iade.pt" at the bottom. Sized for Instagram Stories (9:16) and square post (1:1).</td>
+      </tr>
+      <tr>
+        <td>Share text</td>
+        <td><em>"The oracle drew this for me. The Oracle That Wears Us — [url]"</em> — pre-filled, editable.</td>
+      </tr>
+      <tr>
+        <td>Share targets</td>
+        <td>Instagram (image download + copy link), general copy link. No Twitter/X required.</td>
+      </tr>
+      <tr>
+        <td>Placement</td>
+        <td>Appears only after a session is successfully found. Not visible on cold visit to The Cloth page.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- 5. NAVIGATION AND GLOBAL ELEMENTS -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">05</span>
+    <h2 class="section-title">Navigation and global elements</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <table class="brief-table">
+    <thead>
+      <tr><th>Element</th><th>Detail</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Navigation</td>
+        <td>Minimal persistent header. Logo left: "ORACLE" in Cinzel Decorative, small. Links right: Home · The Cloth · The Marks · About. Document register (cream background). No hamburger menu needed — four links fit.</td>
+      </tr>
+      <tr>
+        <td>Footer</td>
+        <td>Void background. Project name, course, year left. "This fragment remains." right in EB Garamond italic. No social icons in footer — sharing happens on The Cloth page only.</td>
+      </tr>
+      <tr>
+        <td>QR code destination</td>
+        <td>The receipt QR code links to <code>/cloth?session=[id]</code> — the cloth page with the session ID pre-filled in the lookup. The visitor lands directly with their mark already queried.</td>
+      </tr>
+      <tr>
+        <td>Mobile</td>
+        <td>The site must work on a phone — most visitors will scan the QR code with their phone. Single-column layout on mobile. The cloth viewer should be scrollable and zoomable on small screens.</td>
+      </tr>
+      <tr>
+        <td>Language</td>
+        <td>English only. No Portuguese version required for this phase.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- 6. WHAT ANDREY DOES NOT NEED TO WRITE -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">06</span>
+    <h2 class="section-title">Content Andrey does not need to write</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">All narrative copy for the site already exists and should not be rewritten. Copy it exactly from the source documents listed below.</p>
+
+  <table class="brief-table">
+    <thead>
+      <tr><th>Content</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>What the oracle is</td>
+        <td><code>oracle_narrative.html</code> — Chapter I, all four paragraphs</td>
+      </tr>
+      <tr>
+        <td>The exchange steps</td>
+        <td><code>oracle_narrative.html</code> — Chapter II, all six steps</td>
+      </tr>
+      <tr>
+        <td>Each mark description</td>
+        <td><code>oracle_narrative.html</code> — Chapter IV, all eight mark cards including "The oracle heard..." lines</td>
+      </tr>
+      <tr>
+        <td>About the cloth</td>
+        <td><code>oracle_narrative.html</code> — Chapter V, first two paragraphs</td>
+      </tr>
+      <tr>
+        <td>AI transparency note</td>
+        <td>Section 02 of this document, The Marks page copy block</td>
+      </tr>
+      <tr>
+        <td>How it works</td>
+        <td>Section 02 of this document, About page copy block</td>
+      </tr>
+      <tr>
+        <td>Hobo origin sentence</td>
+        <td><code>oracle_narrative.html</code> — Chapter IV opening paragraph, first sentence only</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="note" style="margin-top:20px;">Andrey writes only: team names and roles (About page), the project factual description (one paragraph, About page), and any labels or UI microcopy not covered above. Everything else is sourced from the documents listed.</p>
+</div>
+
+
+<!-- 7. BUILD PRIORITIES -->
+<div class="section">
+  <div class="section-header">
+    <span class="section-num">07</span>
+    <h2 class="section-title">Build order and priorities</h2>
+    <div class="section-rule"></div>
+  </div>
+
+  <p class="body">Build in this order. Each phase is usable on its own if time runs short.</p>
+
+  <table class="brief-table">
+    <thead>
+      <tr><th>Phase</th><th>Pages</th><th>Target</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Phase 1</td>
+        <td>Home (no session lookup yet) · The Marks · About</td>
+        <td>May 10</td>
+        <td>Static site. No Firebase needed. Everything except the cloth viewer works.</td>
+      </tr>
+      <tr>
+        <td>Phase 2</td>
+        <td>The Cloth — static view</td>
+        <td>May 14</td>
+        <td>Cloth page with SVG marks displayed. No live updates yet. Session lookup not wired.</td>
+      </tr>
+      <tr>
+        <td>Phase 3</td>
+        <td>Firebase integration · Session lookup · Live cloth</td>
+        <td>May 20</td>
+        <td>Full feature. Session ID lookup working. Cloth updates in real time from Firebase.</td>
+      </tr>
+      <tr>
+        <td>Phase 4</td>
+        <td>Social sharing · QR deep link</td>
+        <td>May 20</td>
+        <td>Share card generation. QR code updated to <code>/cloth?session=[id]</code> format.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="note">If Phase 3 is not complete before the installation opens, the QR code on the receipt should point to <code>/marks</code> instead, so visitors can at least read about their mark. Update the QR code when Phase 3 is live.</p>
+</div>
+
+</div><!-- /doc -->
+
+<!-- FOOTER -->
+<div class="doc-footer">
+  <span class="footer-left">Oracle · Website Brief · April 2026</span>
+  <span class="footer-right">Read alongside oracle_design_system.html and oracle_narrative.html</span>
+</div>
+
+</body>
+</html>

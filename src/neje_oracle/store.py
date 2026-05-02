@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import ensure_parent
-from .models import PlotterRuntimeState, PlotStatus, PublicStatus, SessionRecord
+from .models import PlotterControlState, PlotterRuntimeState, PlotStatus, PublicStatus, SessionRecord
 
 
 class _SQLiteStore:
@@ -196,8 +196,24 @@ class PlotterStore(_SQLiteStore):
             (json.dumps(state.to_dict()),),
         )
 
+    def save_control_state(self, state: PlotterControlState) -> None:
+        self._execute(
+            """
+            INSERT INTO runtime_state (key, value)
+            VALUES ('control', ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (json.dumps(state.to_dict()),),
+        )
+
     def load_runtime_state(self) -> PlotterRuntimeState:
         row = self._fetchone("SELECT value FROM runtime_state WHERE key = 'plotter'")
         if not row:
             return PlotterRuntimeState()
         return PlotterRuntimeState.from_dict(json.loads(row["value"]))
+
+    def load_control_state(self) -> PlotterControlState:
+        row = self._fetchone("SELECT value FROM runtime_state WHERE key = 'control'")
+        if not row:
+            return PlotterControlState()
+        return PlotterControlState.from_dict(json.loads(row["value"]))

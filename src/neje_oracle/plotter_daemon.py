@@ -6,7 +6,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .config import PlotterSettings, ensure_dir
+from .config import SYMBOL_FIT_RATIO, PlotterSettings, ensure_dir
 from .firebase_io import FirebaseRemoteRepository
 from .layout import build_sheet_layout, calculate_layout_capacity
 from .models import PlotJobLease, PlotStatus, PlotterRuntimeState, RuntimeStatus, SheetItem
@@ -63,6 +63,17 @@ class PlotterDaemon:
                 self.runtime_state.updated_at = datetime.now(tz=UTC)
                 self.store.save_runtime_state(self.runtime_state)
                 return
+
+        control = self.store.load_control_state()
+        if not control.print_enabled:
+            with self.state_lock:
+                self.runtime_state.status = RuntimeStatus.OPERATOR_PAUSED
+                self.runtime_state.message = "Print is stopped by operator. Press START PRINT to enable the next sheet."
+                self.runtime_state.updated_at = datetime.now(tz=UTC)
+                self.store.save_runtime_state(self.runtime_state)
+            return
+
+        with self.state_lock:
             self.runtime_state.status = RuntimeStatus.PREPARING
             self.runtime_state.message = "Preparing next sheet"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
@@ -74,8 +85,9 @@ class PlotterDaemon:
             sheet_height_mm=self.settings.sheet_height_mm,
             margin_mm=self.settings.sheet_margin_mm,
             diameter_mm=self.settings.cell_diameter_mm,
+            gap_mm=self.settings.cell_gap_mm,
         )
-        sheet_limit = min(self.settings.sheet_capacity or layout_capacity, layout_capacity)
+        sheet_limit = layout_capacity
         if sheet_limit <= 0:
             self._set_state(RuntimeStatus.ERROR, "Sheet layout has no printable cells")
             return
@@ -99,6 +111,7 @@ class PlotterDaemon:
             sheet_height_mm=self.settings.sheet_height_mm,
             margin_mm=self.settings.sheet_margin_mm,
             diameter_mm=self.settings.cell_diameter_mm,
+            gap_mm=self.settings.cell_gap_mm,
         )
         if len(placements) < len(items):
             raise RuntimeError("Sheet layout capacity is smaller than the selected items.")
@@ -116,7 +129,7 @@ class PlotterDaemon:
             items,
             placements,
             sample_step_mm=self.settings.sample_step_mm,
-            mark_diameter_mm=self.settings.mark_diameter_mm,
+            cell_diameter_mm=self.settings.cell_diameter_mm,
             travel_rate=self.settings.travel_rate,
             draw_rate=self.settings.draw_rate,
             pen_up_command=self.settings.pen_up_command,
@@ -140,7 +153,11 @@ class PlotterDaemon:
                         for index, item in enumerate(items)
                     ],
                     "layout_mode": self.settings.layout_mode,
-                    "mark_diameter_mm": self.settings.mark_diameter_mm,
+                    "cell_diameter_mm": self.settings.cell_diameter_mm,
+                    "gap_mm": self.settings.cell_gap_mm,
+                    "symbol_fit_ratio": SYMBOL_FIT_RATIO,
+                    "dry_run": control.dry_run,
+                    "run_mode": control.run_mode,
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -150,7 +167,7 @@ class PlotterDaemon:
 
         self._set_state(RuntimeStatus.PRINTING, f"Streaming {sheet_id} to plotter", sheet_id=sheet_id)
         try:
-            gcode_path = self.transport.send(gcode=gcode, sheet_id=sheet_id)
+            gcode_path = self.transport.send(gcode=gcode, sheet_id=sheet_id, dry_run=control.dry_run)
         except Exception as exc:  # noqa: BLE001
             for job in user_jobs:
                 self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))

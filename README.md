@@ -1,16 +1,20 @@
 # Neje Oracle Orchestrator
 
-This repository implements the split architecture for the exhibition system:
+This repository contains the local uploader, public Flutter gallery, plotter daemon, and test tooling for the Oracle exhibition system.
 
-- `neje-uploader` runs on the TouchDesigner machine and only watches/export-publishes session folders to Firebase.
-- `neje-plotter` runs on the MacBook and pulls user print jobs from Firestore, fills sheets with local idle symbols from `assets/symbols`, composes `hex` or `grid` layouts, generates G-code, and exposes a tiny operator dashboard.
-- `public_gallery/` is a Flutter Web app meant for GitHub Pages from the root `docs/` folder and read-only session display via Firebase.
+## Architecture
 
-The TouchDesigner machine does not do plot orchestration anymore. It only emits finished session folders, and the uploader publishes them.
+- Oracle Mac mini: TouchDesigner writes finished session folders; `neje-uploader` uploads safe public assets to Firebase and creates user print jobs.
+- Public web: `public_gallery/` is Flutter Web, built into root `docs/` for GitHub Pages.
+- Plotter MacBook: `neje-plotter` pulls user jobs from Firestore, fills remaining sheet cells with local idle symbols, writes G-code to `spool/`, and exposes an operator page.
+- Test workflow: `neje-generate-sessions` creates fake Oracle sessions from the 8 base symbols, so Firebase upload and print queue behavior can be tested without running TouchDesigner.
+- Operator GUI: `neje-gui` opens a local NiceGUI browser panel for generator controls, layout preview, scale correction, idle bank generation, and plotter status.
+
+The TouchDesigner computer should only run TouchDesigner and the lightweight uploader. Plot orchestration stays on the plotter MacBook.
 
 ## Session contract
 
-Each finished TouchDesigner session folder must look like:
+Each finished real or generated session folder must look like:
 
 ```text
 sessions_raw/<session_id>/
@@ -20,9 +24,9 @@ sessions_raw/<session_id>/
   READY           # optional but recommended
 ```
 
-`metadata.json` can contain safe public metadata. The uploader also reads `session_log.csv` from the sessions root for `intensity`, `instability`, and `confidence`; it does not publish transcript, visitor photo, audio, or `*_visitor.png`. Only `artwork.svg`, `receipt.txt`, QR, and a generated `manifest.json` are published.
+The uploader ignores visitor photos, audio, transcript files, and `*_visitor.png`. It publishes only `artwork.svg`, `receipt.txt`, `qr.png`, and `manifest.json`. It also reads `session_log.csv` from the sessions root for `intensity`, `instability`, and `confidence`.
 
-## Python services
+## Quick Start
 
 Install dependencies with `uv`:
 
@@ -42,7 +46,25 @@ Run the plotter daemon on the MacBook:
 uv run neje-plotter
 ```
 
-The plotter daemon serves an operator dashboard on `http://localhost:8765/` by default. After each printed sheet it enters `paused_for_reload`; press the dashboard button or `POST /operator/reload` to continue.
+Run the local operator GUI:
+
+```bash
+uv run neje-gui
+```
+
+Generate one fake user session into the configured uploader sessions folder:
+
+```bash
+uv run neje-generate-sessions --mode user --count 1
+```
+
+Generate local idle/filling symbols with double circles:
+
+```bash
+uv run neje-generate-sessions --mode idle --count 8
+```
+
+The plotter daemon serves an operator dashboard on `http://localhost:8765/` by default. After each printed sheet it enters `paused_for_reload`; press the dashboard button or call `POST /operator/reload` to continue.
 
 ## Double-click launchers for macOS
 
@@ -50,6 +72,11 @@ Use these files directly from Finder:
 
 - `start_oracle_uploader.command` on the Mac mini with TouchDesigner.
 - `start_plotter_daemon.command` on the MacBook that drives the plotter.
+- `start_oracle_gui.command` for the local generator/plotter operator GUI.
+- `generate_test_sessions.command` to create fake user sessions from the repo root.
+- `assets/sessions/GENERATE_TEST_SESSION.command` to create one fake user session directly in the real sessions folder.
+- `assets/sessions/START_ORACLE_GUI.command` to launch the GUI from the real TouchDesigner sessions folder.
+- `assets/sessions/SETUP_ORACLE_UPLOADER.command` and `assets/sessions/START_ORACLE_UPLOADER.command` are designed to live inside the actual TouchDesigner sessions folder on the Mac mini.
 
 Matching `.sh` files are included for Terminal/manual use. The launchers:
 
@@ -65,6 +92,8 @@ If you want machine-specific templates, start from:
 - `.env.oracle.example` for the Mac mini uploader machine.
 - `.env.plotter.example` for the MacBook plotter machine.
 
+Detailed operator instructions are in `RUNBOOK.md`.
+
 ## Project folders
 
 - `src/neje_oracle/` Python services, Firebase integration, plotting pipeline, launch scripts.
@@ -72,6 +101,8 @@ If you want machine-specific templates, start from:
 - `docs/` built Flutter Web output served by GitHub Pages from `main`.
 - `firebase/` Firestore/Storage rules and Firestore indexes.
 - `assets/symbols/` eight local idle/filling SVG symbols used by the plotter daemon.
+- `assets/symbols/symbol_scales.json` manual per-symbol scale multipliers used by the test generator.
+- `assets/generated_idle_symbols/` generated idle/filling SVGs with double circles; ignored by git.
 - `archive/` old briefing artifacts and reference files that are not part of the runtime system.
 
 ## GitHub Pages
@@ -97,9 +128,22 @@ The runtime Firebase web config is `docs/firebase-config.json`. Firebase Web con
 
 The uploader writes both documents. The plotter daemon only claims and updates `plot_jobs`, while mirroring `plotStatus` onto `sessions/{session_id}`.
 
+## Important Environment Variables
+
+- `NEJE_FIREBASE_PROJECT_ID`, `NEJE_FIREBASE_STORAGE_BUCKET`, `NEJE_FIREBASE_CREDENTIALS`: Firebase Admin access for Python services.
+- `NEJE_GALLERY_BASE_URL`: public GitHub Pages URL used in QR codes.
+- `NEJE_UPLOADER_SESSION_ROOT`: folder watched by the uploader and default target for generated user sessions.
+- `NEJE_PLOTTER_PLACEHOLDER_ROOT`: idle/filling symbol folder; `start_plotter_daemon.sh` prefers `assets/generated_idle_symbols` when it exists, then falls back to `assets/symbols`.
+- `NEJE_PLOTTER_CELL_DIAMETER_MM`: physical packing cell diameter and the visible cell size in the operator preview.
+- `NEJE_PLOTTER_CELL_GAP_MM`: physical empty distance between neighbouring cell circles.
+- `NEJE_PLOTTER_LAYOUT_MODE`: `hex` or `grid`.
+- `NEJE_GENERATOR_COUNT`: count used by double-click test generator launchers.
+- `NEJE_GUI_HOST`, `NEJE_GUI_PORT`: local NiceGUI bind address, default `127.0.0.1:8787`.
+
 ## Verification
 
 ```bash
 uv run pytest
 cd public_gallery && flutter analyze
+./scripts/build_gallery_docs.sh
 ```

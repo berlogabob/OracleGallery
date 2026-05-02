@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+SYMBOL_FIT_RATIO = 0.86
+
 
 def _env_bool(name: str, default: bool) -> bool:
     value = os.getenv(name)
@@ -60,16 +62,12 @@ class PlotterSettings:
     placeholder_root: Path = Path(os.getenv("NEJE_PLOTTER_PLACEHOLDER_ROOT", str(_repo_root() / "assets" / "symbols")))
     spool_root: Path = Path(os.getenv("NEJE_PLOTTER_SPOOL_ROOT", str(_repo_root() / "spool")))
     poll_seconds: float = _env_float("NEJE_PLOTTER_POLL_SECONDS", 4.0)
-    sheet_width_mm: float = _env_float("NEJE_PLOTTER_SHEET_WIDTH_MM", 594.0)
-    sheet_height_mm: float = _env_float("NEJE_PLOTTER_SHEET_HEIGHT_MM", 841.0)
-    sheet_margin_mm: float = _env_float("NEJE_PLOTTER_SHEET_MARGIN_MM", 24.0)
-    cell_diameter_mm: float = _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 160.0)
-    mark_diameter_mm: float = _env_float(
-        "NEJE_PLOTTER_MARK_DIAMETER_MM",
-        _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 160.0) * 0.86,
-    )
+    sheet_width_mm: float = _env_float("NEJE_PLOTTER_SHEET_WIDTH_MM", 250.0)
+    sheet_height_mm: float = _env_float("NEJE_PLOTTER_SHEET_HEIGHT_MM", 440.0)
+    sheet_margin_mm: float = _env_float("NEJE_PLOTTER_SHEET_MARGIN_MM", 0.0)
+    cell_diameter_mm: float = _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 80.0)
+    cell_gap_mm: float = _env_float("NEJE_PLOTTER_CELL_GAP_MM", 0.0)
     layout_mode: str = os.getenv("NEJE_PLOTTER_LAYOUT_MODE", "hex")
-    sheet_capacity: int = _env_int("NEJE_PLOTTER_SHEET_CAPACITY", 7)
     sample_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_STEP_MM", 3.0)
     travel_rate: float = _env_float("NEJE_PLOTTER_TRAVEL_RATE", 5000.0)
     draw_rate: float = _env_float("NEJE_PLOTTER_DRAW_RATE", 1800.0)

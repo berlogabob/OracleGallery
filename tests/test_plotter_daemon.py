@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from neje_oracle.config import PlotterSettings
-from neje_oracle.models import PlotJobLease, PlotStatus, RuntimeStatus
+from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, RuntimeStatus
 from neje_oracle.plotter_daemon import PlotterDaemon
 from neje_oracle.store import PlotterStore
 from neje_oracle.transport import FluidNCTransport
@@ -55,9 +55,7 @@ def _settings(tmp_path: Path) -> PlotterSettings:
         sheet_height_mm=841,
         sheet_margin_mm=24,
         cell_diameter_mm=160,
-        mark_diameter_mm=120,
         layout_mode="hex",
-        sheet_capacity=3,
         sample_step_mm=8.0,
         travel_rate=5000,
         draw_rate=1800,
@@ -100,6 +98,7 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
     ]
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
     remote = FakeRemoteRepository(jobs)
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -122,6 +121,7 @@ def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Pat
 
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
     remote = FakeRemoteRepository(fail_claim=True)
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -131,3 +131,21 @@ def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Pat
     gcode_files = list((tmp_path / "spool").glob("*.gcode"))
     assert len(gcode_files) == 1
     assert daemon.get_state().status == RuntimeStatus.PAUSED
+
+
+def test_plotter_stops_before_next_sheet_when_operator_disabled(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=False, operator_paused=True, run_mode="exhibition", dry_run=True))
+    remote = FakeRemoteRepository()
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport)
+
+    daemon.run_cycle()
+
+    assert not list((tmp_path / "spool").glob("*.gcode"))
+    assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED

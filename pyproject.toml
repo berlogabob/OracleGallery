@@ -8,6 +8,7 @@ dependencies = [
   "fastapi>=0.115.0",
   "firebase-admin>=6.7.0",
   "httpx>=0.28.0",
+  "nicegui>=2.14.0",
   "pydantic>=2.9.0",
   "qrcode[pil]>=8.0",
   "svgpathtools>=1.6.1",
@@ -22,6 +23,8 @@ dev = [
 [project.scripts]
 neje-uploader = "neje_oracle.uploader_service:main"
 neje-plotter = "neje_oracle.plotter_service:main"
+neje-generate-sessions = "neje_oracle.session_generator:main"
+neje-gui = "neje_oracle.gui_service:main"
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
@@ -32,4 +35,3 @@ packages = ["src/neje_oracle"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-

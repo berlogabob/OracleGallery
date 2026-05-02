@@ -28,6 +28,7 @@ class RuntimeStatus(str, Enum):
     PREPARING = "preparing_sheet"
     PRINTING = "printing"
     PAUSED = "paused_for_reload"
+    OPERATOR_PAUSED = "operator_paused"
     ERROR = "error"
 
 
@@ -146,6 +147,36 @@ class PlotterRuntimeState:
             last_sheet_path=payload.get("last_sheet_path", ""),
             placeholder_index=int(payload.get("placeholder_index", 0)),
             pending_reload=bool(payload.get("pending_reload", False)),
+            updated_at=datetime.fromisoformat(payload["updated_at"])
+            if payload.get("updated_at")
+            else utcnow(),
+        )
+
+
+@dataclass
+class PlotterControlState:
+    print_enabled: bool = False
+    operator_paused: bool = True
+    run_mode: str = "exhibition"
+    dry_run: bool = True
+    updated_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "print_enabled": self.print_enabled,
+            "operator_paused": self.operator_paused,
+            "run_mode": self.run_mode,
+            "dry_run": self.dry_run,
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PlotterControlState":
+        return cls(
+            print_enabled=bool(payload.get("print_enabled", False)),
+            operator_paused=bool(payload.get("operator_paused", True)),
+            run_mode=str(payload.get("run_mode", "exhibition")),
+            dry_run=bool(payload.get("dry_run", True)),
             updated_at=datetime.fromisoformat(payload["updated_at"])
             if payload.get("updated_at")
             else utcnow(),

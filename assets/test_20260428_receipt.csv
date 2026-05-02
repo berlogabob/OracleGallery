@@ -1,0 +1,2 @@
+session_id,date,symbol,mark_type,reply_text,keywords,voice_intensity,instability,confidence
+test_20260428,2026-04-28 15:00,THE BITTER ROOT,branch,They crave certainty. Uncertainty fuels their fear.,"['certainty', 'fear', 'desire']",0.80,0.30,0.70
