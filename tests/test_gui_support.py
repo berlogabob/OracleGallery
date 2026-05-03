@@ -5,6 +5,7 @@ from pathlib import Path
 
 from neje_oracle.config import PlotterSettings
 from neje_oracle.gui_support import (
+    GUI_DEFAULTS,
     GuiSettings,
     build_preview_svg,
     confirm_plotter_reload,
@@ -18,7 +19,7 @@ from neje_oracle.gui_support import (
     save_gui_settings,
     save_symbol_scales,
 )
-from neje_oracle.models import PlotterRuntimeState, RuntimeStatus
+from neje_oracle.models import PlotterRuntimeState, RuntimeStatus, SystemMode
 from neje_oracle.store import PlotterStore
 
 
@@ -43,6 +44,7 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     settings_path = tmp_path / "runtime" / "gui_settings.json"
     settings = load_gui_settings(settings_path, PlotterSettings(sheet_width_mm=300, sheet_height_mm=200))
     assert settings.sheet_width_mm == 300
+    assert settings.system_mode == GUI_DEFAULTS["system_mode"]
     assert settings.gap_mm == 0
     assert not hasattr(settings, "mark_diameter_mm")
     assert not hasattr(settings, "sheet_capacity")
@@ -52,6 +54,18 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     reloaded = load_gui_settings(settings_path)
 
     assert reloaded.layout_mode == "grid"
+
+
+def test_gui_settings_migrates_old_run_mode_to_system_mode(tmp_path: Path) -> None:
+    settings_path = tmp_path / "runtime" / "gui_settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text('{"run_mode": "exhibition", "dry_run": false}', encoding="utf-8")
+
+    settings = load_gui_settings(settings_path)
+
+    assert settings.system_mode == SystemMode.EXHIBITION_REAL.value
+    assert settings.run_mode == "exhibition"
+    assert settings.dry_run is False
 
 
 def test_symbol_scales_load_save(tmp_path: Path) -> None:
@@ -234,6 +248,7 @@ def test_read_status_does_not_create_runtime_db(tmp_path: Path) -> None:
     status = read_plotter_status(db_path=db_path, spool_root=tmp_path / "spool")
 
     assert status["status"] == "daemon_not_started"
+    assert status["gcode_progress_percent"] == 0.0
     assert not db_path.exists()
 
 

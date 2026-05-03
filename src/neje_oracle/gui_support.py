@@ -8,33 +8,58 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .config import SYMBOL_FIT_RATIO, PlotterSettings, UploaderSettings, _repo_root, ensure_dir, ensure_parent
+from .config import SYMBOL_FIT_RATIO, OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root, ensure_dir, ensure_parent
+from .gui_modes import apply_mode_to_config, mode_policy
 from .layout import build_sheet_layout, calculate_layout_capacity
-from .models import PlotterControlState, RuntimeStatus, SheetItem
+from .models import PlotterControlState, PlotterRuntimeConfig, RuntimeStatus, SheetItem, SystemMode
 from .session_generator import build_variant_svg, generate_idle_symbols, generate_user_sessions
-from .store import PlotterStore
+from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode, symbol_diameter_for_cell
+from .transport import FluidNCTransport
+
+
+GUI_DEFAULTS = {
+    "system_mode": SystemMode.EXHIBITION_DRY.value,
+    "sheet_width_mm": 250.0,
+    "sheet_height_mm": 440.0,
+    "sheet_margin_mm": 0.0,
+    "cell_diameter_mm": 80.0,
+    "gap_mm": 0.0,
+    "global_scale": 1.0,
+    "randomness": 35.0,
+    "randomness_fine": 0.0,
+}
 
 
 @dataclass
 class GuiSettings:
+    system_mode: str = GUI_DEFAULTS["system_mode"]
     layout_mode: str = "hex"
-    sheet_width_mm: float = 250.0
-    sheet_height_mm: float = 440.0
-    sheet_margin_mm: float = 0.0
-    cell_diameter_mm: float = 80.0
-    gap_mm: float = 0.0
+    sheet_width_mm: float = GUI_DEFAULTS["sheet_width_mm"]
+    sheet_height_mm: float = GUI_DEFAULTS["sheet_height_mm"]
+    sheet_margin_mm: float = GUI_DEFAULTS["sheet_margin_mm"]
+    cell_diameter_mm: float = GUI_DEFAULTS["cell_diameter_mm"]
+    gap_mm: float = GUI_DEFAULTS["gap_mm"]
     run_mode: str = "exhibition"
     dry_run: bool = True
-    global_scale: float = 1.0
-    randomness: float = 35.0
-    randomness_fine: float = 0.0
+    global_scale: float = GUI_DEFAULTS["global_scale"]
+    randomness: float = GUI_DEFAULTS["randomness"]
+    randomness_fine: float = GUI_DEFAULTS["randomness_fine"]
     include_rings: bool = True
     user_count: int = 1
     live_interval_seconds: float = 12.0
     idle_count: int = 8
     idle_variations_per_symbol: int = 2
     selected_symbol: str = "__cycle__"
+
+    def apply_system_mode(self) -> None:
+        policy = mode_policy(self.system_mode)
+        self.run_mode = policy.run_mode
+        self.dry_run = policy.dry_run
+
+    @property
+    def mode(self) -> SystemMode:
+        return SystemMode(self.system_mode)
 
     @classmethod
     def from_plotter_settings(cls, settings: PlotterSettings) -> "GuiSettings":
@@ -69,17 +94,51 @@ def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSetting
     settings_path = path or default_gui_settings_path()
     base = GuiSettings.from_plotter_settings(plotter_settings or PlotterSettings())
     if not settings_path.exists():
+        base.apply_system_mode()
         return base
     payload = json.loads(settings_path.read_text(encoding="utf-8"))
     merged = asdict(base)
+    if "system_mode" not in payload:
+        run_mode = str(payload.get("run_mode", base.run_mode))
+        dry_run = bool(payload.get("dry_run", base.dry_run))
+        if run_mode == "test":
+            payload["system_mode"] = SystemMode.TEST.value
+        elif dry_run:
+            payload["system_mode"] = SystemMode.EXHIBITION_DRY.value
+        else:
+            payload["system_mode"] = SystemMode.EXHIBITION_REAL.value
     merged.update({key: value for key, value in payload.items() if key in merged})
-    return GuiSettings(**merged)
+    settings = GuiSettings(**merged)
+    settings.apply_system_mode()
+    return settings
 
 
 def save_gui_settings(settings: GuiSettings, path: Path | None = None) -> None:
+    settings.apply_system_mode()
     settings_path = path or default_gui_settings_path()
     ensure_parent(settings_path)
     settings_path.write_text(json.dumps(asdict(settings), indent=2), encoding="utf-8")
+
+
+def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfig:
+    settings.apply_system_mode()
+    return apply_mode_to_config(PlotterRuntimeConfig(
+        layout_mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        sheet_margin_mm=settings.sheet_margin_mm,
+        cell_diameter_mm=settings.cell_diameter_mm,
+        gap_mm=settings.gap_mm,
+        run_mode=settings.run_mode,
+        dry_run=settings.dry_run,
+    ), settings.mode)
+
+
+def save_oracle_plotter_config(settings: GuiSettings) -> None:
+    settings.apply_system_mode()
+    store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
+    store.save_system_mode(settings.mode)
+    store.save_plotter_config(gui_settings_to_plotter_config(settings))
 
 
 def list_base_symbols(symbol_root: Path | None = None) -> list[Path]:
@@ -143,6 +202,7 @@ def build_preview_svg(
     height = settings.sheet_height_mm * scale
     circles: list[str] = []
     symbol_images = _preview_symbol_images(settings, symbol_root=symbol_root, scale_path=scale_path)
+    overscale = any(symbol_scale > 1.0 for _, symbol_scale in symbol_images)
     for index, placement in enumerate(placements):
         kind = "user" if index < user_count else "idle"
         stroke = "#9a5b24" if kind == "user" else "#1f1a17"
@@ -157,8 +217,8 @@ def build_preview_svg(
             if kind == "idle":
                 circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" stroke="{stroke}" stroke-width="0.9" data-ring="inner"/>')
         if symbol_images:
-            href = symbol_images[index % len(symbol_images)]
-            image_size = mark_size * 0.68
+            href, symbol_scale = symbol_images[index % len(symbol_images)]
+            image_size = mark_size * max(symbol_scale, 1.0)
             circles.append(
                 f'<image href="{href}" x="{cx - image_size / 2.0:.2f}" y="{cy - image_size / 2.0:.2f}" '
                 f'width="{image_size:.2f}" height="{image_size:.2f}" preserveAspectRatio="xMidYMid meet"/>'
@@ -176,6 +236,12 @@ def build_preview_svg(
         f'width="{(settings.sheet_width_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
         f'height="{(settings.sheet_height_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
         'fill="none" stroke="#d4c3a5" stroke-width="1"/>'
+        + (
+            '<text x="10" y="18" font-size="11" fill="#9a5b24" font-family="monospace">'
+            'overscale may overlap cells</text>'
+            if overscale
+            else ""
+        )
         + "".join(circles)
         + "</svg>"
     )
@@ -207,22 +273,23 @@ def _preview_symbol_images(
     *,
     symbol_root: Path | None = None,
     scale_path: Path | None = None,
-) -> list[str]:
+) -> list[tuple[str, float]]:
     symbols = list_base_symbols(symbol_root)
     if not symbols:
         return []
     scales = load_symbol_scales(scale_path, symbol_root)
-    images: list[str] = []
+    images: list[tuple[str, float]] = []
     for symbol in symbols:
+        symbol_scale = scales.get(symbol.name, 1.0) * settings.global_scale
         svg = build_symbol_preview_svg(
             symbol,
             marker_kind="user",
-            scale=scales.get(symbol.name, 1.0) * settings.global_scale,
+            scale=symbol_scale,
             include_rings=False,
             randomness=effective_randomness(settings),
         )
         encoded = b64encode(svg.encode("utf-8")).decode("ascii")
-        images.append(f"data:image/svg+xml;base64,{encoded}")
+        images.append((f"data:image/svg+xml;base64,{encoded}", symbol_scale))
     return images
 
 
@@ -278,6 +345,8 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
     resolved_db_path = db_path or plotter_settings.db_path
     latest_manifest = latest_spool_manifest(spool_root or plotter_settings.spool_root)
     item_counts = _manifest_item_counts(latest_manifest)
+    oracle_store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
+    oracle_control = oracle_store.load_print_control()
     if not resolved_db_path.exists():
         return {
             "status": "daemon_not_started",
@@ -285,10 +354,13 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
             "current_sheet_id": "",
             "last_sheet_path": "",
             "pending_reload": False,
-            "print_enabled": False,
-            "operator_paused": True,
-            "run_mode": "exhibition",
-            "dry_run": True,
+            "print_enabled": oracle_control.print_enabled,
+            "operator_paused": oracle_control.operator_paused,
+            "run_mode": oracle_control.run_mode,
+            "dry_run": oracle_control.dry_run,
+            "gcode_lines_sent": 0,
+            "gcode_lines_total": 0,
+            "gcode_progress_percent": 0.0,
             "updated_at": "",
             "latest_manifest": str(latest_manifest) if latest_manifest else "",
             "user_count": item_counts["user"],
@@ -297,7 +369,7 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
         }
     store = PlotterStore(resolved_db_path)
     state = store.load_runtime_state()
-    control = store.load_control_state()
+    control = oracle_store.load_print_control(store.load_control_state())
     return {
         "status": state.status.value,
         "message": state.message,
@@ -308,6 +380,9 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
         "operator_paused": control.operator_paused,
         "run_mode": control.run_mode,
         "dry_run": control.dry_run,
+        "gcode_lines_sent": state.gcode_lines_sent,
+        "gcode_lines_total": state.gcode_lines_total,
+        "gcode_progress_percent": state.gcode_progress_percent,
         "updated_at": state.updated_at.isoformat(),
         "latest_manifest": str(latest_manifest) if latest_manifest else "",
         "user_count": item_counts["user"],
@@ -330,6 +405,18 @@ def confirm_plotter_reload(db_path: Path | None = None) -> bool:
     return True
 
 
+def check_fluidnc_connection(settings: PlotterSettings | None = None) -> dict[str, Any]:
+    resolved_settings = settings or PlotterSettings()
+    online, message = FluidNCTransport(resolved_settings).check_connection(timeout_seconds=1.5)
+    return {
+        "online": online,
+        "status": "online" if online else "offline",
+        "message": message,
+        "host": resolved_settings.fluidnc_host,
+        "port": resolved_settings.fluidnc_port,
+    }
+
+
 def set_plotter_control(
     *,
     print_enabled: bool | None = None,
@@ -339,7 +426,8 @@ def set_plotter_control(
 ) -> PlotterControlState:
     plotter_settings = PlotterSettings()
     store = PlotterStore(db_path or plotter_settings.db_path)
-    state = store.load_control_state()
+    oracle_store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
+    state = oracle_store.load_print_control(store.load_control_state())
     if print_enabled is not None:
         state.print_enabled = print_enabled
         state.operator_paused = not print_enabled
@@ -349,6 +437,7 @@ def set_plotter_control(
         state.dry_run = dry_run
     state.updated_at = datetime.now(tz=UTC)
     store.save_control_state(state)
+    oracle_store.save_print_control(state)
     return state
 
 

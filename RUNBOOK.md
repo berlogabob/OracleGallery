@@ -27,9 +27,9 @@ NEJE_FIREBASE_CREDENTIALS=/absolute/path/to/serviceAccountKey.json
 NEJE_GALLERY_BASE_URL=https://berlogabob.github.io/OracleGallery
 ```
 
-## 2. Oracle Mac Mini: Uploader
+## 2. Oracle Mac Mini: Uploader Agent
 
-The uploader watches one folder and uploads finished session folders to Firebase.
+The Mac mini should run the lightweight uploader agent. The main GUI on the MacBook can then start, stop, restart, scan once, and monitor the uploader over the local network.
 
 Required session folder shape:
 
@@ -40,18 +40,18 @@ Required session folder shape:
   READY
 ```
 
-The uploader ignores photos, audio, and transcripts. It publishes only SVG, receipt TXT, QR PNG, and manifest JSON.
+The uploader ignores photos, audio, and transcripts. It publishes normalized SVG, raw SVG backup, receipt TXT, QR PNG, and manifest JSON.
 
 Terminal start:
 
 ```bash
-uv run neje-uploader
+uv run neje-uploader-agent
 ```
 
 Double-click start from repository root:
 
 ```text
-start_oracle_uploader.command
+start_uploader_agent.command
 ```
 
 Double-click start from the real TouchDesigner sessions folder:
@@ -61,7 +61,7 @@ assets/sessions/SETUP_ORACLE_UPLOADER.command
 assets/sessions/START_ORACLE_UPLOADER.command
 ```
 
-On the real Mac mini, copy those two files into the real `sessions` folder. Run setup once, then run start during the exhibition.
+Legacy direct uploader launchers still work for backup/debugging, but the exhibition path should be `neje-uploader-agent` plus the main GUI supervisor.
 
 ## 3. Test Generator
 
@@ -101,7 +101,7 @@ If the uploader is already running, every generated user session will be uploade
 
 ## 4. Operator GUI
 
-The GUI is a local NiceGUI browser panel. It does not replace the uploader or plotter daemon; it controls generation, layout preview, idle bank creation, scale correction, and local plotter state.
+The GUI is the main NiceGUI supervisor panel. It starts/stops the local plotter daemon, controls print state, monitors Firebase/FluidNC/Mac mini uploader, and remains the source of truth for layout config.
 
 Start from repository root:
 
@@ -129,17 +129,29 @@ http://127.0.0.1:8787/
 
 GUI sections:
 
-- Top bar: choose `TEST MODE` or `EXHIBITION MODE`, choose `DRY RUN` or `REAL FLUIDNC`, then use `START PRINT` / `STOP AFTER SHEET`.
+- Top status strip: `System`, `Mac mini uploader`, `Firebase`, `Plotter`, `FluidNC`, `Queue`, `Print`, `Preflight`.
+- Top controls: `START SYSTEM`, `STOP SYSTEM`, `PREFLIGHT`, `CHECK`, `ARM REAL FLUIDNC`, `START PRINT`, `STOP AFTER SHEET`.
+- Top mode selector: choose one mode only: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
+- `TEST`: fake sessions, idle bank, preview, and dry-run only.
+- `EXHIBITION DRY`: real sessions/uploader/queue, but physical FluidNC output is blocked and sheets go to dry-run/spool.
+- `EXHIBITION REAL`: real sessions and real FluidNC output; `START PRINT` stays disabled until preflight has no critical failures and the operator presses `ARM REAL FLUIDNC`.
 - Layout: choose `hex` or `grid`, working field size, margin, cell diameter, and gap between neighbouring cell circles. Capacity is calculated automatically.
 - Test mode: generate fake user session folders in `NEJE_UPLOADER_SESSION_ROOT`.
 - Test mode: generate local double-circle idle SVG files in `assets/generated_idle_symbols`.
 - `Sheet Preview`: static schematic preview of current placement, not a plotter animation.
 - `Plotter Status`: read local plotter runtime state, latest spool manifest, and confirm reload.
+- `Logs`: shows the last local supervisor/preflight/uploader/plotter log lines from `logs/oracle_supervisor.log`.
 - `Symbol Scale Correction`: edit `assets/symbols/symbol_scales.json` with global and per-symbol scale controls.
+- Scale values can go up to `5.0`. Values above `1.0` intentionally may overlap neighbouring cells; use dry-run before enabling real FluidNC.
 
 Important behavior:
 
-- If `neje-uploader` is running, GUI-generated user sessions are published to Firebase and become `plot_jobs`.
+- On launch, nothing starts automatically. Press `START SYSTEM` to start supervised components in safe mode.
+- `START SYSTEM` starts the local plotter daemon, checks Firebase/FluidNC, and contacts `NEJE_MACMINI_AGENT_URL`.
+- `PREFLIGHT` checks folders, symbols, idle bank, Firebase config, Mac mini/uploader path assumptions, FluidNC, spool write access, and dry-run G-code generation.
+- `ARM REAL FLUIDNC` is reset whenever the mode changes. It is never restored automatically after GUI restart.
+- The GUI writes layout settings to `runtime/oracle_runtime.sqlite3`; the plotter daemon reads this before every new sheet.
+- If the Mac mini uploader agent is running and started, GUI-generated or TouchDesigner session folders are published to Firebase and become `plot_jobs`.
 - `Generate dry-run sheet` writes local G-code and manifest to `spool/`; it does not send anything to the physical plotter.
 - `STOP AFTER SHEET` is a safe stop. It prevents the next sheet from starting; it does not interrupt a FluidNC stream already in progress.
 - `Confirm reload` updates the local plotter runtime state in SQLite, equivalent to confirming reload in the operator dashboard.
@@ -173,11 +185,49 @@ Manual per-symbol scale correction:
 assets/symbols/symbol_scales.json
 ```
 
-Set values above or below `1.0` after visual tests. This changes the inner symbol scale before final plotter normalization. The physical packing is controlled by `NEJE_PLOTTER_CELL_DIAMETER_MM`; the printed symbol is internally kept below the cell diameter to prevent overlap.
+Set values above or below `1.0` after visual tests. This changes the canonical symbol scale before upload, preview, and G-code. The physical packing is controlled by `NEJE_PLOTTER_CELL_DIAMETER_MM`; scale above `1.0` may deliberately cross cell boundaries for calibration.
 
-## 6. Plotter MacBook
+## 6. SVG Normalization and Firebase Reprocessing
 
-Start in dry-run mode first:
+New session uploads are normalized automatically:
+
+```text
+viewBox="0 0 1000 1000"
+data-neje-normalized="true"
+data-neje-scale="<scale>"
+```
+
+The public `artwork.svg` is normalized. The original file is preserved as `artwork_raw.svg` in the same Firebase Storage session folder.
+
+Dry-run existing Firebase sessions before writing:
+
+```bash
+uv run neje-normalize-firebase-sessions --dry-run --limit 10
+```
+
+Normalize one existing session:
+
+```bash
+uv run neje-normalize-firebase-sessions --session-id <session_id>
+```
+
+Force reprocessing if a session is already marked normalized:
+
+```bash
+uv run neje-normalize-firebase-sessions --session-id <session_id> --force
+```
+
+After upload, Firestore `svgUrl` gets a cache-busting version parameter so Flutter reloads the updated normalized SVG.
+
+## 7. Plotter MacBook
+
+Preferred exhibition start:
+
+```bash
+uv run neje-gui
+```
+
+Legacy direct daemon start for backup/debugging:
 
 ```bash
 NEJE_PLOTTER_DRY_RUN=true uv run neje-plotter
@@ -226,9 +276,9 @@ NEJE_PLOTTER_CELL_GAP_MM=0
 NEJE_PLOTTER_DRY_RUN=true
 ```
 
-Set the GUI output mode to `REAL FLUIDNC` only after dry-run G-code and layout are inspected. The default path remains dry-run and operator-paused.
+Set the GUI mode to `EXHIBITION REAL` only after dry-run G-code and layout are inspected. Then run `PREFLIGHT`, confirm there are no critical failures, press `ARM REAL FLUIDNC`, and only then press `START PRINT`.
 
-## 7. Flutter Gallery and GitHub Pages
+## 8. Flutter Gallery and GitHub Pages
 
 The repository is configured for GitHub Pages from:
 
@@ -258,7 +308,7 @@ QR codes point to:
 https://berlogabob.github.io/OracleGallery/#/session/<session_id>
 ```
 
-## 8. Firebase Setup and Deploy
+## 9. Firebase Setup and Deploy
 
 Deploy Firestore rules, indexes, and Storage rules:
 
@@ -278,13 +328,13 @@ Expected result:
 Updated CORS for gs://oraclegallery.firebasestorage.app
 ```
 
-## 9. Smoke Tests
+## 10. Smoke Tests
 
 Uploader path:
 
 ```bash
 uv run neje-generate-sessions --mode user --count 1
-uv run neje-uploader
+uv run neje-uploader-agent
 ```
 
 Check Firebase:
@@ -324,13 +374,40 @@ uv run neje-gui
 
 Then in the browser:
 
-- generate one user session;
-- confirm a new session folder appears in `NEJE_UPLOADER_SESSION_ROOT`;
+- select `TEST`;
+- press `START SYSTEM`;
+- press `PREFLIGHT` and confirm there are no critical failures for test mode;
+- generate one user session and confirm a new session folder appears in `NEJE_UPLOADER_SESSION_ROOT`;
 - generate idle bank and confirm `assets/generated_idle_symbols/*.svg` exists;
-- generate dry-run sheet and confirm `spool/*.gcode` and `spool/*.json` exist;
-- press `Refresh status`.
+- open `Plotter`, generate dry-run sheet, and confirm `spool/*.gcode` and `spool/*.json` exist;
+- open `Logs` and confirm supervisor/preflight lines are visible.
 
-## 10. Troubleshooting
+Exhibition dry-run smoke path:
+
+```bash
+uv run neje-uploader-agent
+uv run neje-gui
+```
+
+Then in the GUI:
+
+- select `EXHIBITION DRY`;
+- press `START SYSTEM`;
+- confirm `Mac mini uploader`, `Firebase`, `Plotter`, and `Queue` statuses are not `error`;
+- press `PREFLIGHT`;
+- press `START PRINT`;
+- confirm generated sheets are written to `spool/` and physical FluidNC output remains blocked.
+
+Real FluidNC smoke path:
+
+- select `EXHIBITION REAL`;
+- press `PREFLIGHT`;
+- confirm no critical failures and `FluidNC` is online;
+- press `ARM REAL FLUIDNC`;
+- only then press `START PRINT`;
+- use `STOP AFTER SHEET` for safe stop before the next sheet.
+
+## 11. Troubleshooting
 
 If SVG images show endless loading in the website, apply Storage CORS and hard-refresh the browser.
 
@@ -348,8 +425,12 @@ uv run neje-generate-sessions --mode idle --count 8
 
 If plotter cannot claim Firebase jobs, check service account path and Firestore permissions.
 
-If real plotting starts too early, keep `NEJE_PLOTTER_DRY_RUN=true` until the G-code and physical layout are confirmed.
+If real plotting starts too early, do not use `EXHIBITION REAL`. Use `EXHIBITION DRY` until G-code and physical layout are confirmed. `EXHIBITION REAL` requires `PREFLIGHT` plus `ARM REAL FLUIDNC`.
 
 If the GUI does not open, check `NEJE_GUI_HOST` and `NEJE_GUI_PORT`, then open `http://127.0.0.1:8787/` manually.
 
-If GUI-generated sessions do not become Firebase jobs, start `neje-uploader` and confirm GUI and uploader use the same `NEJE_UPLOADER_SESSION_ROOT`.
+If GUI-generated sessions do not become Firebase jobs, start `neje-uploader-agent`, press `START SYSTEM`, and confirm Mac mini agent plus GUI use the same `NEJE_UPLOADER_SESSION_ROOT`.
+
+If `START PRINT` is disabled in `EXHIBITION REAL`, run `PREFLIGHT`, fix critical failures, confirm `FluidNC` is online, then press `ARM REAL FLUIDNC`.
+
+If the Logs panel is empty, perform an action such as `PREFLIGHT` or `CHECK`, then refresh logs. Logs are written to `NEJE_ORACLE_LOGS_ROOT/oracle_supervisor.log`.

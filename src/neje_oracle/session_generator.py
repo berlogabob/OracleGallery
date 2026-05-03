@@ -13,25 +13,10 @@ from pathlib import Path
 from typing import Iterable
 
 from .config import UploaderSettings, _repo_root, ensure_dir
+from .svg_normalizer import MARK_NAMES, normalize_svg_file
 
 SVG_NS = "http://www.w3.org/2000/svg"
 ET.register_namespace("", SVG_NS)
-
-CANVAS_SIZE = 800.0
-CENTER = CANVAS_SIZE / 2.0
-OUTER_RADIUS = 360.0
-INNER_IDLE_RADIUS = 338.0
-
-MARK_NAMES = [
-    "THE KIND SOUL",
-    "THE PITIFUL STORY",
-    "THE SHRIEK",
-    "THE THORNS",
-    "THE SKY EYE",
-    "THE BITTER ROOT",
-    "THE STILL BLADE",
-    "THE HOLLOW SUN",
-]
 
 ORACLE_LINES = [
     "They crave certainty. Uncertainty fuels their fear.",
@@ -233,88 +218,13 @@ def build_variant_svg(
     jitter_px: float,
     include_rings: bool = True,
 ) -> str:
-    tree = ET.parse(source_svg)
-    root = tree.getroot()
-    _jitter_drawables(root, rng, jitter_px)
-    bbox = _drawable_bbox(root)
-    min_x, min_y, max_x, max_y = bbox
-    width = max(max_x - min_x, 1.0)
-    height = max(max_y - min_y, 1.0)
-    source_mid_x = (min_x + max_x) / 2.0
-    source_mid_y = (min_y + max_y) / 2.0
-    target_diameter = OUTER_RADIUS * 2.0 * scale
-    transform_scale = target_diameter / max(width, height)
-    viewbox_min_x, viewbox_min_y, viewbox_width, viewbox_height = _variant_viewbox(
-        min_x=min_x,
-        min_y=min_y,
-        max_x=max_x,
-        max_y=max_y,
-        source_mid_x=source_mid_x,
-        source_mid_y=source_mid_y,
-        transform_scale=transform_scale,
-        include_rings=include_rings,
+    return normalize_svg_file(
+        source_svg,
         marker_kind=marker_kind,
-    )
-    children = "\n".join(ET.tostring(child, encoding="unicode") for child in list(root))
-
-    rings: list[str] = []
-    if marker_kind not in {"idle", "user"}:
-        raise ValueError(f"Unsupported marker kind: {marker_kind}")
-    if include_rings:
-        rings.append(f'<circle cx="{CENTER:.1f}" cy="{CENTER:.1f}" r="{OUTER_RADIUS:.1f}" />')
-        if marker_kind == "idle":
-            rings.append(f'<circle cx="{CENTER:.1f}" cy="{CENTER:.1f}" r="{INNER_IDLE_RADIUS:.1f}" />')
-
-    return (
-        f'<svg xmlns="{SVG_NS}" width="{int(CANVAS_SIZE)}" height="{int(CANVAS_SIZE)}" '
-        f'viewBox="{viewbox_min_x:.3f} {viewbox_min_y:.3f} {viewbox_width:.3f} {viewbox_height:.3f}">\n'
-        '<g fill="none" stroke="black" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round">\n'
-        + "\n".join(rings)
-        + "\n"
-        f'<g transform="translate({CENTER:.3f} {CENTER:.3f}) scale({transform_scale:.8f}) '
-        f'translate({-source_mid_x:.3f} {-source_mid_y:.3f})">\n'
-        f"{children}\n"
-        "</g>\n"
-        "</g>\n"
-        "</svg>\n"
-    )
-
-
-def _variant_viewbox(
-    *,
-    min_x: float,
-    min_y: float,
-    max_x: float,
-    max_y: float,
-    source_mid_x: float,
-    source_mid_y: float,
-    transform_scale: float,
-    include_rings: bool,
-    marker_kind: str,
-) -> tuple[float, float, float, float]:
-    transformed_min_x = CENTER + ((min_x - source_mid_x) * transform_scale)
-    transformed_max_x = CENTER + ((max_x - source_mid_x) * transform_scale)
-    transformed_min_y = CENTER + ((min_y - source_mid_y) * transform_scale)
-    transformed_max_y = CENTER + ((max_y - source_mid_y) * transform_scale)
-
-    xs = [0.0, CANVAS_SIZE, transformed_min_x, transformed_max_x]
-    ys = [0.0, CANVAS_SIZE, transformed_min_y, transformed_max_y]
-
-    if include_rings:
-        ring_radius = OUTER_RADIUS if marker_kind == "user" else max(OUTER_RADIUS, INNER_IDLE_RADIUS)
-        xs.extend([CENTER - ring_radius, CENTER + ring_radius])
-        ys.extend([CENTER - ring_radius, CENTER + ring_radius])
-
-    padding = 8.0
-    viewbox_min_x = min(xs) - padding
-    viewbox_min_y = min(ys) - padding
-    viewbox_max_x = max(xs) + padding
-    viewbox_max_y = max(ys) + padding
-    return (
-        viewbox_min_x,
-        viewbox_min_y,
-        max(viewbox_max_x - viewbox_min_x, 1.0),
-        max(viewbox_max_y - viewbox_min_y, 1.0),
+        scale=scale,
+        include_rings=include_rings,
+        rng=rng,
+        jitter_px=jitter_px,
     )
 
 
@@ -415,116 +325,6 @@ def _append_session_log(
                 "confidence": measures["confidence"],
             }
         )
-
-
-def _jitter_drawables(root: ET.Element, rng: random.Random, jitter_px: float) -> None:
-    if jitter_px <= 0:
-        return
-    for element in root.iter():
-        tag = _local_name(element.tag)
-        if tag in {"polyline", "polygon"} and element.get("points"):
-            element.set("points", _jitter_points_attribute(element.get("points", ""), rng, jitter_px))
-        elif tag == "line":
-            for key in ("x1", "y1", "x2", "y2"):
-                _jitter_numeric_attr(element, key, rng, jitter_px)
-        elif tag in {"circle", "ellipse"}:
-            for key in ("cx", "cy"):
-                _jitter_numeric_attr(element, key, rng, jitter_px)
-
-
-def _jitter_points_attribute(points: str, rng: random.Random, jitter_px: float) -> str:
-    pairs: list[str] = []
-    for pair in points.replace("\n", " ").split():
-        if "," not in pair:
-            continue
-        raw_x, raw_y = pair.split(",", 1)
-        try:
-            x = float(raw_x) + rng.gauss(0.0, jitter_px)
-            y = float(raw_y) + rng.gauss(0.0, jitter_px)
-        except ValueError:
-            continue
-        pairs.append(f"{x:.1f},{y:.1f}")
-    return " ".join(pairs)
-
-
-def _jitter_numeric_attr(element: ET.Element, key: str, rng: random.Random, jitter_px: float) -> None:
-    raw_value = element.get(key)
-    if raw_value is None:
-        return
-    try:
-        element.set(key, f"{float(raw_value) + rng.gauss(0.0, jitter_px):.1f}")
-    except ValueError:
-        return
-
-
-def _drawable_bbox(root: ET.Element) -> tuple[float, float, float, float]:
-    xs: list[float] = []
-    ys: list[float] = []
-    for element in root.iter():
-        tag = _local_name(element.tag)
-        if tag in {"polyline", "polygon"}:
-            for x, y in _parse_points(element.get("points", "")):
-                xs.append(x)
-                ys.append(y)
-        elif tag == "line":
-            for x_key, y_key in (("x1", "y1"), ("x2", "y2")):
-                point = _read_point(element, x_key, y_key)
-                if point:
-                    xs.append(point[0])
-                    ys.append(point[1])
-        elif tag == "circle":
-            cx = _read_float(element, "cx")
-            cy = _read_float(element, "cy")
-            radius = _read_float(element, "r")
-            if cx is not None and cy is not None and radius is not None:
-                xs.extend([cx - radius, cx + radius])
-                ys.extend([cy - radius, cy + radius])
-        elif tag == "ellipse":
-            cx = _read_float(element, "cx")
-            cy = _read_float(element, "cy")
-            rx = _read_float(element, "rx")
-            ry = _read_float(element, "ry")
-            if cx is not None and cy is not None and rx is not None and ry is not None:
-                xs.extend([cx - rx, cx + rx])
-                ys.extend([cy - ry, cy + ry])
-    if not xs or not ys:
-        return (0.0, 0.0, CANVAS_SIZE, CANVAS_SIZE)
-    return (min(xs), min(ys), max(xs), max(ys))
-
-
-def _parse_points(points: str) -> list[tuple[float, float]]:
-    parsed: list[tuple[float, float]] = []
-    for pair in points.replace("\n", " ").split():
-        if "," not in pair:
-            continue
-        raw_x, raw_y = pair.split(",", 1)
-        try:
-            parsed.append((float(raw_x), float(raw_y)))
-        except ValueError:
-            continue
-    return parsed
-
-
-def _read_point(element: ET.Element, x_key: str, y_key: str) -> tuple[float, float] | None:
-    x = _read_float(element, x_key)
-    y = _read_float(element, y_key)
-    if x is None or y is None:
-        return None
-    return (x, y)
-
-
-def _read_float(element: ET.Element, key: str) -> float | None:
-    raw_value = element.get(key)
-    if raw_value is None:
-        return None
-    try:
-        return float(raw_value)
-    except ValueError:
-        return None
-
-
-def _local_name(tag: str) -> str:
-    return tag.rsplit("}", 1)[-1]
 
 
 if __name__ == "__main__":

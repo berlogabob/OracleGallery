@@ -18,6 +18,7 @@ launcher_ensure_dir_var "NEJE_PLOTTER_SPOOL_ROOT" "Point this to a writable spoo
 echo "GUI:             http://${NEJE_GUI_HOST:-127.0.0.1}:${NEJE_GUI_PORT:-8787}/"
 echo "Sessions folder: $NEJE_UPLOADER_SESSION_ROOT"
 echo "Spool folder:    ${NEJE_PLOTTER_SPOOL_ROOT:-$SCRIPT_DIR/spool}"
+echo "Mac mini agent:  ${NEJE_MACMINI_AGENT_URL:-not configured}"
 echo
 
 launcher_run_service "neje-gui"

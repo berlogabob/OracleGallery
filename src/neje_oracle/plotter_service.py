@@ -7,11 +7,11 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from .config import FirebaseSettings, PlotterSettings
+from .config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
 from .firebase_io import FirebaseRemoteRepository
 from .models import HealthResponse, ReloadResponse
 from .plotter_daemon import PlotterDaemon
-from .store import PlotterStore
+from .store import OracleRuntimeStore, PlotterStore
 from .transport import FluidNCTransport
 
 
@@ -19,8 +19,9 @@ def create_app() -> FastAPI:
     settings = PlotterSettings()
     remote = FirebaseRemoteRepository(FirebaseSettings())
     store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):

@@ -1,78 +1,77 @@
-# Test Symbol Generator + Complete Run Documentation
+# Oracle GUI v2: текущий план и состояние
 
 ## Summary
-- Добавить генератор тестовых Oracle-сессий, который имитирует TouchDesigner: создаёт реальные папки с `*_plotter.svg`, `*_receipt.txt`, `READY` и строкой в `session_log.csv`.
-- По выбранному варианту генератор по умолчанию пишет в реальную `NEJE_UPLOADER_SESSION_ROOT`, чтобы сразу проверять auto-upload в Firebase и создание `plot_jobs`.
-- Добавить отдельную генерацию idle/filling SVG для запасной очереди плоттера: те же 8 базовых символов, но с двойной окружностью.
-- Обновить документацию в формате `README.md` + отдельный root `RUNBOOK.md`, потому что `docs/` занят Flutter Pages build output.
 
-## Key Changes
-- Добавить Python CLI `neje-generate-sessions`.
-- CLI режимы:
-  - `--mode user`: создаёт пользовательские session folders с одним кругом, receipt TXT, READY marker, CSV measures.
-  - `--mode idle`: создаёт локальный idle symbol bank с двойным кругом для плоттера, без Firebase и без `plot_jobs`.
-  - `--live --interval-seconds N`: создаёт пользовательские сессии по одной с интервалом, чтобы проверять реальный auto-upload при запущенном uploader.
-- Источник символов: `assets/symbols/*.svg`.
-- Output defaults:
-  - user sessions: `NEJE_UPLOADER_SESSION_ROOT`, fallback `assets/sessions`.
-  - idle symbols: `assets/generated_idle_symbols`.
-- SVG output:
-  - нормализованный `viewBox="0 0 800 800"`;
-  - базовый символ центрируется внутри окружности;
-  - user SVG получает одну окружность;
-  - idle SVG получает две окружности;
-  - окружность включается в bbox, поэтому при печати внешний круг становится фактическим `NEJE_PLOTTER_MARK_DIAMETER_MM`.
-- Scale control:
-  - добавить `assets/symbols/symbol_scales.json`;
-  - ключи: basename каждого из 8 исходных SVG;
-  - значение: scale multiplier для самого знака внутри окружности, не для окружности;
-  - default для всех: `1.0`.
-- Variation control:
-  - jitter линий зависит от seed и synthetic measures;
-  - intensity/instability/confidence пишутся в `session_log.csv`, чтобы uploader добавил их в Firestore;
-  - receipt TXT остаётся в существующем формате, который уже парсит uploader.
-- Launch wrappers:
-  - `generate_test_sessions.command` и `.sh` в root;
-  - `assets/sessions/GENERATE_TEST_SESSION.command` для запуска прямо из реальной папки сессий на Mac mini;
-  - wrapper показывает output path, количество созданных сессий и предупреждает, что при активном uploader они сразу уйдут в Firebase.
-- Plotter launcher:
-  - если `assets/generated_idle_symbols` существует и содержит SVG, использовать его как default `NEJE_PLOTTER_PLACEHOLDER_ROOT`;
-  - иначе fallback остаётся `assets/symbols`.
+`neje-gui` является главным операторским пультом выставочной системы. Из него оператор выбирает режим, запускает supervised system, запускает preflight, смотрит статусы, управляет Mac mini uploader agent, контролирует plotter daemon, подтверждает reload и включает печать.
 
-## Documentation Updates
-- `README.md`: оставить короткий обзор архитектуры, контракты, основные команды, список launchers.
-- `RUNBOOK.md`: добавить пошаговые инструкции:
-  - первая установка на Oracle Mac mini;
-  - запуск uploader из `assets/sessions`;
-  - проверка Firebase upload и Firestore `plot_jobs`;
-  - генерация тестовых пользовательских сессий;
-  - live генерация для проверки real-time priority;
-  - генерация idle bank с двойными кругами;
-  - запуск plotter daemon в dry-run и real mode;
-  - где смотреть spool, G-code, operator dashboard;
-  - сборка Flutter в `/docs`;
-  - применение Firebase rules, indexes и Storage CORS;
-  - troubleshooting: CORS, credentials, неверный watched folder, повторный import, пустая очередь.
-- `public_gallery/README.md`: обновить описание под текущий digital receipt UI без фото/preview.
+Система намеренно безопасна по умолчанию: при открытии GUI ничего не стартует автоматически, physical FluidNC output заблокирован до явного режима `EXHIBITION REAL`, успешного preflight и ручного `ARM REAL FLUIDNC`.
 
-## Test Plan
-- Unit tests для генератора:
-  - создаёт session folder с `{id}_plotter.svg`, `{id}_receipt.txt`, `READY`;
-  - append/update `session_log.csv` без transcript/photo/audio;
-  - user SVG содержит одну окружность;
-  - idle SVG содержит две окружности;
-  - per-symbol scale меняет bbox знака, но не меняет внешний круг;
-  - output SVG читается текущим `svg_gcode`.
-- Integration-style local test:
-  - сгенерировать 1 user session в temp sessions root;
-  - запустить `SessionUploader.scan_once()` с fake remote;
-  - проверить, что создаётся `plot_jobs` payload через существующий publish path.
-- Existing checks:
-  - `uv run pytest`;
-  - `cd public_gallery && flutter analyze`;
-  - `./scripts/build_gallery_docs.sh`.
+## Реализованная архитектура
 
-## Assumptions
-- Генератор не пишет напрямую в Firebase. Это намеренно: он проверяет настоящий путь `folder -> uploader -> Firebase -> plot_jobs`.
-- Тестовые сессии будут видны в публичной витрине, если uploader запущен и output path указывает на реальную watched-папку.
-- Оригинальные 8 SVG в `assets/symbols` не перезаписываются; все вариации и idle SVG создаются отдельно.
+- **Mac mini / TouchDesigner:** TouchDesigner только создаёт session folders. На Mac mini запускается `neje-uploader-agent`, которым управляет главный GUI по `NEJE_MACMINI_AGENT_URL`.
+- **MacBook / Operator + Plotter:** `neje-gui` запускает локальный `PlotterDaemon` в background thread через `SupervisorService`.
+- **Runtime source of truth:** `runtime/oracle_runtime.sqlite3` хранит component states, plotter config, print control, selected system mode, preflight result и real FluidNC arm state.
+- **Logs:** supervisor/preflight/uploader/plotter actions пишутся в `logs/oracle_supervisor.log`, путь задаётся `NEJE_ORACLE_LOGS_ROOT`.
+- **Legacy launchers:** `neje-uploader` и `neje-plotter` остаются backup/debug path, но выставочный путь: `neje-uploader-agent` + `neje-gui`.
+
+## GUI modes
+
+- `TEST`: fake sessions, idle bank, preview, dry-run sheet. Physical FluidNC output заблокирован.
+- `EXHIBITION DRY`: реальные sessions/uploader/Firebase/queue, но output остаётся dry-run/spool.
+- `EXHIBITION REAL`: реальные sessions + FluidNC. `START PRINT` разрешается только после `PREFLIGHT` без critical failures и `ARM REAL FLUIDNC`.
+
+Внутренние поля `run_mode` и `dry_run` сохраняются для совместимости plotter daemon, но оператор больше не управляет ими как независимыми переключателями.
+
+## Operator workflow
+
+1. Запустить `neje-uploader-agent` на Mac mini.
+2. Запустить `neje-gui` на operator/plotter MacBook.
+3. Выбрать режим: `TEST`, `EXHIBITION DRY` или `EXHIBITION REAL`.
+4. Нажать `START SYSTEM`.
+5. Нажать `PREFLIGHT`.
+6. В `TEST` или `EXHIBITION DRY` можно нажать `START PRINT`; физическая отправка в FluidNC заблокирована.
+7. В `EXHIBITION REAL` после successful preflight нажать `ARM REAL FLUIDNC`, затем `START PRINT`.
+8. Для остановки использовать `STOP AFTER SHEET`; это не emergency stop и не рвёт текущий G-code stream.
+
+## Реализованные safety gates
+
+- Mode change всегда сбрасывает `real_fluidnc_armed=false`.
+- `START PRINT` в `EXHIBITION REAL` блокируется без arm.
+- `ARM REAL FLUIDNC` блокируется без preflight result или при critical failures.
+- `ARM REAL FLUIDNC` проверяет FluidNC online перед arming.
+- `TEST` и `EXHIBITION DRY` всегда мапятся в dry-run control state.
+
+## Preflight
+
+Preflight проверяет:
+
+- runtime folder writable;
+- base symbols available;
+- generated idle bank present или warning fallback;
+- uploader watched folder;
+- Firebase config;
+- FluidNC connection;
+- spool folder writable;
+- dry-run G-code generation.
+
+Результат сохраняется в runtime store и отображается в GUI status strip/logs.
+
+## Следующие этапы
+
+- **Queue dashboard:** показывать реальные counts Firestore `plot_jobs`: pending, leased, plotting, printed, failed, retry.
+- **Uploader outbox/quarantine:** durable local backlog на Mac mini для плохой сети и битых sessions.
+- **Preflight depth:** добавить реальный Firebase read/write smoke test вместо проверки только конфигурации.
+- **FluidNC progress:** перейти от локального G-code line progress к подтверждениям/статусу FluidNC, если транспорт позволит.
+- **GUI modularization phase 2:** вынести panel composition из `gui_service.py` в отдельные panel-модули. Текущий UI kit уже вынесен, но основной page composition пока оставлен в одном файле для снижения риска.
+
+## Verification
+
+Обязательные проверки после изменений:
+
+```bash
+uv run pytest
+cd public_gallery && flutter analyze
+./scripts/build_gallery_docs.sh
+```
+
+Текущий тестовый набор покрывает mode mapping, preflight, real FluidNC safety gate, runtime store, supervisor start/stop, uploader agent, GUI settings, SVG normalization и plotter G-code helpers.

@@ -29,6 +29,7 @@ class FakeRemoteRepository:
     def publish_session(self, record, public_dir: Path) -> PublicationResult:
         self.published.append(record.session_id)
         assert (public_dir / "artwork.svg").exists()
+        assert (public_dir / "artwork_raw.svg").exists()
         assert (public_dir / "receipt.txt").exists()
         assert (public_dir / "qr.png").exists()
         return PublicationResult(
@@ -108,17 +109,16 @@ def test_symbol_scale_changes_inner_mark_transform(tmp_path: Path) -> None:
     assert _transform_scale(small_svg) < _transform_scale(large_svg)
 
 
-def test_large_symbol_scale_expands_viewbox_instead_of_clipping(tmp_path: Path) -> None:
+def test_large_symbol_scale_keeps_fixed_canonical_viewbox(tmp_path: Path) -> None:
     source_root = _write_symbol_bank(tmp_path)
     source_svg = source_root / "base.svg"
 
-    svg_text = build_variant_svg(source_svg, marker_kind="user", scale=1.5, rng=Random(1), jitter_px=0)
+    svg_text = build_variant_svg(source_svg, marker_kind="user", scale=5.0, rng=Random(1), jitter_px=0)
     min_x, min_y, width, height = _viewbox(svg_text)
 
-    assert min_x < 0
-    assert min_y < 0
-    assert min_x + width > 800
-    assert min_y + height > 800
+    assert (min_x, min_y, width, height) == (0.0, 0.0, 1000.0, 1000.0)
+    assert 'data-neje-normalized="true"' in svg_text
+    assert 'data-neje-scale="5"' in svg_text
 
 
 def test_generated_svg_can_feed_existing_gcode_normalizer(tmp_path: Path) -> None:
@@ -146,11 +146,11 @@ def test_generated_svg_can_feed_existing_gcode_normalizer(tmp_path: Path) -> Non
     assert f"; item {generated.session_id} (user)" in gcode
 
 
-def test_large_scaled_generated_svg_prints_inside_cell(tmp_path: Path) -> None:
+def test_large_scaled_generated_svg_can_print_outside_cell(tmp_path: Path) -> None:
     source_root = _write_symbol_bank(tmp_path)
     svg_path = tmp_path / "large.svg"
     svg_path.write_text(
-        build_variant_svg(source_root / "base.svg", marker_kind="user", scale=1.5, rng=Random(1), jitter_px=0),
+        build_variant_svg(source_root / "base.svg", marker_kind="user", scale=5.0, rng=Random(1), jitter_px=0),
         encoding="utf-8",
     )
 
@@ -173,10 +173,11 @@ def test_large_scaled_generated_svg_prints_inside_cell(tmp_path: Path) -> None:
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
 
-    assert min(xs) >= 80
-    assert max(xs) <= 120
-    assert min(ys) >= 80
-    assert max(ys) <= 120
+    assert min(xs) < 80
+    assert max(xs) > 120
+    assert min(ys) < 80
+    assert max(ys) > 120
+    assert "overscale" in gcode
 
 
 def test_generated_session_passes_through_uploader(tmp_path: Path) -> None:

@@ -8,7 +8,18 @@ from pathlib import Path
 from typing import Any
 
 from .config import ensure_parent
-from .models import PlotterControlState, PlotterRuntimeState, PlotStatus, PublicStatus, SessionRecord
+from .models import (
+    ComponentState,
+    ComponentStatus,
+    PreflightResult,
+    PlotterControlState,
+    PlotterRuntimeConfig,
+    PlotterRuntimeState,
+    PlotStatus,
+    PublicStatus,
+    SessionRecord,
+    SystemMode,
+)
 
 
 class _SQLiteStore:
@@ -217,3 +228,139 @@ class PlotterStore(_SQLiteStore):
         if not row:
             return PlotterControlState()
         return PlotterControlState.from_dict(json.loads(row["value"]))
+
+
+class OracleRuntimeStore(_SQLiteStore):
+    def __init__(self, db_path: Path) -> None:
+        super().__init__(db_path)
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS oracle_runtime (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+            """
+        )
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS component_state (
+              component TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+            """
+        )
+
+    def save_component_state(self, state: ComponentState) -> None:
+        self._execute(
+            """
+            INSERT INTO component_state (component, value)
+            VALUES (?, ?)
+            ON CONFLICT(component) DO UPDATE SET value=excluded.value
+            """,
+            (state.component, json.dumps(state.to_dict())),
+        )
+
+    def load_component_state(self, component: str) -> ComponentState:
+        row = self._fetchone("SELECT value FROM component_state WHERE component = ?", (component,))
+        if not row:
+            return ComponentState(component=component, status=ComponentStatus.STOPPED)
+        return ComponentState.from_dict(json.loads(row["value"]))
+
+    def load_all_component_states(self) -> dict[str, ComponentState]:
+        with self._lock:
+            rows = self._connection.execute("SELECT component, value FROM component_state").fetchall()
+        return {row["component"]: ComponentState.from_dict(json.loads(row["value"])) for row in rows}
+
+    def set_component(
+        self,
+        component: str,
+        status: ComponentStatus,
+        *,
+        message: str = "",
+        last_error: str = "",
+        heartbeat: bool = False,
+        started: bool = False,
+    ) -> ComponentState:
+        now = datetime.now(tz=UTC)
+        previous = self.load_component_state(component)
+        state = ComponentState(
+            component=component,
+            status=status,
+            message=message,
+            last_error=last_error,
+            heartbeat_at=now if heartbeat else previous.heartbeat_at,
+            started_at=now if started else previous.started_at,
+            updated_at=now,
+        )
+        self.save_component_state(state)
+        return state
+
+    def save_plotter_config(self, config: PlotterRuntimeConfig) -> None:
+        self._execute(
+            """
+            INSERT INTO oracle_runtime (key, value)
+            VALUES ('plotter_config', ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (json.dumps(config.to_dict()),),
+        )
+
+    def load_plotter_config(self, default: PlotterRuntimeConfig | None = None) -> PlotterRuntimeConfig:
+        row = self._fetchone("SELECT value FROM oracle_runtime WHERE key = 'plotter_config'")
+        if not row:
+            return default or PlotterRuntimeConfig()
+        return PlotterRuntimeConfig.from_dict(json.loads(row["value"]))
+
+    def save_print_control(self, state: PlotterControlState) -> None:
+        self._execute(
+            """
+            INSERT INTO oracle_runtime (key, value)
+            VALUES ('print_control', ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (json.dumps(state.to_dict()),),
+        )
+
+    def load_print_control(self, default: PlotterControlState | None = None) -> PlotterControlState:
+        row = self._fetchone("SELECT value FROM oracle_runtime WHERE key = 'print_control'")
+        if not row:
+            return default or PlotterControlState()
+        return PlotterControlState.from_dict(json.loads(row["value"]))
+
+    def save_json(self, key: str, payload: dict[str, Any]) -> None:
+        self._execute(
+            """
+            INSERT INTO oracle_runtime (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (key, json.dumps(payload)),
+        )
+
+    def load_json(self, key: str, default: dict[str, Any] | None = None) -> dict[str, Any]:
+        row = self._fetchone("SELECT value FROM oracle_runtime WHERE key = ?", (key,))
+        if not row:
+            return default or {}
+        return dict(json.loads(row["value"]))
+
+    def save_system_mode(self, mode: SystemMode) -> None:
+        self.save_json("system_mode", {"mode": mode.value, "updated_at": datetime.now(tz=UTC).isoformat()})
+
+    def load_system_mode(self, default: SystemMode = SystemMode.EXHIBITION_DRY) -> SystemMode:
+        payload = self.load_json("system_mode", {"mode": default.value})
+        return SystemMode(payload.get("mode", default.value))
+
+    def save_real_fluidnc_armed(self, armed: bool) -> None:
+        self.save_json("real_fluidnc_armed", {"armed": armed, "updated_at": datetime.now(tz=UTC).isoformat()})
+
+    def load_real_fluidnc_armed(self) -> bool:
+        return bool(self.load_json("real_fluidnc_armed", {"armed": False}).get("armed", False))
+
+    def save_preflight_result(self, result: PreflightResult) -> None:
+        self.save_json("preflight_result", result.to_dict())
+
+    def load_preflight_result(self) -> PreflightResult | None:
+        payload = self.load_json("preflight_result")
+        if not payload:
+            return None
+        return PreflightResult.from_dict(payload)

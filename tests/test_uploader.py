@@ -15,6 +15,8 @@ class FakeRemoteRepository:
 
     def publish_session(self, record, public_dir: Path) -> PublicationResult:
         self.publish_calls.append(record.session_id)
+        assert (public_dir / "artwork.svg").exists()
+        assert (public_dir / "artwork_raw.svg").exists()
         assert (public_dir / "receipt.txt").exists()
         assert not (public_dir / "preview.png").exists()
         return PublicationResult(
@@ -223,8 +225,11 @@ def test_touchdesigner_plotter_and_receipt_assets_are_imported_without_visitor_p
 
     assert uploader.scan_once() == [session_id]
     assert (public_root / session_id / "artwork.svg").exists()
+    assert (public_root / session_id / "artwork_raw.svg").exists()
     assert (public_root / session_id / "receipt.txt").exists()
     assert not (public_root / session_id / "preview.png").exists()
+    assert 'data-neje-normalized="true"' in (public_root / session_id / "artwork.svg").read_text(encoding="utf-8")
+    assert 'data-neje-normalized="true"' not in (public_root / session_id / "artwork_raw.svg").read_text(encoding="utf-8")
 
     row = store.get_session(session_id)
     assert row is not None

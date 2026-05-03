@@ -2,14 +2,31 @@ from __future__ import annotations
 
 import os
 import subprocess
+from base64 import b64encode
 from typing import Any
 
 from nicegui import ui
 
 from .config import PlotterSettings
+from .gui_modes import MODE_LABELS, mode_policy
+from .gui_ui import (
+    danger_action_button,
+    log_viewer,
+    mode_badge,
+    number_control,
+    primary_action_button,
+    safe_action_button,
+    slider_control,
+    status_pill,
+    update_status_pill,
+    warning_banner,
+)
+from .models import ComponentStatus, PreflightLevel, SystemMode
 from .gui_support import (
+    GUI_DEFAULTS,
     build_preview_svg,
     build_symbol_preview_svg,
+    check_fluidnc_connection,
     confirm_plotter_reload,
     create_idle_bank_from_gui,
     create_user_sessions_from_gui,
@@ -17,15 +34,18 @@ from .gui_support import (
     default_scale_config_path,
     effective_randomness,
     generate_dry_run_sheet,
+    gui_settings_to_plotter_config,
     layout_capacity,
     list_base_symbols,
     load_gui_settings,
     load_symbol_scales,
     read_plotter_status,
     save_gui_settings,
+    save_oracle_plotter_config,
     save_symbol_scales,
-    set_plotter_control,
 )
+from .oracle_logging import read_logs
+from .supervisor import SupervisorService
 
 
 def build_page() -> None:
@@ -37,7 +57,10 @@ def build_page() -> None:
     status_labels: dict[str, Any] = {}
     symbol_previews: dict[str, Any] = {}
     control_labels: dict[str, Any] = {}
+    plotter_labels: dict[str, Any] = {}
+    component_labels: dict[str, Any] = {}
     cycle_state = {"index": 0}
+    supervisor = SupervisorService()
 
     ui.colors(primary="#1f1a17", secondary="#9a5b24", accent="#c7a45a")
     ui.add_head_html(
@@ -55,16 +78,21 @@ def build_page() -> None:
           }
           .oracle-title { letter-spacing: 0.16em; color: #8f4f2b; }
           .compact-card { padding: 10px 12px !important; }
-          .preview-frame svg { width: 100%; height: auto; max-height: 64vh; }
+          .preview-frame svg { width: 100%; height: auto; max-height: 68vh; }
           .symbol-preview svg { width: 58px; height: 58px; }
           .path-label { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .tight-slider .q-slider { min-height: 28px; }
+          .status-pill { border: 1px solid #dac9ad; border-radius: 999px; padding: 3px 8px; font-size: 11px; white-space: nowrap; }
+          .mode-badge { border: 1px solid #9a5b24; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; color: #8f4f2b; }
+          .warning-banner { background: #fff4df; border: 1px solid #c99743; border-radius: 10px; color: #8f4f2b; padding: 6px 8px; font-size: 12px; }
+          .log-viewer textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.35; }
         </style>
         """
     )
 
     def pull_settings_from_fields() -> None:
-        settings.run_mode = str(fields["run_mode"].value)
-        settings.dry_run = str(fields["transport_mode"].value) == "dry_run"
+        settings.system_mode = str(fields["system_mode"].value)
+        settings.apply_system_mode()
         settings.layout_mode = str(fields["layout_mode"].value)
         settings.cell_diameter_mm = float(fields["cell_diameter_mm"].value or 1)
         settings.gap_mm = float(fields["gap_mm"].value or 0)
@@ -84,35 +112,61 @@ def build_page() -> None:
     def persist_and_refresh() -> None:
         pull_settings_from_fields()
         save_gui_settings(settings)
+        save_oracle_plotter_config(settings)
         preview.content = build_preview_svg(settings)
         preview.update()
         capacity_label.set_text(f"{layout_capacity(settings)} cells")
-        mode_label.set_text(settings.run_mode.upper())
-        transport_label.set_text("DRY RUN" if settings.dry_run else "REAL FLUIDNC")
-        test_panel.visible = settings.run_mode == "test"
+        policy = mode_policy(settings.mode)
+        mode_label.set_text(policy.label)
+        transport_label.set_text("DRY RUN" if policy.dry_run else "REAL FLUIDNC")
+        test_panel.visible = policy.test_tools_enabled
         test_panel.update()
+        real_warning.visible = policy.real_fluidnc_required
+        real_warning.update()
+        if policy.real_fluidnc_required:
+            arm_button.enable()
+            if supervisor.runtime_store.load_real_fluidnc_armed():
+                start_print_button.enable()
+            else:
+                start_print_button.disable()
+        else:
+            arm_button.disable()
+            start_print_button.enable()
+            supervisor.runtime_store.save_real_fluidnc_armed(False)
         live_timer.interval = max(settings.live_interval_seconds, 1.0)
         refresh_symbol_previews()
         refresh_status()
+        refresh_component_status()
 
     def refresh_symbol_previews() -> None:
         for symbol in symbols:
             scale = scales.get(symbol.name, 1.0) * settings.global_scale
-            symbol_previews[symbol.name].content = build_symbol_preview_svg(
+            svg = build_symbol_preview_svg(
                 symbol,
                 marker_kind="user",
                 scale=scale,
                 include_rings=settings.include_rings,
                 randomness=effective_randomness(settings),
             )
+            encoded = b64encode(svg.encode("utf-8")).decode("ascii")
+            symbol_previews[symbol.name].content = (
+                f'<img src="data:image/svg+xml;base64,{encoded}" '
+                f'alt="{symbol.stem}" style="width:58px;height:58px;object-fit:contain;" />'
+            )
             symbol_previews[symbol.name].update()
 
-    def save_scales_from_fields() -> None:
+    def update_scales_from_fields() -> None:
         pull_settings_from_fields()
         for symbol in symbols:
             scales[symbol.name] = float(fields[f"scale:{symbol.name}"].value or 1.0)
+        save_gui_settings(settings)
         save_symbol_scales(scales)
         refresh_symbol_previews()
+        preview.content = build_preview_svg(settings)
+        preview.update()
+
+    def save_scales_from_fields() -> None:
+        update_scales_from_fields()
         ui.notify("Symbol scales saved", color="positive")
 
     def generate_user_sessions() -> None:
@@ -161,11 +215,101 @@ def build_page() -> None:
         for key, label in control_labels.items():
             label.set_text(str(status.get(key, "-") or "-"))
         total = int(status.get("processed_symbols", 0) or 0)
-        progress.value = min(total / max(layout_capacity(settings), 1), 1.0)
+        progress_percent = float(status.get("gcode_progress_percent", 0.0) or 0.0)
+        progress.value = min(max(progress_percent / 100.0, 0.0), 1.0)
+        print_enabled = bool(status.get("print_enabled"))
+        pending_reload = bool(status.get("pending_reload"))
+        dry_run = bool(status.get("dry_run"))
+        run_mode = str(status.get("run_mode", "-") or "-")
+        status_text = str(status.get("status", "-") or "-").replace("_", " ")
+        transport_text = "DRY RUN" if dry_run else "REAL FLUIDNC"
+        print_text = "READY" if print_enabled else "STOPPED"
+        if pending_reload:
+            print_text = "WAITING FOR RELOAD"
+        plotter_labels["state"].set_text(f"{status_text.upper()} · {print_text}")
+        plotter_labels["mode"].set_text(f"{run_mode.upper()} · {transport_text}")
+        plotter_labels["sheet"].set_text(str(status.get("current_sheet_id") or "no sheet yet"))
+        plotter_labels["cells"].set_text(
+            f"{total}/{layout_capacity(settings)} cells · "
+            f"user {status.get('user_count', 0)} · idle {status.get('idle_count', 0)}"
+        )
+        plotter_labels["progress"].set_text(
+            f"{progress_percent:.0f}% · {status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} lines"
+        )
+        plotter_labels["message"].set_text(str(status.get("message", "-") or "-"))
+        preview_progress_label.set_text(
+            f"{status.get('status', '-')} | {progress_percent:.1f}% | "
+            f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
+            f"{total}/{layout_capacity(settings)} cells in last sheet"
+        )
         if status.get("pending_reload"):
             reload_button.enable()
         else:
             reload_button.disable()
+        refresh_component_status()
+
+    def refresh_component_status() -> None:
+        states = supervisor.refresh_all_status()
+        for component, label in component_labels.items():
+            state = states.get(component)
+            update_status_pill(label, state, component.replace("_", " "))
+
+    def start_system() -> None:
+        pull_settings_from_fields()
+        save_gui_settings(settings)
+        save_oracle_plotter_config(settings)
+        supervisor.start_system(gui_settings_to_plotter_config(settings))
+        ui.notify("System supervisor started in safe mode", color="positive")
+        refresh_status()
+
+    def stop_system() -> None:
+        supervisor.stop_system()
+        ui.notify("System stopped safely", color="warning")
+        refresh_status()
+
+    def check_system() -> None:
+        supervisor.check_firebase()
+        supervisor.check_fluidnc()
+        supervisor.check_macmini_agent()
+        refresh_component_status()
+        ui.notify("System checks refreshed")
+
+    def set_system_mode() -> None:
+        pull_settings_from_fields()
+        save_gui_settings(settings)
+        save_oracle_plotter_config(settings)
+        supervisor.set_system_mode(settings.mode)
+        ui.notify(f"Mode set to {mode_policy(settings.mode).label}. REAL FluidNC disarmed.", color="warning")
+        refresh_status()
+
+    def run_preflight() -> None:
+        pull_settings_from_fields()
+        save_gui_settings(settings)
+        save_oracle_plotter_config(settings)
+        result = supervisor.run_preflight(settings)
+        refresh_preflight_result()
+        refresh_component_status()
+        refresh_logs()
+        color = "positive" if result.status == PreflightLevel.OK else "warning"
+        if result.status == PreflightLevel.CRITICAL:
+            color = "negative"
+        ui.notify(f"Preflight {result.status.value}: {len(result.checks)} checks", color=color)
+
+    def refresh_preflight_result() -> None:
+        result = supervisor.runtime_store.load_preflight_result()
+        if not result:
+            preflight_label.set_text("Preflight: not run")
+            return
+        critical = sum(1 for check in result.checks if check.level == PreflightLevel.CRITICAL)
+        warnings = sum(1 for check in result.checks if check.level == PreflightLevel.WARNING)
+        preflight_label.set_text(f"Preflight: {result.status.value} · critical {critical} · warnings {warnings}")
+
+    def arm_real_fluidnc() -> None:
+        pull_settings_from_fields()
+        state = supervisor.arm_real_fluidnc(settings.mode)
+        persist_and_refresh()
+        color = "positive" if supervisor.runtime_store.load_real_fluidnc_armed() else "warning"
+        ui.notify(state.message, color=color)
 
     def confirm_reload() -> None:
         if confirm_plotter_reload():
@@ -176,25 +320,27 @@ def build_page() -> None:
 
     def start_print() -> None:
         pull_settings_from_fields()
-        control = set_plotter_control(print_enabled=True, run_mode=settings.run_mode, dry_run=settings.dry_run)
-        ui.notify(f"Print enabled ({control.run_mode}, {'dry-run' if control.dry_run else 'real FluidNC'})", color="positive")
+        save_oracle_plotter_config(settings)
+        state = supervisor.start_print(settings.mode)
+        color = "positive" if state.status == ComponentStatus.RUNNING else "warning"
+        ui.notify(state.message, color=color)
         refresh_status()
 
     def stop_print() -> None:
-        set_plotter_control(print_enabled=False)
-        ui.notify("Print will stop before the next sheet", color="warning")
+        state = supervisor.stop_print()
+        ui.notify(state.message, color="warning")
         refresh_status()
-
-    def update_control_mode() -> None:
-        pull_settings_from_fields()
-        save_gui_settings(settings)
-        set_plotter_control(run_mode=settings.run_mode, dry_run=settings.dry_run)
-        if not settings.dry_run:
-            ui.notify("REAL FLUIDNC selected. START PRINT will send the next sheet to the plotter.", color="warning")
-        persist_and_refresh()
 
     def open_spool() -> None:
         subprocess.run(["open", str(PlotterSettings().spool_root)], check=False)
+
+    def check_fluidnc() -> None:
+        result = check_fluidnc_connection()
+        supervisor.check_fluidnc()
+        color = "positive" if result["online"] else "negative"
+        fluidnc_status_label.set_text(result["message"])
+        ui.notify(result["message"], color=color)
+        refresh_logs()
 
     def toggle_live() -> None:
         pull_settings_from_fields()
@@ -211,132 +357,183 @@ def build_page() -> None:
         live_timer.interval = max(settings.live_interval_seconds, 1.0)
         save_gui_settings(settings)
 
+    def start_macmini() -> None:
+        supervisor.start_macmini_uploader()
+        refresh_component_status()
+
+    def stop_macmini() -> None:
+        supervisor.stop_macmini_uploader()
+        refresh_component_status()
+
+    def restart_macmini() -> None:
+        supervisor.restart_macmini_uploader()
+        refresh_component_status()
+
+    def scan_macmini() -> None:
+        supervisor.scan_macmini_once()
+        refresh_component_status()
+
+    def refresh_logs() -> None:
+        selected = str(fields["log_filter"].value or "all") if "log_filter" in fields else "all"
+        log_lines = read_logs(category_filter=selected, limit=100)
+        logs_view.value = "\n".join(log_lines)
+        logs_view.update()
+
+    def open_logs() -> None:
+        subprocess.run(["open", str(supervisor.settings.logs_root)], check=False)
+
     with ui.column().classes("oracle-shell w-full gap-2 p-3"):
         with ui.row().classes("w-full items-center justify-between"):
             ui.label("THE ORACLE OPERATOR").classes("oracle-title text-lg")
             with ui.row().classes("items-center gap-2"):
-                mode_label = ui.label("-").classes("text-xs font-bold")
+                mode_label = mode_badge()
                 transport_label = ui.label("-").classes("text-xs font-bold")
-                ui.button("START PRINT", on_click=start_print).props("dense color=positive")
-                ui.button("STOP AFTER SHEET", on_click=stop_print).props("dense color=warning")
+                primary_action_button("START SYSTEM", start_system)
+                danger_action_button("STOP SYSTEM", stop_system)
+                safe_action_button("PREFLIGHT", run_preflight)
+                safe_action_button("CHECK", check_system)
+                arm_button = danger_action_button("ARM REAL FLUIDNC", arm_real_fluidnc)
+                start_print_button = primary_action_button("START PRINT", start_print)
+                danger_action_button("STOP AFTER SHEET", stop_print)
                 ui.label("capacity").classes("text-xs text-[#8f4f2b]")
                 capacity_label = ui.label("-").classes("text-sm font-bold")
 
+        with ui.row().classes("w-full gap-1"):
+            for component in ("system", "macmini_uploader", "firebase", "plotter", "fluidnc", "queue", "print", "preflight"):
+                component_labels[component] = status_pill(component.replace("_", " "))
+
         with ui.card().classes("oracle-card compact-card w-full"):
             with ui.row().classes("w-full items-end gap-2"):
-                fields["run_mode"] = ui.select(
-                    {"test": "TEST MODE", "exhibition": "EXHIBITION MODE"},
-                    value=settings.run_mode,
-                    label="Work mode",
-                ).props("dense outlined").classes("w-44").on_value_change(update_control_mode)
-                fields["transport_mode"] = ui.select(
-                    {"dry_run": "DRY RUN", "real": "REAL FLUIDNC"},
-                    value="dry_run" if settings.dry_run else "real",
-                    label="Output",
-                ).props("dense outlined").classes("w-40").on_value_change(update_control_mode)
+                fields["system_mode"] = ui.select(
+                    {mode.value: MODE_LABELS[mode] for mode in SystemMode},
+                    value=settings.system_mode,
+                    label="Mode",
+                ).props("dense outlined").classes("w-48").on_value_change(set_system_mode)
                 fields["layout_mode"] = ui.select(["hex", "grid"], value=settings.layout_mode, label="Layout").props("dense outlined").classes("w-28").on_value_change(persist_and_refresh)
-                fields["sheet_width_mm"] = ui.number("Field W mm", value=settings.sheet_width_mm, min=1).props("dense outlined").classes("w-28").on_value_change(persist_and_refresh)
-                fields["sheet_height_mm"] = ui.number("Field H mm", value=settings.sheet_height_mm, min=1).props("dense outlined").classes("w-28").on_value_change(persist_and_refresh)
-                fields["cell_diameter_mm"] = ui.number("Cell diameter mm", value=settings.cell_diameter_mm, min=1).props("dense outlined").classes("w-36").on_value_change(persist_and_refresh)
-                fields["gap_mm"] = ui.number("Gap mm", value=settings.gap_mm, min=0).props("dense outlined").classes("w-24").on_value_change(persist_and_refresh)
-                fields["sheet_margin_mm"] = ui.number("Margin mm", value=settings.sheet_margin_mm, min=0).props("dense outlined").classes("w-28").on_value_change(persist_and_refresh)
+                number_control(fields, "sheet_width_mm", label="Field W", value=settings.sheet_width_mm, default=GUI_DEFAULTS["sheet_width_mm"], min_value=1, width_class="w-24", tooltip="Printable field width in mm.", on_change=persist_and_refresh)
+                number_control(fields, "sheet_height_mm", label="Field H", value=settings.sheet_height_mm, default=GUI_DEFAULTS["sheet_height_mm"], min_value=1, width_class="w-24", tooltip="Printable field height in mm.", on_change=persist_and_refresh)
+                number_control(fields, "cell_diameter_mm", label="Cell", value=settings.cell_diameter_mm, default=GUI_DEFAULTS["cell_diameter_mm"], min_value=1, width_class="w-24", tooltip="Packing cell diameter and grid step base.", on_change=persist_and_refresh)
+                number_control(fields, "gap_mm", label="Gap", value=settings.gap_mm, default=GUI_DEFAULTS["gap_mm"], min_value=0, width_class="w-20", tooltip="Distance between neighboring cell diameters.", on_change=persist_and_refresh)
+                number_control(fields, "sheet_margin_mm", label="Margin", value=settings.sheet_margin_mm, default=GUI_DEFAULTS["sheet_margin_mm"], min_value=0, width_class="w-24", tooltip="Safe border inside printable field.", on_change=persist_and_refresh)
                 fields["include_rings"] = ui.switch("Rings", value=settings.include_rings).on_value_change(persist_and_refresh)
+            real_warning = warning_banner("REAL mode is locked until preflight passes and ARM REAL FLUIDNC is pressed.")
+            preflight_label = ui.label("Preflight: not run").classes("text-xs text-[#8f4f2b]")
 
-        with ui.grid(columns="330px 1fr 330px").classes("w-full gap-2 min-h-0"):
+        with ui.grid(columns="300px 1fr 360px").classes("w-full gap-2 min-h-0"):
             with ui.column().classes("gap-2 min-h-0"):
                 with ui.column().classes("gap-2 w-full") as test_panel:
                     with ui.card().classes("oracle-card compact-card w-full"):
-                        ui.label("Test User Queue").classes("text-sm font-bold")
-                        symbol_options = {"__cycle__": "ALL 8 / cycle one-by-one"}
-                        symbol_options.update({symbol.name: symbol.stem for symbol in symbols})
-                        fields["selected_symbol"] = ui.select(
-                            symbol_options,
-                            value=settings.selected_symbol,
-                            label="Base symbol mode",
-                        ).props("dense outlined").classes("w-full")
-                        with ui.row().classes("items-end gap-2"):
-                            fields["user_count"] = ui.number("Count", value=settings.user_count, min=1, step=1).props("dense outlined").classes("w-20")
-                            fields["live_interval_seconds"] = ui.number("Live sec", value=settings.live_interval_seconds, min=1).props("dense outlined").classes("w-24").on_value_change(live_interval_changed)
-                        with ui.row().classes("items-center gap-2"):
-                            ui.label("Randomness").classes("text-xs text-[#8f4f2b]")
-                            fields["randomness"] = ui.slider(min=0, max=100, step=1, value=settings.randomness).props("label label-always").classes("w-64").on_value_change(persist_and_refresh)
-                        with ui.row().classes("items-center gap-2"):
-                            ui.label("Fine randomness").classes("text-xs text-[#8f4f2b]")
-                            fields["randomness_fine"] = ui.slider(min=-10, max=10, step=0.1, value=settings.randomness_fine).props("label label-always dense").classes("w-48").on_value_change(persist_and_refresh)
-                        ui.label("Randomness = coarse + fine; affects generated test symbols only.").classes("text-xs text-[#8f4f2b]")
-                        with ui.row().classes("items-center gap-2"):
-                            ui.button("Generate", on_click=generate_user_sessions).props("dense")
-                            ui.button("Generate ALL 8", on_click=generate_all_user_symbols).props("dense")
-                            live_toggle = ui.switch("Live", value=False, on_change=toggle_live)
-                        last_user_output = ui.label("-").classes("path-label text-xs")
+                        with ui.expansion("Test Generator", icon="science", group="left-column", value=True).classes("w-full"):
+                            symbol_options = {"__cycle__": "ALL 8 / cycle one-by-one"}
+                            symbol_options.update({symbol.name: symbol.stem for symbol in symbols})
+                            fields["selected_symbol"] = ui.select(
+                                symbol_options,
+                                value=settings.selected_symbol,
+                                label="Base symbol mode",
+                            ).props("dense outlined").classes("w-full")
+                            with ui.row().classes("items-end gap-2"):
+                                fields["user_count"] = ui.number("Count", value=settings.user_count, min=1, step=1).props("dense outlined").classes("w-20")
+                                fields["live_interval_seconds"] = ui.number("Live sec", value=settings.live_interval_seconds, min=1).props("dense outlined").classes("w-24").on_value_change(live_interval_changed)
+                            with ui.row().classes("items-center gap-2"):
+                                slider_control(fields, "randomness", label="Random", value=settings.randomness, default=GUI_DEFAULTS["randomness"], min_value=0, max_value=100, step=1, on_change=persist_and_refresh).classes("w-56")
+                            with ui.row().classes("items-center gap-2"):
+                                slider_control(fields, "randomness_fine", label="Fine", value=settings.randomness_fine, default=GUI_DEFAULTS["randomness_fine"], min_value=-10, max_value=10, step=0.1, on_change=persist_and_refresh).classes("w-44")
+                            with ui.row().classes("items-center gap-2"):
+                                ui.button("Generate", on_click=generate_user_sessions).props("dense")
+                                ui.button("All 8", on_click=generate_all_user_symbols).props("dense")
+                                live_toggle = ui.switch("Live", value=False, on_change=toggle_live)
+                            last_user_output = ui.label("-").classes("path-label text-xs")
 
                     with ui.card().classes("oracle-card compact-card w-full"):
-                        ui.label("Filler Bank").classes("text-sm font-bold")
-                        with ui.row().classes("items-end gap-2"):
-                            fields["idle_variations_per_symbol"] = ui.number(
-                                "Variations/base",
-                                value=settings.idle_variations_per_symbol,
-                                min=1,
-                                step=1,
-                            ).props("dense outlined").classes("w-36")
-                            ui.button("Generate filler", on_click=generate_idle_bank).props("dense")
-                        idle_output = ui.label(str(default_idle_root())).classes("path-label text-xs")
+                        with ui.expansion("Idle filler bank", icon="inventory_2", group="left-column", value=False).classes("w-full"):
+                            ui.label("Creates local idle symbols for empty sheet cells. Usually run once after scale changes.").classes("text-xs text-[#8f4f2b]")
+                            with ui.row().classes("items-end gap-2"):
+                                fields["idle_variations_per_symbol"] = ui.number(
+                                    "Variations/base",
+                                    value=settings.idle_variations_per_symbol,
+                                    min=1,
+                                    step=1,
+                                ).props("dense outlined").classes("w-32")
+                                ui.button("Generate filler", on_click=generate_idle_bank).props("dense")
+                            idle_output = ui.label(str(default_idle_root())).classes("path-label text-xs")
 
                 with ui.card().classes("oracle-card compact-card w-full"):
-                    ui.label("Plotter").classes("text-sm font-bold")
-                    for key, title in [
-                        ("status", "status"),
-                        ("current_sheet_id", "sheet"),
-                        ("processed_symbols", "symbols"),
-                        ("user_count", "user"),
-                        ("idle_count", "idle"),
-                        ("pending_reload", "reload"),
-                    ]:
-                        with ui.row().classes("w-full justify-between gap-2"):
-                            ui.label(title).classes("text-xs text-[#8f4f2b]")
-                            status_labels[key] = ui.label("-").classes("path-label text-xs font-bold")
-                    for key, title in [
-                        ("print_enabled", "print enabled"),
-                        ("run_mode", "mode"),
-                        ("dry_run", "dry-run"),
-                    ]:
-                        with ui.row().classes("w-full justify-between gap-2"):
-                            ui.label(title).classes("text-xs text-[#8f4f2b]")
-                            control_labels[key] = ui.label("-").classes("path-label text-xs font-bold")
-                    status_labels["message"] = ui.label("-").classes("path-label text-xs")
-                    status_labels["last_sheet_path"] = ui.label("-").classes("path-label text-xs")
-                    status_labels["latest_manifest"] = ui.label("-").classes("hidden")
-                    progress = ui.linear_progress(value=0).classes("w-full")
-                    with ui.row().classes("gap-1"):
-                        ui.button("Refresh", on_click=refresh_status).props("dense")
-                        reload_button = ui.button("Reload OK", on_click=confirm_reload).props("dense")
-                        ui.button("Dry-run", on_click=generate_dry_run).props("dense")
-                        ui.button("Spool", on_click=open_spool).props("dense")
+                    with ui.expansion("Mac mini uploader", icon="cloud_upload", group="left-column", value=False).classes("w-full"):
+                        with ui.row().classes("gap-1"):
+                            ui.button("Start", on_click=start_macmini).props("dense")
+                            ui.button("Stop", on_click=stop_macmini).props("dense")
+                            ui.button("Scan", on_click=scan_macmini).props("dense")
+                            ui.button("Restart", on_click=restart_macmini).props("dense")
+                        ui.label("Controlled through NEJE_MACMINI_AGENT_URL").classes("text-xs text-[#8f4f2b]")
+
+                with ui.card().classes("oracle-card compact-card w-full"):
+                    with ui.expansion("Plotter", icon="precision_manufacturing", group="left-column", value=False).classes("w-full"):
+                        with ui.column().classes("gap-1 w-full"):
+                            ui.label("PRINT STATE").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                            plotter_labels["state"] = ui.label("-").classes("text-sm font-bold")
+                            plotter_labels["mode"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                        ui.separator()
+                        with ui.column().classes("gap-1 w-full"):
+                            ui.label("SHEET").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                            plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
+                            plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                            plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                        progress = ui.linear_progress(value=0).classes("w-full")
+                        plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
+                        status_labels["pending_reload"] = ui.label("-").classes("hidden")
+                        status_labels["latest_manifest"] = ui.label("-").classes("hidden")
+                        status_labels["last_sheet_path"] = ui.label("-").classes("hidden")
+                        with ui.row().classes("gap-1"):
+                            ui.button("Start", on_click=start_print).props("dense color=positive")
+                            ui.button("Stop", on_click=stop_print).props("dense color=warning")
+                            reload_button = ui.button("Reload OK", on_click=confirm_reload).props("dense")
+                        with ui.row().classes("gap-1"):
+                            ui.button("Dry-run sheet", on_click=generate_dry_run).props("dense")
+                            ui.button("FluidNC", on_click=check_fluidnc).props("dense")
+                            ui.button("Spool", on_click=open_spool).props("dense")
+                            ui.button("Refresh", on_click=refresh_status).props("dense flat")
+                        fluidnc_status_label = ui.label("FluidNC: not checked").classes("path-label text-xs")
+
+                with ui.card().classes("oracle-card compact-card w-full"):
+                    with ui.expansion("Logs", icon="receipt_long", group="left-column", value=False).classes("w-full"):
+                        fields["log_filter"] = ui.select(
+                            {"all": "all", "errors": "errors", "system": "system", "plotter": "plotter", "uploader": "uploader", "preflight": "preflight"},
+                            value="all",
+                            label="Filter",
+                        ).props("dense outlined").classes("w-full").on_value_change(refresh_logs)
+                        with ui.row().classes("gap-1"):
+                            safe_action_button("Refresh", refresh_logs)
+                            safe_action_button("Open logs", open_logs)
+                        logs_view = log_viewer([])
 
             with ui.card().classes("oracle-card compact-card w-full min-h-0"):
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label("Sheet Preview").classes("text-sm font-bold")
-                    ui.label("static layout only").classes("text-xs text-[#8f4f2b]")
+                preview_progress_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
                 preview = ui.html().classes("preview-frame w-full")
 
             with ui.card().classes("oracle-card compact-card w-full"):
-                with ui.expansion("Symbol scale correction", icon="graphic_eq", value=False).classes("w-full"):
-                    fields["global_scale"] = ui.slider(min=0.3, max=1.5, step=0.01, value=settings.global_scale).props("label label-always").classes("w-full").on_value_change(persist_and_refresh)
+                with ui.expansion("Symbol scale correction", icon="graphic_eq", value=True).classes("w-full"):
+                    slider_control(fields, "global_scale", label="Global scale", value=settings.global_scale, default=GUI_DEFAULTS["global_scale"], min_value=0.3, max_value=5.0, step=0.01, on_change=persist_and_refresh)
                     ui.label(f"Config: {default_scale_config_path()}").classes("path-label text-xs")
+                    ui.label("Double-click any scale slider to reset it to 1.0. Scale changes are applied and saved immediately.").classes("text-xs text-[#8f4f2b]")
                     with ui.grid(columns=2).classes("w-full gap-2"):
                         for symbol in symbols:
                             with ui.column().classes("gap-0"):
                                 symbol_previews[symbol.name] = ui.html().classes("symbol-preview")
                                 ui.label(symbol.stem[:22]).classes("text-[10px]")
-                                fields[f"scale:{symbol.name}"] = ui.slider(
-                                    min=0.3,
-                                    max=1.5,
-                                    step=0.01,
+                                slider_control(
+                                    fields,
+                                    f"scale:{symbol.name}",
+                                    label="",
                                     value=scales.get(symbol.name, 1.0),
-                                ).props("dense label label-always")
+                                    default=1.0,
+                                    min_value=0.3,
+                                    max_value=5.0,
+                                    step=0.01,
+                                    on_change=update_scales_from_fields,
+                                )
                     ui.button("Save scales", on_click=save_scales_from_fields).props("dense")
-                ui.separator()
-                ui.label("Scale controls are collapsed by default to keep the dashboard fitting on a 14-inch screen.").classes("text-xs text-[#8f4f2b]")
 
     live_timer = ui.timer(settings.live_interval_seconds, generate_user_sessions, active=False)
     ui.timer(2.0, refresh_status)

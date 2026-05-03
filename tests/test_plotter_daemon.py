@@ -4,9 +4,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from neje_oracle.config import PlotterSettings
-from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, RuntimeStatus
+from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
 from neje_oracle.plotter_daemon import PlotterDaemon
-from neje_oracle.store import PlotterStore
+from neje_oracle.store import OracleRuntimeStore, PlotterStore
 from neje_oracle.transport import FluidNCTransport
 
 
@@ -110,6 +110,9 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
     state = daemon.get_state()
     assert state.status == RuntimeStatus.PAUSED
     assert state.pending_reload is True
+    assert state.gcode_progress_percent == 100.0
+    assert state.gcode_lines_sent == state.gcode_lines_total
+    assert state.gcode_lines_total > 0
     assert ("session_a", PlotStatus.PRINTED.value, state.current_sheet_id) in remote.updates
     assert ("session_b", PlotStatus.PRINTED.value, state.current_sheet_id) in remote.updates
 
@@ -149,3 +152,36 @@ def test_plotter_stops_before_next_sheet_when_operator_disabled(tmp_path: Path) 
 
     assert not list((tmp_path / "spool").glob("*.gcode"))
     assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
+
+
+def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_plotter_config(
+        PlotterRuntimeConfig(
+            layout_mode="grid",
+            sheet_width_mm=300,
+            sheet_height_mm=220,
+            sheet_margin_mm=0,
+            cell_diameter_mm=80,
+            gap_mm=20,
+            run_mode="test",
+            dry_run=True,
+        )
+    )
+    remote = FakeRemoteRepository()
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
+
+    daemon.run_cycle()
+
+    manifest = next((tmp_path / "spool").glob("*.json")).read_text(encoding="utf-8")
+    assert '"layout_mode": "grid"' in manifest
+    assert '"cell_diameter_mm": 80' in manifest
+    assert '"gap_mm": 20' in manifest

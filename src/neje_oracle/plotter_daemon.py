@@ -9,8 +9,8 @@ from pathlib import Path
 from .config import SYMBOL_FIT_RATIO, PlotterSettings, ensure_dir
 from .firebase_io import FirebaseRemoteRepository
 from .layout import build_sheet_layout, calculate_layout_capacity
-from .models import PlotJobLease, PlotStatus, PlotterRuntimeState, RuntimeStatus, SheetItem
-from .store import PlotterStore
+from .models import ComponentStatus, PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, PlotterRuntimeState, RuntimeStatus, SheetItem
+from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode
 from .transport import FluidNCTransport
 
@@ -22,11 +22,13 @@ class PlotterDaemon:
         store: PlotterStore,
         remote: FirebaseRemoteRepository,
         transport: FluidNCTransport,
+        oracle_store: OracleRuntimeStore | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.remote = remote
         self.transport = transport
+        self.oracle_store = oracle_store
         self.stop_event = threading.Event()
         self.state_lock = threading.Lock()
         self.runtime_state = self.store.load_runtime_state()
@@ -55,8 +57,12 @@ class PlotterDaemon:
             self.runtime_state.message = "Operator confirmed reload"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
+        if self.oracle_store is not None:
+            self.oracle_store.set_component("plotter", ComponentStatus.RUNNING, message="Reload confirmed", heartbeat=True)
 
     def run_cycle(self) -> None:
+        if self.oracle_store is not None:
+            self.oracle_store.set_component("plotter", ComponentStatus.RUNNING, message="Daemon cycle", heartbeat=True)
         with self.state_lock:
             if self.runtime_state.pending_reload:
                 self.runtime_state.message = "Waiting for operator reload confirmation"
@@ -64,7 +70,8 @@ class PlotterDaemon:
                 self.store.save_runtime_state(self.runtime_state)
                 return
 
-        control = self.store.load_control_state()
+        config = self._load_plotter_config()
+        control = self._load_control_state()
         if not control.print_enabled:
             with self.state_lock:
                 self.runtime_state.status = RuntimeStatus.OPERATOR_PAUSED
@@ -78,14 +85,16 @@ class PlotterDaemon:
             self.runtime_state.message = "Preparing next sheet"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
+        if self.oracle_store is not None:
+            self.oracle_store.set_component("plotter", ComponentStatus.WARNING, message="Sheet finished; waiting reload", heartbeat=True)
 
         layout_capacity = calculate_layout_capacity(
-            mode=self.settings.layout_mode,
-            sheet_width_mm=self.settings.sheet_width_mm,
-            sheet_height_mm=self.settings.sheet_height_mm,
-            margin_mm=self.settings.sheet_margin_mm,
-            diameter_mm=self.settings.cell_diameter_mm,
-            gap_mm=self.settings.cell_gap_mm,
+            mode=config.layout_mode,
+            sheet_width_mm=config.sheet_width_mm,
+            sheet_height_mm=config.sheet_height_mm,
+            margin_mm=config.sheet_margin_mm,
+            diameter_mm=config.cell_diameter_mm,
+            gap_mm=config.gap_mm,
         )
         sheet_limit = layout_capacity
         if sheet_limit <= 0:
@@ -106,12 +115,12 @@ class PlotterDaemon:
         sheet_id = datetime.now(tz=UTC).strftime("sheet_%Y%m%d_%H%M%S")
         placements = build_sheet_layout(
             len(items),
-            mode=self.settings.layout_mode,
-            sheet_width_mm=self.settings.sheet_width_mm,
-            sheet_height_mm=self.settings.sheet_height_mm,
-            margin_mm=self.settings.sheet_margin_mm,
-            diameter_mm=self.settings.cell_diameter_mm,
-            gap_mm=self.settings.cell_gap_mm,
+            mode=config.layout_mode,
+            sheet_width_mm=config.sheet_width_mm,
+            sheet_height_mm=config.sheet_height_mm,
+            margin_mm=config.sheet_margin_mm,
+            diameter_mm=config.cell_diameter_mm,
+            gap_mm=config.gap_mm,
         )
         if len(placements) < len(items):
             raise RuntimeError("Sheet layout capacity is smaller than the selected items.")
@@ -129,7 +138,7 @@ class PlotterDaemon:
             items,
             placements,
             sample_step_mm=self.settings.sample_step_mm,
-            cell_diameter_mm=self.settings.cell_diameter_mm,
+            cell_diameter_mm=config.cell_diameter_mm,
             travel_rate=self.settings.travel_rate,
             draw_rate=self.settings.draw_rate,
             pen_up_command=self.settings.pen_up_command,
@@ -152,9 +161,9 @@ class PlotterDaemon:
                         }
                         for index, item in enumerate(items)
                     ],
-                    "layout_mode": self.settings.layout_mode,
-                    "cell_diameter_mm": self.settings.cell_diameter_mm,
-                    "gap_mm": self.settings.cell_gap_mm,
+                    "layout_mode": config.layout_mode,
+                    "cell_diameter_mm": config.cell_diameter_mm,
+                    "gap_mm": config.gap_mm,
                     "symbol_fit_ratio": SYMBOL_FIT_RATIO,
                     "dry_run": control.dry_run,
                     "run_mode": control.run_mode,
@@ -165,9 +174,22 @@ class PlotterDaemon:
             encoding="utf-8",
         )
 
-        self._set_state(RuntimeStatus.PRINTING, f"Streaming {sheet_id} to plotter", sheet_id=sheet_id)
+        total_gcode_lines = len(gcode.splitlines())
+        self._set_state(
+            RuntimeStatus.PRINTING,
+            f"Streaming {sheet_id} to plotter",
+            sheet_id=sheet_id,
+            gcode_lines_sent=0,
+            gcode_lines_total=total_gcode_lines,
+            gcode_progress_percent=0.0,
+        )
         try:
-            gcode_path = self.transport.send(gcode=gcode, sheet_id=sheet_id, dry_run=control.dry_run)
+            gcode_path = self.transport.send(
+                gcode=gcode,
+                sheet_id=sheet_id,
+                dry_run=control.dry_run,
+                progress_callback=self._record_gcode_progress,
+            )
         except Exception as exc:  # noqa: BLE001
             for job in user_jobs:
                 self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
@@ -190,8 +212,13 @@ class PlotterDaemon:
             self.runtime_state.current_sheet_id = sheet_id
             self.runtime_state.last_sheet_path = str(gcode_path)
             self.runtime_state.pending_reload = True
+            self.runtime_state.gcode_lines_sent = total_gcode_lines
+            self.runtime_state.gcode_lines_total = total_gcode_lines
+            self.runtime_state.gcode_progress_percent = 100.0
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
+        if self.oracle_store is not None:
+            self.oracle_store.set_component("plotter", ComponentStatus.WARNING, message="Sheet finished; waiting reload", heartbeat=True)
 
     def _claim_user_jobs(self, limit: int) -> list[PlotJobLease]:
         jobs: list[PlotJobLease] = []
@@ -244,11 +271,70 @@ class PlotterDaemon:
             self.store.save_runtime_state(self.runtime_state)
         return items
 
-    def _set_state(self, status: RuntimeStatus, message: str, *, sheet_id: str = "") -> None:
+    def _load_plotter_config(self) -> PlotterRuntimeConfig:
+        default = PlotterRuntimeConfig(
+            layout_mode=self.settings.layout_mode,
+            sheet_width_mm=self.settings.sheet_width_mm,
+            sheet_height_mm=self.settings.sheet_height_mm,
+            sheet_margin_mm=self.settings.sheet_margin_mm,
+            cell_diameter_mm=self.settings.cell_diameter_mm,
+            gap_mm=self.settings.cell_gap_mm,
+            run_mode="exhibition",
+            dry_run=self.settings.dry_run,
+        )
+        if self.oracle_store is None:
+            return default
+        return self.oracle_store.load_plotter_config(default)
+
+    def _load_control_state(self) -> PlotterControlState:
+        default = self.store.load_control_state()
+        if self.oracle_store is None:
+            return default
+        control = self.oracle_store.load_print_control(default)
+        self.store.save_control_state(control)
+        return control
+
+    def _set_state(
+        self,
+        status: RuntimeStatus,
+        message: str,
+        *,
+        sheet_id: str = "",
+        gcode_lines_sent: int | None = None,
+        gcode_lines_total: int | None = None,
+        gcode_progress_percent: float | None = None,
+    ) -> None:
         with self.state_lock:
             self.runtime_state.status = status
             self.runtime_state.message = message
             if sheet_id:
                 self.runtime_state.current_sheet_id = sheet_id
+            if gcode_lines_sent is not None:
+                self.runtime_state.gcode_lines_sent = gcode_lines_sent
+            if gcode_lines_total is not None:
+                self.runtime_state.gcode_lines_total = gcode_lines_total
+            if gcode_progress_percent is not None:
+                self.runtime_state.gcode_progress_percent = gcode_progress_percent
+            self.runtime_state.updated_at = datetime.now(tz=UTC)
+            self.store.save_runtime_state(self.runtime_state)
+        if self.oracle_store is not None:
+            component_status = ComponentStatus.ERROR if status == RuntimeStatus.ERROR else ComponentStatus.RUNNING
+            if status in {RuntimeStatus.PAUSED, RuntimeStatus.OPERATOR_PAUSED}:
+                component_status = ComponentStatus.WARNING
+            self.oracle_store.set_component(
+                "plotter",
+                component_status,
+                message=message,
+                last_error=message if status == RuntimeStatus.ERROR else "",
+                heartbeat=True,
+            )
+
+    def _record_gcode_progress(self, sent: int, total: int) -> None:
+        percent = 100.0 if total <= 0 else min(max((sent / total) * 100.0, 0.0), 100.0)
+        with self.state_lock:
+            self.runtime_state.gcode_lines_sent = sent
+            self.runtime_state.gcode_lines_total = total
+            self.runtime_state.gcode_progress_percent = percent
+            self.runtime_state.message = f"Streaming G-code: {sent}/{total} lines ({percent:.1f}%)"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)

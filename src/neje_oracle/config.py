@@ -80,6 +80,16 @@ class PlotterSettings:
     operator_port: int = _env_int("NEJE_PLOTTER_OPERATOR_PORT", 8765)
 
 
+@dataclass(frozen=True)
+class OracleSupervisorSettings:
+    runtime_db_path: Path = Path(
+        os.getenv("NEJE_ORACLE_RUNTIME_DB_PATH", str(_repo_root() / "runtime" / "oracle_runtime.sqlite3"))
+    )
+    logs_root: Path = Path(os.getenv("NEJE_ORACLE_LOGS_ROOT", str(_repo_root() / "logs")))
+    macmini_agent_url: str = os.getenv("NEJE_MACMINI_AGENT_URL", "")
+    macmini_agent_timeout_seconds: float = _env_float("NEJE_MACMINI_AGENT_TIMEOUT_SECONDS", 2.0)
+
+
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
 

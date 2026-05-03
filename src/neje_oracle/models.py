@@ -32,6 +32,27 @@ class RuntimeStatus(str, Enum):
     ERROR = "error"
 
 
+class ComponentStatus(str, Enum):
+    STOPPED = "stopped"
+    STARTING = "starting"
+    RUNNING = "running"
+    OFFLINE = "offline"
+    WARNING = "warning"
+    ERROR = "error"
+
+
+class SystemMode(str, Enum):
+    TEST = "test"
+    EXHIBITION_DRY = "exhibition_dry"
+    EXHIBITION_REAL = "exhibition_real"
+
+
+class PreflightLevel(str, Enum):
+    OK = "ok"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
 def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
@@ -125,6 +146,9 @@ class PlotterRuntimeState:
     last_sheet_path: str = ""
     placeholder_index: int = 0
     pending_reload: bool = False
+    gcode_lines_sent: int = 0
+    gcode_lines_total: int = 0
+    gcode_progress_percent: float = 0.0
     updated_at: datetime = field(default_factory=utcnow)
 
     def to_dict(self) -> dict[str, Any]:
@@ -135,6 +159,9 @@ class PlotterRuntimeState:
             "last_sheet_path": self.last_sheet_path,
             "placeholder_index": self.placeholder_index,
             "pending_reload": self.pending_reload,
+            "gcode_lines_sent": self.gcode_lines_sent,
+            "gcode_lines_total": self.gcode_lines_total,
+            "gcode_progress_percent": self.gcode_progress_percent,
             "updated_at": self.updated_at.isoformat(),
         }
 
@@ -147,6 +174,9 @@ class PlotterRuntimeState:
             last_sheet_path=payload.get("last_sheet_path", ""),
             placeholder_index=int(payload.get("placeholder_index", 0)),
             pending_reload=bool(payload.get("pending_reload", False)),
+            gcode_lines_sent=int(payload.get("gcode_lines_sent", 0)),
+            gcode_lines_total=int(payload.get("gcode_lines_total", 0)),
+            gcode_progress_percent=float(payload.get("gcode_progress_percent", 0.0)),
             updated_at=datetime.fromisoformat(payload["updated_at"])
             if payload.get("updated_at")
             else utcnow(),
@@ -181,6 +211,144 @@ class PlotterControlState:
             if payload.get("updated_at")
             else utcnow(),
         )
+
+
+@dataclass
+class ComponentState:
+    component: str
+    status: ComponentStatus = ComponentStatus.STOPPED
+    message: str = ""
+    last_error: str = ""
+    heartbeat_at: datetime | None = None
+    started_at: datetime | None = None
+    updated_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "component": self.component,
+            "status": self.status.value,
+            "message": self.message,
+            "last_error": self.last_error,
+            "heartbeat_at": self.heartbeat_at.isoformat() if self.heartbeat_at else "",
+            "started_at": self.started_at.isoformat() if self.started_at else "",
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "ComponentState":
+        return cls(
+            component=str(payload.get("component", "")),
+            status=ComponentStatus(payload.get("status", ComponentStatus.STOPPED.value)),
+            message=str(payload.get("message", "")),
+            last_error=str(payload.get("last_error", "")),
+            heartbeat_at=_optional_datetime(payload.get("heartbeat_at")),
+            started_at=_optional_datetime(payload.get("started_at")),
+            updated_at=datetime.fromisoformat(payload["updated_at"])
+            if payload.get("updated_at")
+            else utcnow(),
+        )
+
+
+@dataclass
+class PlotterRuntimeConfig:
+    layout_mode: str = "hex"
+    sheet_width_mm: float = 250.0
+    sheet_height_mm: float = 440.0
+    sheet_margin_mm: float = 0.0
+    cell_diameter_mm: float = 80.0
+    gap_mm: float = 0.0
+    run_mode: str = "exhibition"
+    dry_run: bool = True
+    updated_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "layout_mode": self.layout_mode,
+            "sheet_width_mm": self.sheet_width_mm,
+            "sheet_height_mm": self.sheet_height_mm,
+            "sheet_margin_mm": self.sheet_margin_mm,
+            "cell_diameter_mm": self.cell_diameter_mm,
+            "gap_mm": self.gap_mm,
+            "run_mode": self.run_mode,
+            "dry_run": self.dry_run,
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PlotterRuntimeConfig":
+        return cls(
+            layout_mode=str(payload.get("layout_mode", "hex")),
+            sheet_width_mm=float(payload.get("sheet_width_mm", 250.0)),
+            sheet_height_mm=float(payload.get("sheet_height_mm", 440.0)),
+            sheet_margin_mm=float(payload.get("sheet_margin_mm", 0.0)),
+            cell_diameter_mm=float(payload.get("cell_diameter_mm", 80.0)),
+            gap_mm=float(payload.get("gap_mm", 0.0)),
+            run_mode=str(payload.get("run_mode", "exhibition")),
+            dry_run=bool(payload.get("dry_run", True)),
+            updated_at=datetime.fromisoformat(payload["updated_at"])
+            if payload.get("updated_at")
+            else utcnow(),
+        )
+
+
+@dataclass
+class PreflightCheck:
+    name: str
+    level: PreflightLevel
+    message: str
+    detail: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "level": self.level.value,
+            "message": self.message,
+            "detail": self.detail,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PreflightCheck":
+        return cls(
+            name=str(payload.get("name", "")),
+            level=PreflightLevel(payload.get("level", PreflightLevel.WARNING.value)),
+            message=str(payload.get("message", "")),
+            detail=dict(payload.get("detail", {})),
+        )
+
+
+@dataclass
+class PreflightResult:
+    status: PreflightLevel
+    checks: list[PreflightCheck]
+    generated_at: datetime = field(default_factory=utcnow)
+
+    @property
+    def has_critical(self) -> bool:
+        return any(check.level == PreflightLevel.CRITICAL for check in self.checks)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status.value,
+            "checks": [check.to_dict() for check in self.checks],
+            "generated_at": self.generated_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PreflightResult":
+        checks = [PreflightCheck.from_dict(item) for item in payload.get("checks", [])]
+        return cls(
+            status=PreflightLevel(payload.get("status", PreflightLevel.WARNING.value)),
+            checks=checks,
+            generated_at=datetime.fromisoformat(payload["generated_at"])
+            if payload.get("generated_at")
+            else utcnow(),
+        )
+
+
+def _optional_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    return datetime.fromisoformat(str(value))
 
 
 class HealthResponse(BaseModel):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from urllib.parse import quote
 
@@ -37,12 +38,17 @@ class FirebaseRemoteRepository:
         receipt_blob = self._bucket.blob(f"{remote_root}/receipt.txt")
         qr_blob = self._bucket.blob(f"{remote_root}/qr.png")
         manifest_blob = self._bucket.blob(f"{remote_root}/manifest.json")
+        raw_svg_path = public_dir / "artwork_raw.svg"
+        raw_svg_storage_path = f"{remote_root}/artwork_raw.svg"
 
         svg_blob.upload_from_filename(str(public_dir / "artwork.svg"), content_type="image/svg+xml")
         receipt_blob.upload_from_filename(str(public_dir / "receipt.txt"), content_type="text/plain; charset=utf-8")
         qr_blob.upload_from_filename(str(public_dir / "qr.png"), content_type="image/png")
+        if raw_svg_path.exists():
+            self._bucket.blob(raw_svg_storage_path).upload_from_filename(str(raw_svg_path), content_type="image/svg+xml")
 
-        svg_url = self._public_storage_url(f"{remote_root}/artwork.svg")
+        svg_version = _file_hash(public_dir / "artwork.svg")
+        svg_url = self._public_storage_url(f"{remote_root}/artwork.svg", version=svg_version)
         receipt_url = self._public_storage_url(f"{remote_root}/receipt.txt")
         qr_url = self._public_storage_url(f"{remote_root}/qr.png")
 
@@ -89,7 +95,9 @@ class FirebaseRemoteRepository:
                     "qr": f"{remote_root}/qr.png",
                     "receipt": f"{remote_root}/receipt.txt",
                     "manifest": f"{remote_root}/manifest.json",
+                    "rawSvg": raw_svg_storage_path if raw_svg_path.exists() else "",
                 },
+                "svgVersion": svg_version,
                 "metadata": record.extra_metadata,
             },
             merge=True,
@@ -206,9 +214,67 @@ class FirebaseRemoteRepository:
         destination.parent.mkdir(parents=True, exist_ok=True)
         self._bucket.blob(storage_path).download_to_filename(str(destination))
 
-    def _public_storage_url(self, storage_path: str) -> str:
+    def upload_asset(self, storage_path: str, source: Path, *, content_type: str) -> None:
+        self._bucket.blob(storage_path).upload_from_filename(str(source), content_type=content_type)
+
+    def storage_asset_exists(self, storage_path: str) -> bool:
+        return self._bucket.blob(storage_path).exists()
+
+    def iter_sessions(self, *, limit: int | None = None, session_id: str | None = None):
+        if session_id:
+            doc = self._db.collection("sessions").document(session_id).get()
+            if not doc.exists:
+                return []
+            payload = doc.to_dict() or {}
+            payload["_id"] = doc.id
+            return [payload]
+        query = self._db.collection("sessions").order_by("createdAt")
+        if limit:
+            query = query.limit(limit)
+        rows = []
+        for doc in query.stream():
+            payload = doc.to_dict() or {}
+            payload["_id"] = doc.id
+            rows.append(payload)
+        return rows
+
+    def update_normalized_svg(
+        self,
+        session_id: str,
+        *,
+        svg_storage_path: str,
+        raw_svg_storage_path: str,
+        svg_version: str,
+    ) -> str:
+        svg_url = self._public_storage_url(svg_storage_path, version=svg_version)
+        self._db.collection("sessions").document(session_id).set(
+            {
+                "svgUrl": svg_url,
+                "assetUrls": {"svg": svg_url},
+                "assetPaths": {"svg": svg_storage_path, "rawSvg": raw_svg_storage_path},
+                "svgVersion": svg_version,
+                "metadata": {"svgNormalized": True},
+            },
+            merge=True,
+        )
+        self._db.collection("plot_jobs").document(session_id).set(
+            {
+                "svgStoragePath": svg_storage_path,
+                "svgUrl": svg_url,
+            },
+            merge=True,
+        )
+        return svg_url
+
+    def public_storage_url(self, storage_path: str, *, version: str | None = None) -> str:
+        return self._public_storage_url(storage_path, version=version)
+
+    def _public_storage_url(self, storage_path: str, *, version: str | None = None) -> str:
         encoded_path = quote(storage_path, safe="")
-        return f"https://firebasestorage.googleapis.com/v0/b/{self.settings.storage_bucket}/o/{encoded_path}?alt=media"
+        url = f"https://firebasestorage.googleapis.com/v0/b/{self.settings.storage_bucket}/o/{encoded_path}?alt=media"
+        if version:
+            return f"{url}&v={quote(version, safe='')}"
+        return url
 
 
 def recorded_datetime(value: str | None):
@@ -223,3 +289,11 @@ def record_to_json(record: SessionRecord) -> str:
     import json
 
     return json.dumps(record.to_manifest_dict(), ensure_ascii=False, indent=2)
+
+
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:16]

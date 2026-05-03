@@ -838,6 +838,8 @@ class SymbolView extends StatelessWidget {
     return SvgPicture.network(
       svgUrl,
       fit: BoxFit.contain,
+      allowDrawingOutsideViewBox: true,
+      clipBehavior: Clip.none,
       colorFilter: const ColorFilter.mode(_charcoal, BlendMode.srcIn),
       errorBuilder: (context, error, stackTrace) => Text(
         'SYMBOL LOAD ERROR',

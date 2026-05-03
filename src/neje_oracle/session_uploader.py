@@ -12,10 +12,11 @@ from urllib.parse import quote
 
 import qrcode
 
-from .config import FirebaseSettings, UploaderSettings, ensure_dir
+from .config import FirebaseSettings, UploaderSettings, _repo_root, ensure_dir
 from .firebase_io import FirebaseRemoteRepository, record_to_json
 from .models import PlotStatus, PublicStatus, SessionRecord
 from .store import UploaderStore
+from .svg_normalizer import normalize_svg_file, scale_for_mark_name
 
 
 class SessionUploader:
@@ -98,15 +99,6 @@ class SessionUploader:
         if svg_source is None or receipt_source is None:
             raise FileNotFoundError(f"Missing SVG or receipt TXT asset in {session_dir}")
 
-        svg_target = public_dir / "artwork.svg"
-        receipt_target = public_dir / "receipt.txt"
-        shutil.copy2(svg_source, svg_target)
-        shutil.copy2(receipt_source, receipt_target)
-
-        qr_url = f"{self.firebase_settings.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
-        qr_target = public_dir / "qr.png"
-        qrcode.make(qr_url).save(qr_target)
-
         receipt_data = self._parse_receipt_txt(receipt_source)
         csv_data = self._load_csv_metadata(session_id)
         safe_metadata = self._safe_metadata(metadata, receipt_data, csv_data)
@@ -115,6 +107,32 @@ class SessionUploader:
         oracle_text = receipt_data.get("oracle_text") or csv_data.get("oracle_text") or ""
         themes = self._resolve_themes(receipt_data, csv_data)
         measures = self._resolve_measures(csv_data)
+
+        raw_svg_target = public_dir / "artwork_raw.svg"
+        svg_target = public_dir / "artwork.svg"
+        receipt_target = public_dir / "receipt.txt"
+        shutil.copy2(svg_source, raw_svg_target)
+        svg_scale = scale_for_mark_name(
+            mark_name,
+            _repo_root() / "assets" / "symbols",
+            _repo_root() / "assets" / "symbols" / "symbol_scales.json",
+        )
+        svg_target.write_text(
+            normalize_svg_file(svg_source, marker_kind="user", scale=svg_scale, include_rings=True),
+            encoding="utf-8",
+        )
+        shutil.copy2(receipt_source, receipt_target)
+        safe_metadata.update(
+            {
+                "svgNormalized": True,
+                "svgScale": svg_scale,
+                "rawSvgFile": raw_svg_target.name,
+            }
+        )
+
+        qr_url = f"{self.firebase_settings.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
+        qr_target = public_dir / "qr.png"
+        qrcode.make(qr_url).save(qr_target)
         record = SessionRecord(
             session_id=session_id,
             created_at=created_at,

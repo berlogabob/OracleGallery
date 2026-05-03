@@ -4,11 +4,11 @@ This repository contains the local uploader, public Flutter gallery, plotter dae
 
 ## Architecture
 
-- Oracle Mac mini: TouchDesigner writes finished session folders; `neje-uploader` uploads safe public assets to Firebase and creates user print jobs.
+- Oracle Mac mini: TouchDesigner writes finished session folders; `neje-uploader-agent` lets the main GUI start/stop/monitor uploads to Firebase.
 - Public web: `public_gallery/` is Flutter Web, built into root `docs/` for GitHub Pages.
-- Plotter MacBook: `neje-plotter` pulls user jobs from Firestore, fills remaining sheet cells with local idle symbols, writes G-code to `spool/`, and exposes an operator page.
+- Plotter MacBook: `neje-gui` is the main supervisor. It starts/stops the local plotter daemon, controls print state, previews sheets, and monitors Mac mini uploader/Firebase/FluidNC.
 - Test workflow: `neje-generate-sessions` creates fake Oracle sessions from the 8 base symbols, so Firebase upload and print queue behavior can be tested without running TouchDesigner.
-- Operator GUI: `neje-gui` opens a local NiceGUI browser panel for generator controls, layout preview, scale correction, idle bank generation, and plotter status.
+- Operator GUI: `neje-gui` opens a local NiceGUI browser panel for generator controls, layout preview, scale correction, idle bank generation, preflight, logs, and plotter status.
 
 The TouchDesigner computer should only run TouchDesigner and the lightweight uploader. Plot orchestration stays on the plotter MacBook.
 
@@ -24,7 +24,7 @@ sessions_raw/<session_id>/
   READY           # optional but recommended
 ```
 
-The uploader ignores visitor photos, audio, transcript files, and `*_visitor.png`. It publishes only `artwork.svg`, `receipt.txt`, `qr.png`, and `manifest.json`. It also reads `session_log.csv` from the sessions root for `intensity`, `instability`, and `confidence`.
+The uploader ignores visitor photos, audio, transcript files, and `*_visitor.png`. It publishes normalized `artwork.svg`, raw backup `artwork_raw.svg`, `receipt.txt`, `qr.png`, and `manifest.json`. It also reads `session_log.csv` from the sessions root for `intensity`, `instability`, and `confidence`.
 
 ## Quick Start
 
@@ -34,22 +34,39 @@ Install dependencies with `uv`:
 uv sync
 ```
 
-Run the uploader on the main machine:
-
-```bash
-uv run neje-uploader
-```
-
-Run the plotter daemon on the MacBook:
-
-```bash
-uv run neje-plotter
-```
-
-Run the local operator GUI:
+Run the central operator GUI on the MacBook:
 
 ```bash
 uv run neje-gui
+```
+
+Run the Mac mini uploader agent on the TouchDesigner machine:
+
+```bash
+uv run neje-uploader-agent
+```
+
+Recommended operator flow:
+
+1. Start `neje-uploader-agent` on the Mac mini.
+2. Start `neje-gui` on the plotter/operator MacBook.
+3. Select one GUI mode: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
+4. Press `START SYSTEM`.
+5. Press `PREFLIGHT` and inspect the result in the status strip/logs.
+6. Use `EXHIBITION DRY` for normal queue/dry-run checks.
+7. Use `EXHIBITION REAL` only after preflight has no critical failures, then press `ARM REAL FLUIDNC`, then `START PRINT`.
+
+GUI modes:
+
+- `TEST`: fake sessions, idle bank generation, preview, and dry-run only. Physical FluidNC output is blocked.
+- `EXHIBITION DRY`: real Mac mini/Firebase/queue flow, but sheets are written to local dry-run/spool only.
+- `EXHIBITION REAL`: real queue and real FluidNC output. This mode requires preflight and explicit arming every time.
+
+Legacy direct services are still available for backup/debugging:
+
+```bash
+uv run neje-uploader
+uv run neje-plotter
 ```
 
 Generate one fake user session into the configured uploader sessions folder:
@@ -64,15 +81,22 @@ Generate local idle/filling symbols with double circles:
 uv run neje-generate-sessions --mode idle --count 8
 ```
 
-The plotter daemon serves an operator dashboard on `http://localhost:8765/` by default. After each printed sheet it enters `paused_for_reload`; press the dashboard button or call `POST /operator/reload` to continue.
+Normalize already uploaded Firebase session SVGs in place, without writing first:
+
+```bash
+uv run neje-normalize-firebase-sessions --dry-run --limit 10
+```
+
+The legacy plotter daemon serves an operator dashboard on `http://localhost:8765/` by default. The preferred exhibition control path is `neje-gui`, which starts and supervises the local daemon directly.
 
 ## Double-click launchers for macOS
 
 Use these files directly from Finder:
 
 - `start_oracle_uploader.command` on the Mac mini with TouchDesigner.
+- `start_uploader_agent.command` on the Mac mini when the main GUI should control uploader start/stop/status.
 - `start_plotter_daemon.command` on the MacBook that drives the plotter.
-- `start_oracle_gui.command` for the local generator/plotter operator GUI.
+- `start_oracle_gui.command` for the main supervised operator GUI.
 - `generate_test_sessions.command` to create fake user sessions from the repo root.
 - `assets/sessions/GENERATE_TEST_SESSION.command` to create one fake user session directly in the real sessions folder.
 - `assets/sessions/START_ORACLE_GUI.command` to launch the GUI from the real TouchDesigner sessions folder.
@@ -101,7 +125,7 @@ Detailed operator instructions are in `RUNBOOK.md`.
 - `docs/` built Flutter Web output served by GitHub Pages from `main`.
 - `firebase/` Firestore/Storage rules and Firestore indexes.
 - `assets/symbols/` eight local idle/filling SVG symbols used by the plotter daemon.
-- `assets/symbols/symbol_scales.json` manual per-symbol scale multipliers used by the test generator.
+- `assets/symbols/symbol_scales.json` manual per-symbol scale multipliers used by the test generator, uploader normalization, and Firebase reprocessing.
 - `assets/generated_idle_symbols/` generated idle/filling SVGs with double circles; ignored by git.
 - `archive/` old briefing artifacts and reference files that are not part of the runtime system.
 
@@ -128,11 +152,27 @@ The runtime Firebase web config is `docs/firebase-config.json`. Firebase Web con
 
 The uploader writes both documents. The plotter daemon only claims and updates `plot_jobs`, while mirroring `plotStatus` onto `sessions/{session_id}`.
 
+## SVG normalization
+
+All new generated and uploaded session SVGs are converted to a canonical fixed canvas:
+
+```text
+viewBox="0 0 1000 1000"
+data-neje-normalized="true"
+data-neje-scale="<0.3..5.0>"
+```
+
+The fixed viewport is intentional. Scale values above `1.0` may overlap neighbouring cells and can produce G-code outside the packing circle; this is allowed for visual/print calibration. Legacy non-normalized SVG files are still bbox-fitted safely by the G-code fallback.
+
 ## Important Environment Variables
 
 - `NEJE_FIREBASE_PROJECT_ID`, `NEJE_FIREBASE_STORAGE_BUCKET`, `NEJE_FIREBASE_CREDENTIALS`: Firebase Admin access for Python services.
 - `NEJE_GALLERY_BASE_URL`: public GitHub Pages URL used in QR codes.
+- `NEJE_ORACLE_RUNTIME_DB_PATH`: shared local supervisor/runtime SQLite used by GUI and plotter.
+- `NEJE_ORACLE_LOGS_ROOT`: local folder for GUI/supervisor/preflight logs.
+- `NEJE_MACMINI_AGENT_URL`: URL of the Mac mini uploader agent, for example `http://macmini.local:8790`.
 - `NEJE_UPLOADER_SESSION_ROOT`: folder watched by the uploader and default target for generated user sessions.
+- `NEJE_UPLOADER_AGENT_HOST`, `NEJE_UPLOADER_AGENT_PORT`: bind address for `neje-uploader-agent` on the Mac mini.
 - `NEJE_PLOTTER_PLACEHOLDER_ROOT`: idle/filling symbol folder; `start_plotter_daemon.sh` prefers `assets/generated_idle_symbols` when it exists, then falls back to `assets/symbols`.
 - `NEJE_PLOTTER_CELL_DIAMETER_MM`: physical packing cell diameter and the visible cell size in the operator preview.
 - `NEJE_PLOTTER_CELL_GAP_MM`: physical empty distance between neighbouring cell circles.
@@ -147,3 +187,5 @@ uv run pytest
 cd public_gallery && flutter analyze
 ./scripts/build_gallery_docs.sh
 ```
+
+The current GUI/supervisor tests cover mode mapping, preflight behavior, real FluidNC safety gates, runtime store persistence, GUI settings migration, plotter runtime config handoff, uploader agent control, and SVG/G-code helpers.

@@ -6,6 +6,7 @@ from svgpathtools import svg2paths2
 
 from .config import SYMBOL_FIT_RATIO
 from .models import SheetItem, SheetPlacement
+from .svg_normalizer import read_normalized_svg_metadata
 
 
 def symbol_diameter_for_cell(cell_diameter_mm: float) -> float:
@@ -34,6 +35,9 @@ def generate_sheet_gcode(
 
     for item, placement in zip(items, placements, strict=True):
         lines.append(f"; item {item.session_id} ({item.source_kind})")
+        metadata = read_normalized_svg_metadata(item.svg_path)
+        if metadata.normalized and metadata.scale > 1.0:
+            lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")
         for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm, cell_diameter_mm):
             start_x, start_y = polyline[0]
             lines.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
@@ -62,11 +66,19 @@ def _svg_to_polylines(
     min_y = min(path.bbox()[2] for path in non_empty_paths)
     max_y = max(path.bbox()[3] for path in non_empty_paths)
 
-    width = max(max_x - min_x, 1.0)
-    height = max(max_y - min_y, 1.0)
-    scale = min(symbol_diameter_for_cell(cell_diameter_mm), cell_diameter_mm) / max(width, height)
-    mid_x = (min_x + max_x) / 2.0
-    mid_y = (min_y + max_y) / 2.0
+    metadata = read_normalized_svg_metadata(svg_path)
+    if metadata.normalized:
+        width = max(max_x - min_x, 1.0)
+        height = max(max_y - min_y, 1.0)
+        scale = symbol_diameter_for_cell(cell_diameter_mm) * metadata.scale / max(width, height)
+        mid_x = (min_x + max_x) / 2.0
+        mid_y = (min_y + max_y) / 2.0
+    else:
+        width = max(max_x - min_x, 1.0)
+        height = max(max_y - min_y, 1.0)
+        scale = min(symbol_diameter_for_cell(cell_diameter_mm), cell_diameter_mm) / max(width, height)
+        mid_x = (min_x + max_x) / 2.0
+        mid_y = (min_y + max_y) / 2.0
 
     polylines: list[list[tuple[float, float]]] = []
     for path in non_empty_paths:
