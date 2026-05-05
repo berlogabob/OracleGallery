@@ -4,6 +4,14 @@ Source: `FIX.md`
 
 Date: 2026-05-05
 
+Status updated: 2026-05-05
+
+Legend:
+
+- `[x]` done
+- `[~]` partially done
+- `[ ]` pending
+
 ## Core diagnosis
 
 The most urgent blocker is FluidNC connectivity. The current code treats FluidNC as a raw TCP endpoint on `NEJE_PLOTTER_FLUIDNC_HOST:NEJE_PLOTTER_FLUIDNC_PORT`, defaulting to `fluidnc.local:23`.
@@ -31,7 +39,7 @@ This means the GUI can show FluidNC offline even when the dashboard works, and r
    - physical FluidNC output is enabled only after explicit checks and arming.
 6. Flutter gallery shows the normalized public SVG and receipt page.
 
-## Phase 0: Safety and reproducibility
+## Phase 0: Safety and reproducibility `[x]`
 
 Goal: make failures visible before changing behavior.
 
@@ -51,6 +59,14 @@ Goal: make failures visible before changing behavior.
   - `NEJE_PLOTTER_FLUIDNC_PROTOCOL=auto`
 - Keep default real sending blocked until diagnostics pass.
 
+Status:
+
+- [x] FluidNC diagnostics are visible in `Plotter Console`.
+- [x] HTTP URL, Telnet host/port, status, position, and messages are shown.
+- [x] `.env.example` and `.env.plotter.example` use `10.198.21.74`.
+- [x] Real sending remains blocked by mode, preflight, arm, and FluidNC `Idle` checks.
+- [~] `NEJE_PLOTTER_FLUIDNC_PROTOCOL=auto` was not added; implementation uses Telnet for streaming and HTTP for diagnostics. This is intentional for the current fix.
+
 Files:
 
 - `src/neje_oracle/config.py`
@@ -62,7 +78,7 @@ Files:
 - `.env.plotter.example`
 - `RUNBOOK.md`
 
-## Phase 1: Replace FluidNC transport with real protocol handling
+## Phase 1: Replace FluidNC transport with real protocol handling `[x]`
 
 Goal: make FluidNC connection actually work and fail safely.
 
@@ -110,7 +126,17 @@ Tests:
 - Fake Telnet server sends `error` -> job fails and does not mark printed.
 - Timeout waiting for `ok` -> job fails and logs exact command.
 
-## Phase 2: Make TEST mode fully functional
+Status:
+
+- [x] `FluidNCTransport.probe()` checks HTTP, Telnet, `?`, and `$G`.
+- [x] `send()` waits for `ok` line-by-line.
+- [x] `error`, `ALARM`, disconnect, and timeout fail the transport.
+- [x] Progress is based on acknowledged G-code commands.
+- [x] GUI has `Connect / Probe`.
+- [x] Tests were added in `tests/test_transport.py`.
+- [x] Plotter daemon disables print and does not mark jobs `printed` on transport failure.
+
+## Phase 2: Make TEST mode fully functional `[~]`
 
 Goal: TEST mode must be the place where every subsystem can be checked without exhibition risk.
 
@@ -145,7 +171,16 @@ Files:
 - `src/neje_oracle/gui_modes.py`
 - `src/neje_oracle/supervisor.py`
 
-## Phase 3: Reorganize GUI layout
+Status:
+
+- [x] TEST mode can run FluidNC diagnostics/manual control.
+- [x] TEST mode can run dry-run sheet generation.
+- [x] TEST mode still supports fake sessions and idle bank.
+- [x] Plotter UI sequence is now explicit: `Connect`, `Manual control`, `Print`.
+- [~] A separate armed “real tiny test-send” action was not added; physical output remains intentionally gated.
+- [x] Runtime/GUI now show current row and sheet progress. Preview highlight for current row is still pending.
+
+## Phase 3: Reorganize GUI layout `[~]`
 
 Goal: hardware/control on the left, symbols/generation on the right, preview in the center.
 
@@ -178,23 +213,32 @@ Files:
 - `src/neje_oracle/gui_service.py`
 - `src/neje_oracle/gui_ui.py`
 
-## Phase 4: Refactor printing from whole-sheet streaming to row streaming
+Status:
+
+- [x] Plotter/hardware control was compacted into `Plotter Console`.
+- [x] Duplicated top print buttons and status pills were removed.
+- [x] Plotter controls now fit better in the left column.
+- [~] Full “hardware left / symbols right” re-layout is not complete. It is paused because current work is restricted to plotter/G-code/FluidNC/GUI.
+
+## Phase 4: Refactor printing from whole-sheet streaming to row streaming `[~]`
 
 Goal: match exhibition behavior: continuous row-based plotting.
 
 Current behavior:
 
-- `PlotterDaemon.run_cycle()` builds one full sheet, sends one full G-code file, then pauses for reload.
+- `PlotterDaemon.run_cycle()` now builds a full sheet layout, groups it into rows, and streams one G-code file per row.
+- Before each row it checks the user queue, places user jobs first, then fills remaining row cells with idle symbols.
+- The physical sheet is still the reload unit: after all rows are streamed, daemon enters `paused_for_reload`.
 
 Required behavior:
 
-- Introduce `PrintRow` and `PrintCell` model.
+- Introduce explicit `PrintRow` and `PrintCell` model if row orchestration needs to become reusable outside `PlotterDaemon`.
 - Build next printable row from:
   - user queue first;
   - idle/filler queue second.
 - Stream row G-code as the atomic unit.
 - New user session can become next row, but never interrupts a current symbol or row.
-- Keep optional sheet reload logic, but do not require a full-sheet pause after every generated G-code if physical workflow needs continuous rows.
+- Keep sheet reload logic for v1 physical workflow.
 - Store progress as:
   - current sheet;
   - current row;
@@ -215,10 +259,22 @@ Tests:
 
 - User jobs are placed before idle jobs at the next row boundary.
 - New user job during row streaming waits until the next row.
-- Stop command stops before next row.
+- Stop command remains `Stop After Sheet` in v1; emergency stop/feed hold is the only immediate stop path.
 - Failed row does not mark user job printed.
 
-## Phase 5: Add Firebase normalization handoff on MacBook
+Status:
+
+- [x] Basic row streaming implemented.
+- [x] Layout grouping by row implemented.
+- [x] User jobs are claimed before each row, so a late user job can enter the next row.
+- [x] Row G-code progress and sheet progress are stored in runtime state and shown in GUI.
+- [x] Related safety improvement completed: manual jog/home pauses print before movement and is blocked while G-code is actively streaming.
+- [x] Transport failures do not mark user jobs `printed`.
+- [ ] Explicit `PrintRow`/`PrintCell` dataclasses are not added yet; current implementation uses existing `SheetItem`/`SheetPlacement`.
+- [ ] Current-symbol progress is not implemented yet; progress is row + acknowledged G-code lines.
+- [ ] Preview does not yet highlight current row.
+
+## Phase 5: Add Firebase normalization handoff on MacBook `[ ]`
 
 Goal: real user SVGs must be normalized and scaled before gallery display and printing.
 
@@ -257,7 +313,12 @@ Tests:
 - Normalizer applies per-symbol scale from GUI config.
 - Reprocessing one Firebase session updates Storage and Firestore.
 
-## Phase 6: Update Flutter gallery from WebsiteWireframe
+Status:
+
+- [ ] Not implemented in this FluidNC-focused pass.
+- [ ] Existing uploader/normalizer utilities remain, but the supervisor handoff pipeline is not complete.
+
+## Phase 6: Update Flutter gallery from WebsiteWireframe `[ ]`
 
 Goal: use `assets/WebsiteWireframe` as the new site map/layout/style reference.
 
@@ -298,7 +359,11 @@ Tests:
 - `./scripts/build_gallery_docs.sh`
 - Manual check of home/about/library/session routes.
 
-## Phase 7: Documentation and operator runbook
+Status:
+
+- [ ] Not implemented. User explicitly paused Flutter work during current plotter/G-code/FluidNC pass.
+
+## Phase 7: Documentation and operator runbook `[~]`
 
 Goal: make GUI usage obvious to a non-developer operator.
 
@@ -332,15 +397,22 @@ Files:
 - `.env.example`
 - `.env.plotter.example`
 
+Status:
+
+- [x] FluidNC setup/troubleshooting documented.
+- [x] Plotter Console sequence documented.
+- [x] Manual jog/home safety behavior documented.
+- [~] Full one-page operator flow should be revisited after row streaming and normalization handoff are implemented.
+
 ## Immediate implementation order
 
-1. FluidNC diagnostics and config split.
-2. Real Telnet handshake/ack sender with tests.
-3. GUI FluidNC panel and clearer button order.
-4. Move generator/scales/filler blocks to the right column.
-5. Row-based print model.
-6. Firebase normalization handoff.
-7. Flutter wireframe update.
-8. Documentation update.
+1. `[x]` FluidNC diagnostics and config split.
+2. `[x]` Real Telnet handshake/ack sender with tests.
+3. `[x]` GUI FluidNC panel and clearer button order.
+4. `[~]` Move generator/scales/filler blocks to the right column.
+5. `[ ]` Row-based print model.
+6. `[ ]` Firebase normalization handoff.
+7. `[ ]` Flutter wireframe update.
+8. `[~]` Documentation update.
 
 Do not start with Flutter or layout polish before FluidNC transport is fixed. If FluidNC transport is wrong, the rest of the operator GUI gives false confidence.

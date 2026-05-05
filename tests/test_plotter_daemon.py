@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -106,11 +107,13 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
     daemon.run_cycle()
 
     gcode_files = list((tmp_path / "spool").glob("*.gcode"))
-    assert len(gcode_files) == 1
+    assert len(gcode_files) > 1
     state = daemon.get_state()
     assert state.status == RuntimeStatus.PAUSED
     assert state.pending_reload is True
     assert state.gcode_progress_percent == 100.0
+    assert state.sheet_progress_percent == 100.0
+    assert state.rows_completed == state.row_count
     assert state.gcode_lines_sent == state.gcode_lines_total
     assert state.gcode_lines_total > 0
     assert ("session_a", PlotStatus.PRINTED.value, state.current_sheet_id) in remote.updates
@@ -132,7 +135,7 @@ def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Pat
     daemon.run_cycle()
 
     gcode_files = list((tmp_path / "spool").glob("*.gcode"))
-    assert len(gcode_files) == 1
+    assert gcode_files
     assert daemon.get_state().status == RuntimeStatus.PAUSED
 
 
@@ -223,3 +226,53 @@ def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> No
     assert '"layout_mode": "grid"' in manifest
     assert '"cell_diameter_mm": 80' in manifest
     assert '"gap_mm": 20' in manifest
+
+
+def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        sheet_width_mm=300,
+        sheet_height_mm=260,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="hex",
+    )
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository([])
+
+    class RowTransport:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback):
+            self.calls += 1
+            if progress_callback:
+                total = len(gcode.splitlines())
+                progress_callback(total, total)
+            path = settings.spool_root / f"{sheet_id}.gcode"
+            path.write_text(gcode, encoding="utf-8")
+            if self.calls == 1:
+                remote.jobs.append(
+                    PlotJobLease(
+                        session_id="late_user",
+                        title="late",
+                        summary="",
+                        created_at=datetime.now(tz=UTC),
+                        priority="user",
+                        queue="user",
+                        svg_storage_path="sessions/late/artwork.svg",
+                        svg_url="",
+                    )
+                )
+            return path
+
+    daemon = PlotterDaemon(settings, store, remote, RowTransport())  # type: ignore[arg-type]
+
+    daemon.run_cycle()
+
+    assert any(update[0] == "late_user" and update[1] == PlotStatus.PRINTED.value for update in remote.updates)

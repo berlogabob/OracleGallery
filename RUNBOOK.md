@@ -134,7 +134,7 @@ Important behavior:
 - On launch, nothing starts automatically. Press `START SYSTEM` to start supervised components in safe mode.
 - `START SYSTEM` starts the local plotter daemon, checks Firebase/FluidNC, and contacts `NEJE_MACMINI_AGENT_URL`.
 - `PREFLIGHT` checks folders, symbols, idle bank, Firebase config, Mac mini/uploader path assumptions, FluidNC, spool write access, and dry-run G-code generation.
-- `CHECK FLUIDNC` must show WebUI online, Telnet online, and controller state `Idle` before real print is armed.
+- `Connect / Probe` must show WebUI online, Telnet online, and controller state `Idle` before real print is armed.
 - `ARM REAL FLUIDNC` is reset whenever the mode changes. It is never restored automatically after GUI restart.
 - The GUI writes layout settings to `runtime/oracle_runtime.sqlite3`; the plotter daemon reads this before every new sheet.
 - If the Mac mini uploader agent is running and started, GUI-generated or TouchDesigner session folders are published to Firebase and become `plot_jobs`.
@@ -143,6 +143,7 @@ Important behavior:
 - `EMERGENCY STOP` sends FluidNC realtime feed hold `!`, disables print, and disarms real FluidNC. It is software safety only, not a replacement for a physical emergency stop.
 - `Confirm reload` updates the local plotter runtime state in SQLite, equivalent to confirming reload in the operator dashboard.
 - The GUI keeps settings in `runtime/gui_settings.json`.
+- Real daemon streaming is row-based. It claims user jobs before every row, fills remaining row cells with idle symbols, and sends one row G-code file at a time. The physical reload workflow remains sheet-based.
 
 FluidNC manual controls:
 
@@ -245,18 +246,18 @@ http://localhost:8765/
 Runtime behavior:
 
 - The daemon claims user jobs from Firestore.
-- User jobs are placed first on the next sheet.
-- Empty cells are filled with local idle symbols.
+- User jobs are placed first on the next row.
+- Empty row cells are filled with local idle symbols.
 - The sheet capacity is always calculated automatically from field size, margin, layout mode, and cell diameter.
 - `START PRINT` enables the next sheet. `STOP AFTER SHEET` prevents the next sheet but never interrupts a G-code stream already being sent.
-- A sheet is atomic: new user jobs do not interrupt a sheet already printing.
+- A row is atomic: new user jobs do not interrupt the current row, but can be claimed for the next row.
 - After each sheet the daemon enters `paused_for_reload`.
 - The operator replaces material and confirms reload in the dashboard.
 
 Generated files:
 
 ```text
-spool/*.gcode
+spool/*_row_*.gcode
 spool/*.json
 spool/cache/*.svg
 ```
@@ -355,8 +356,8 @@ In the GUI select `EXHIBITION DRY`, press `START SYSTEM`, press `PREFLIGHT`, the
 
 Check:
 
-- `spool/*.gcode` was written.
-- `spool/*.json` contains user items before placeholder items.
+- `spool/*_row_*.gcode` files were written.
+- `spool/*.json` contains row entries and user items before placeholder items inside each row.
 - dashboard shows `paused_for_reload` after the sheet.
 
 Full developer checks:
@@ -402,7 +403,7 @@ Then in the GUI:
 Real FluidNC smoke path:
 
 - select `EXHIBITION REAL`;
-- press `CHECK FLUIDNC` and confirm `WebUI online`, `Telnet online`, and `State: Idle`;
+- press `Connect / Probe` and confirm `WebUI online`, `Telnet online`, and `State: Idle`;
 - press `PREFLIGHT`;
 - confirm no critical failures and `FluidNC` is online;
 - press `ARM REAL FLUIDNC`;
@@ -437,6 +438,6 @@ If FluidNC state is `Alarm`, inspect the machine physically, then use `UNLOCK AL
 
 If FluidNC state is `Hold`, use `RESUME` only when the tool path is safe to continue.
 
-If a G-code stream fails with `error`, `ALARM`, disconnect, or timeout waiting for `ok`, the GUI disables print and disarms real FluidNC. Run `CHECK FLUIDNC`, inspect logs, and restart with dry-run before arming real output again.
+If a G-code stream fails with `error`, `ALARM`, disconnect, or timeout waiting for `ok`, the GUI disables print and disarms real FluidNC. Run `Connect / Probe`, inspect logs, and restart with dry-run before arming real output again.
 
 If the Logs panel is empty, perform an action such as `PREFLIGHT` or `CHECK`, then refresh logs. Logs are written to `NEJE_ORACLE_LOGS_ROOT/oracle_supervisor.log`.

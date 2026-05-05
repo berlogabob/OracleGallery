@@ -58,9 +58,9 @@ Recommended operator flow:
 2. Start `neje-gui` on the plotter/operator MacBook.
 3. Select one GUI mode: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
 4. Press `START SYSTEM`.
-5. Press `PREFLIGHT` and inspect the result in the status strip/logs.
+5. In `Plotter Console`, press `Connect / Probe`, then `Preflight`.
 6. Use `EXHIBITION DRY` for normal queue/dry-run checks.
-7. Use `EXHIBITION REAL` only after preflight has no critical failures, then press `ARM REAL FLUIDNC`, then `START PRINT`.
+7. Use `EXHIBITION REAL` only after preflight has no critical failures, then press `Arm Real`, then `Start Print`.
 
 GUI modes:
 
@@ -71,10 +71,11 @@ GUI modes:
 FluidNC control:
 
 - Configure the plotter with `NEJE_PLOTTER_FLUIDNC_HTTP_URL=http://10.198.21.74` and `NEJE_PLOTTER_FLUIDNC_TELNET_HOST=10.198.21.74`.
-- The GUI `CHECK FLUIDNC` action verifies both WebUI/HTTP and Telnet, then reads `?` status and `$G` modal state.
+- The GUI `Connect / Probe` action verifies both WebUI/HTTP and Telnet, then reads `?` status and `$G` modal state.
 - WebUI online is not enough for real sending. Real G-code streaming requires Telnet port `23` and an `Idle` controller state.
 - GUI jog/homing controls use FluidNC commands: `$H`, `$H=X`, `$H=Y`, `$X`, `$J=G91 G21 ...`, realtime `!`, `~`, and `Ctrl-X`.
 - `EMERGENCY STOP` is software feed hold `!`; keep a physical emergency stop/power cut available.
+- Printing is row-based: the daemon groups each sheet into rows, claims user jobs before every row, fills remaining row cells with idle symbols, and writes/sends `spool/<sheet>_row_XX.gcode`. Material reload is still sheet-based in v1.
 
 Developer-only direct services are still available for debugging:
 

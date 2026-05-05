@@ -160,6 +160,10 @@ class PlotterRuntimeState:
     gcode_lines_sent: int = 0
     gcode_lines_total: int = 0
     gcode_progress_percent: float = 0.0
+    current_row_index: int = 0
+    row_count: int = 0
+    rows_completed: int = 0
+    sheet_progress_percent: float = 0.0
     updated_at: datetime = field(default_factory=utcnow)
 
     def to_dict(self) -> dict[str, Any]:
@@ -173,6 +177,10 @@ class PlotterRuntimeState:
             "gcode_lines_sent": self.gcode_lines_sent,
             "gcode_lines_total": self.gcode_lines_total,
             "gcode_progress_percent": self.gcode_progress_percent,
+            "current_row_index": self.current_row_index,
+            "row_count": self.row_count,
+            "rows_completed": self.rows_completed,
+            "sheet_progress_percent": self.sheet_progress_percent,
             "updated_at": self.updated_at.isoformat(),
         }
 
@@ -188,6 +196,10 @@ class PlotterRuntimeState:
             gcode_lines_sent=int(payload.get("gcode_lines_sent", 0)),
             gcode_lines_total=int(payload.get("gcode_lines_total", 0)),
             gcode_progress_percent=float(payload.get("gcode_progress_percent", 0.0)),
+            current_row_index=int(payload.get("current_row_index", 0)),
+            row_count=int(payload.get("row_count", 0)),
+            rows_completed=int(payload.get("rows_completed", 0)),
+            sheet_progress_percent=float(payload.get("sheet_progress_percent", 0.0)),
             updated_at=datetime.fromisoformat(payload["updated_at"])
             if payload.get("updated_at")
             else utcnow(),

@@ -158,6 +158,20 @@ def calculate_layout_capacity(
     )
 
 
+def group_layout_rows(placements: list[SheetPlacement], *, tolerance_mm: float = 0.001) -> list[list[SheetPlacement]]:
+    if not placements:
+        return []
+
+    sorted_placements = sorted(placements, key=lambda placement: (placement.center_y_mm, placement.center_x_mm))
+    rows: list[list[SheetPlacement]] = []
+    for placement in sorted_placements:
+        if not rows or abs(rows[-1][0].center_y_mm - placement.center_y_mm) > tolerance_mm:
+            rows.append([placement])
+        else:
+            rows[-1].append(placement)
+    return [sorted(row, key=lambda placement: placement.center_x_mm) for row in rows]
+
+
 def _center_placements(
     placements: list[SheetPlacement],
     *,

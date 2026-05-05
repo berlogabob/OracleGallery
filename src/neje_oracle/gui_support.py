@@ -361,6 +361,10 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
             "gcode_lines_sent": 0,
             "gcode_lines_total": 0,
             "gcode_progress_percent": 0.0,
+            "current_row_index": 0,
+            "row_count": 0,
+            "rows_completed": 0,
+            "sheet_progress_percent": 0.0,
             "updated_at": "",
             "latest_manifest": str(latest_manifest) if latest_manifest else "",
             "user_count": item_counts["user"],
@@ -383,6 +387,10 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
         "gcode_lines_sent": state.gcode_lines_sent,
         "gcode_lines_total": state.gcode_lines_total,
         "gcode_progress_percent": state.gcode_progress_percent,
+        "current_row_index": state.current_row_index,
+        "row_count": state.row_count,
+        "rows_completed": state.rows_completed,
+        "sheet_progress_percent": state.sheet_progress_percent,
         "updated_at": state.updated_at.isoformat(),
         "latest_manifest": str(latest_manifest) if latest_manifest else "",
         "user_count": item_counts["user"],
@@ -528,6 +536,14 @@ def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:
         return {"user": 0, "idle": 0, "total": 0}
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     items = payload.get("items", [])
+    if not items and isinstance(payload.get("rows"), list):
+        items = [
+            item
+            for row in payload["rows"]
+            if isinstance(row, dict)
+            for item in row.get("items", [])
+            if isinstance(item, dict)
+        ]
     user = sum(1 for item in items if item.get("source_kind") == "user")
     idle = len(items) - user
     return {"user": user, "idle": idle, "total": len(items)}

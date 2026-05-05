@@ -23,9 +23,11 @@ def generate_sheet_gcode(
     draw_rate: float,
     pen_up_command: str,
     pen_down_command: str,
+    title: str = "sheet",
+    return_home: bool = True,
 ) -> str:
     lines = [
-        "; Neje Oracle sheet",
+        f"; Neje Oracle {title}",
         "G21",
         "G90",
         f"G0 F{travel_rate:.2f}",
@@ -46,7 +48,9 @@ def generate_sheet_gcode(
                 lines.append(f"G1 X{x:.3f} Y{y:.3f}")
             lines.append(pen_up_command)
 
-    lines.extend([pen_up_command, "G0 X0 Y0"])
+    lines.append(pen_up_command)
+    if return_home:
+        lines.append("G0 X0 Y0")
     return "\n".join(lines) + "\n"
 
 

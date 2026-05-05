@@ -218,7 +218,7 @@ def build_page() -> None:
         for key, label in control_labels.items():
             label.set_text(str(status.get(key, "-") or "-"))
         total = int(status.get("processed_symbols", 0) or 0)
-        progress_percent = float(status.get("gcode_progress_percent", 0.0) or 0.0)
+        progress_percent = float(status.get("sheet_progress_percent", status.get("gcode_progress_percent", 0.0)) or 0.0)
         progress.value = min(max(progress_percent / 100.0, 0.0), 1.0)
         print_enabled = bool(status.get("print_enabled"))
         pending_reload = bool(status.get("pending_reload"))
@@ -237,11 +237,13 @@ def build_page() -> None:
             f"user {status.get('user_count', 0)} · idle {status.get('idle_count', 0)}"
         )
         plotter_labels["progress"].set_text(
-            f"{progress_percent:.0f}% · {status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} lines"
+            f"{progress_percent:.0f}% · row {status.get('current_row_index', 0)}/{status.get('row_count', 0)} · "
+            f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} lines"
         )
         plotter_labels["message"].set_text(str(status.get("message", "-") or "-"))
         preview_progress_label.set_text(
             f"{status.get('status', '-')} | {progress_percent:.1f}% | "
+            f"row {status.get('current_row_index', 0)}/{status.get('row_count', 0)} | "
             f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
             f"{total}/{layout_capacity(settings)} cells in last sheet"
         )

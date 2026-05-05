@@ -1,6 +1,6 @@
 import pytest
 
-from neje_oracle.layout import build_grid_layout, build_hex_layout
+from neje_oracle.layout import build_grid_layout, build_hex_layout, group_layout_rows
 
 
 def test_hex_layout_stays_within_sheet() -> None:
@@ -139,3 +139,18 @@ def test_hex_layout_centers_used_cells_in_printable_area() -> None:
 
     assert (min_x + max_x) / 2 == pytest.approx(125)
     assert (min_y + max_y) / 2 == pytest.approx(220)
+
+
+def test_group_layout_rows_keeps_left_to_right_order() -> None:
+    placements = build_hex_layout(
+        5,
+        sheet_width_mm=300,
+        sheet_height_mm=260,
+        margin_mm=0,
+        diameter_mm=80,
+    )
+
+    rows = group_layout_rows(placements)
+
+    assert [len(row) for row in rows[:2]] == [3, 2]
+    assert all(row[index].center_x_mm <= row[index + 1].center_x_mm for row in rows for index in range(len(row) - 1))
