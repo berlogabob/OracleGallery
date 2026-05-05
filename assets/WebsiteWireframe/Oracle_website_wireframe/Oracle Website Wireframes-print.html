@@ -1,0 +1,1164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Oracle — Website Wireframes</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;1,400&family=Cinzel:wght@400;600&family=Cinzel+Decorative:wght@400&family=Caveat:wght@400;600&family=Kalam:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --cream:#f7f4ef;
+    --paper:#efeae1;
+    --ink:#1a1a1a;
+    --ink-mid:#3a3a3a;
+    --ink-mute:#6a6a6a;
+    --rust:#8B4513;
+    --rule:#ccc5b8;
+    --void:#0a0a12;
+    --gold:#c9a84c;
+    --note:#b94a2a;
+    --note-bg:#fff6e8;
+    --grey-box:#d9d3c6;
+    --grey-box-2:#cec6b6;
+    --hand:'Caveat',cursive;
+    --hand-tight:'Kalam',cursive;
+    --display:'Cinzel',serif;
+    --logo:'Cinzel Decorative',serif;
+    --body:'EB Garamond',Georgia,serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#e6e1d6;color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6}
+
+  /* ───── Workbench backdrop ───── */
+  .workbench{
+    padding:48px 32px 96px;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(0,0,0,0.04) 39px 40px),
+      #e6e1d6;
+  }
+  .wb-title{
+    max-width:1120px;margin:0 auto 32px;
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+    border-bottom:0.5px solid #b6ad9a;padding-bottom:20px;
+  }
+  .wb-title h1{
+    font-family:var(--logo);font-weight:400;font-size:28px;letter-spacing:0.22em;color:var(--ink);
+  }
+  .wb-title .meta{
+    font-family:var(--display);font-size:9px;letter-spacing:0.35em;color:var(--rust);text-transform:uppercase;
+  }
+  .wb-title .meta div + div{margin-top:4px;color:var(--ink-mute)}
+  .wb-legend{
+    max-width:1120px;margin:0 auto 56px;
+    display:grid;grid-template-columns:repeat(4,1fr);gap:24px;
+    font-family:var(--hand-tight);font-size:14px;color:var(--ink-mid);
+  }
+  .wb-legend .swatch{display:flex;gap:10px;align-items:flex-start}
+  .wb-legend .chip{width:28px;height:18px;border:0.5px solid #999;flex:none;margin-top:3px}
+  .wb-legend .chip.cream{background:var(--cream)}
+  .wb-legend .chip.void{background:var(--void)}
+  .wb-legend .chip.box{background:var(--grey-box)}
+  .wb-legend .chip.note{background:var(--note-bg);border:1px dashed var(--note)}
+  .wb-legend strong{font-family:var(--display);font-size:9px;letter-spacing:0.3em;color:var(--ink);text-transform:uppercase;display:block;margin-bottom:2px}
+
+  /* ───── Page frame (mock browser) ───── */
+  .page{
+    max-width:1120px;margin:0 auto 80px;
+    background:var(--cream);
+    border:1px solid #6a6a6a;
+    box-shadow:8px 8px 0 rgba(0,0,0,0.08);
+    position:relative;
+  }
+  .page-tag{
+    position:absolute;top:-34px;left:0;
+    font-family:var(--hand);font-size:24px;color:var(--rust);
+    white-space:nowrap;
+  }
+  .page-tag .small{font-family:var(--display);font-size:9px;letter-spacing:0.35em;color:var(--ink-mute);text-transform:uppercase;display:block;line-height:1.4;margin-top:-4px;white-space:nowrap}
+  .browser-bar{
+    background:#dcd6c8;border-bottom:0.5px solid #b6ad9a;
+    padding:8px 14px;display:flex;align-items:center;gap:10px;
+    font-family:var(--hand-tight);font-size:13px;color:var(--ink-mute);
+  }
+  .browser-bar .dots{display:flex;gap:6px}
+  .browser-bar .dots span{width:10px;height:10px;border:1px solid #888;border-radius:50%;display:block}
+  .browser-bar .url{
+    flex:1;background:#efeae1;border:0.5px solid #b6ad9a;padding:4px 12px;
+    font-family:'Courier New',monospace;font-size:12px;color:var(--ink-mid);
+  }
+
+  /* ───── Persistent nav (rendered in cream) ───── */
+  .nav{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:22px 48px;border-bottom:0.5px solid var(--rule);
+    background:var(--cream);
+  }
+  .nav .logo{font-family:var(--logo);font-size:18px;letter-spacing:0.28em;color:var(--ink);text-indent:0.28em}
+  .nav ul{list-style:none;display:flex;gap:36px;font-family:var(--display);font-size:10px;letter-spacing:0.3em;text-transform:uppercase;color:var(--ink-mid)}
+  .nav ul li.active{color:var(--rust);border-bottom:0.5px solid var(--rust);padding-bottom:2px}
+
+  /* ───── Section scaffolding ───── */
+  section{padding:64px 48px;border-bottom:0.5px dashed var(--rule);position:relative}
+  section.void{background:var(--void);color:var(--cream);border-bottom-color:rgba(201,168,76,0.15)}
+  .sec-label{
+    font-family:var(--display);font-size:9px;letter-spacing:0.4em;color:var(--rust);text-transform:uppercase;
+    display:flex;align-items:center;gap:18px;margin-bottom:20px;
+  }
+  .void .sec-label{color:var(--gold)}
+  .sec-label::after{content:'';flex:1;height:0.5px;background:var(--rule)}
+  .void .sec-label::after{background:rgba(201,168,76,0.25)}
+  h2.sec-title{
+    font-family:var(--body);font-style:italic;font-weight:400;font-size:30px;color:var(--ink);margin-bottom:24px;line-height:1.2;
+  }
+  .void h2.sec-title{color:var(--cream)}
+
+  /* ───── Wireframe primitives ───── */
+  .box{
+    background:var(--grey-box);
+    border:0.5px solid #a89e87;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--hand-tight);font-size:13px;color:var(--ink-mid);
+    position:relative;
+  }
+  .box.diag::before{
+    content:'';position:absolute;inset:0;
+    background:
+      linear-gradient(45deg, transparent calc(50% - 0.5px), rgba(0,0,0,0.18) 50%, transparent calc(50% + 0.5px)),
+      linear-gradient(-45deg, transparent calc(50% - 0.5px), rgba(0,0,0,0.18) 50%, transparent calc(50% + 0.5px));
+    pointer-events:none;
+  }
+  .box .label{position:relative;background:var(--grey-box);padding:4px 10px;border:0.5px solid #a89e87;font-family:var(--display);font-size:9px;letter-spacing:0.25em;color:var(--ink);text-transform:uppercase}
+  .void .box{background:#1a1a26;border-color:rgba(201,168,76,0.25);color:rgba(247,244,239,0.55)}
+  .void .box .label{background:#1a1a26;border-color:rgba(201,168,76,0.3);color:var(--gold)}
+
+  .text-line{height:9px;background:#cdc6b5;margin:6px 0;border-radius:1px}
+  .text-line.short{width:55%}
+  .text-line.med{width:78%}
+  .text-line.long{width:96%}
+  .void .text-line{background:rgba(247,244,239,0.18)}
+
+  .heading-line{height:18px;background:#bfb6a1;margin-bottom:14px;width:60%}
+  .void .heading-line{background:rgba(247,244,239,0.32)}
+
+  /* ───── Annotation pins ───── */
+  .anno{
+    position:absolute;
+    background:var(--note-bg);
+    border:1px dashed var(--note);
+    padding:6px 10px;
+    font-family:var(--hand-tight);font-size:12px;color:var(--note);
+    line-height:1.35;max-width:240px;
+    z-index:10;
+  }
+  .anno strong{font-family:var(--display);font-size:8px;letter-spacing:0.3em;color:var(--note);text-transform:uppercase;display:block;margin-bottom:2px}
+  .anno-arrow{
+    position:absolute;width:60px;height:1px;background:var(--note);
+    transform-origin:left center;
+    z-index:10;
+  }
+  .anno-arrow::after{
+    content:'';position:absolute;right:-1px;top:-3px;width:7px;height:7px;
+    border-right:1px solid var(--note);border-bottom:1px solid var(--note);
+    transform:rotate(-45deg);
+  }
+  .source-tag{
+    display:block;width:fit-content;max-width:100%;
+    background:transparent;
+    border:0.5px dashed var(--rust);padding:3px 8px;
+    font-family:var(--hand-tight);font-size:11px;color:var(--rust);
+    margin-top:14px;
+  }
+  .void .source-tag{border-color:var(--gold);color:var(--gold)}
+
+  /* ───── Page 1 specifics ───── */
+  .hero-void{
+    min-height:520px;background:var(--void);color:var(--cream);
+    padding:80px 48px 60px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border-bottom:0.5px dashed rgba(201,168,76,0.15);position:relative;
+  }
+  .hero-portrait{
+    width:160px;height:200px;
+    background:radial-gradient(ellipse at 50% 40%, rgba(201,168,76,0.45) 0%, rgba(201,168,76,0.15) 50%, transparent 75%);
+    border:0.5px dashed rgba(201,168,76,0.4);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--hand-tight);font-size:11px;color:rgba(201,168,76,0.7);
+    margin-bottom:32px;
+  }
+  .hero-title{
+    font-family:var(--display);font-size:14px;letter-spacing:0.4em;color:var(--cream);
+    text-transform:uppercase;text-align:center;margin-bottom:36px;text-indent:0.4em;
+  }
+  .hero-marks{
+    display:flex;gap:24px;justify-content:center;align-items:center;
+  }
+  .hero-marks svg{width:32px;height:32px;opacity:0.55}
+  .hero-marks svg.dim{opacity:0.18}
+  .hero-marks svg.bright{opacity:0.9}
+
+  /* Session lookup component */
+  .session{
+    max-width:520px;margin:0 auto;
+  }
+  .session .lbl{
+    font-family:var(--display);font-size:10px;letter-spacing:0.35em;color:var(--rust);text-transform:uppercase;
+    margin-bottom:14px;text-align:center;
+  }
+  .void .session .lbl{color:var(--gold)}
+  .session .row{display:flex;gap:0}
+  .session input{
+    flex:1;border:0.5px solid var(--ink-mid);background:transparent;
+    padding:14px 16px;font-family:var(--body);font-size:15px;font-style:italic;color:var(--ink-mute);
+  }
+  .void .session input{border-color:rgba(201,168,76,0.5);color:rgba(247,244,239,0.5)}
+  .session button{
+    border:0.5px solid var(--ink);background:var(--ink);color:var(--cream);
+    padding:14px 28px;font-family:var(--display);font-size:10px;letter-spacing:0.3em;text-transform:uppercase;cursor:pointer;
+  }
+  .void .session button{background:transparent;border-color:var(--gold);color:var(--gold)}
+  .session .help{
+    margin-top:14px;font-style:italic;color:var(--ink-mute);font-size:14px;text-align:center;
+  }
+  .void .session .help{color:rgba(247,244,239,0.5)}
+
+  /* ───── Cloth viewer mock ───── */
+  .cloth-viewer{
+    background:var(--void);border:0.5px solid rgba(201,168,76,0.2);
+    padding:32px;position:relative;overflow:hidden;
+    min-height:420px;
+  }
+  .cloth-grid{
+    display:grid;grid-template-columns:repeat(18,1fr);gap:18px 14px;
+  }
+  .cloth-cell{
+    aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+    color:rgba(201,168,76,0.35);
+  }
+  .cloth-cell.real{color:rgba(201,168,76,0.7)}
+  .cloth-cell.match{
+    color:var(--gold);
+    outline:1px dashed var(--gold);
+    outline-offset:4px;
+    position:relative;
+  }
+  .cloth-cell.dim{opacity:0.35}
+  .cloth-cell svg{width:100%;height:100%}
+
+  .reading-panel{
+    position:absolute;right:32px;top:32px;width:240px;
+    background:rgba(10,10,18,0.92);border:0.5px solid var(--gold);padding:20px;
+    color:var(--cream);
+  }
+  .reading-panel .em{font-family:var(--display);font-size:8px;letter-spacing:0.4em;color:var(--rust);text-transform:uppercase;margin-bottom:6px}
+  .reading-panel .nm{font-family:var(--display);font-size:13px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:14px}
+  .reading-panel .read{font-style:italic;font-size:13px;color:rgba(247,244,239,0.78);line-height:1.55;margin-bottom:18px}
+  .reading-panel .share{
+    border:0.5px solid var(--gold);padding:8px 12px;font-family:var(--display);
+    font-size:9px;letter-spacing:0.3em;color:var(--gold);text-transform:uppercase;text-align:center;
+  }
+
+  /* ───── Mark cards ───── */
+  .marks-page-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px;margin-top:32px}
+  .mark-card{
+    border:0.5px solid var(--rule);display:grid;grid-template-columns:140px 1fr;background:var(--cream);
+  }
+  .mark-card .vis{background:var(--void);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;gap:10px;border-right:0.5px solid rgba(201,168,76,0.2)}
+  .mark-card .vis svg{width:80px;height:60px}
+  .mark-card .em{font-family:var(--display);font-size:7px;letter-spacing:0.4em;color:var(--rust);text-transform:uppercase}
+  .mark-card .nm{font-family:var(--display);font-size:9px;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;text-align:center;line-height:1.4}
+  .mark-card .txt{padding:18px 22px}
+  .mark-card .desc{font-size:14px;color:var(--ink-mid);line-height:1.55;margin-bottom:10px}
+  .mark-card .read{font-size:12px;font-style:italic;color:var(--ink-mute);line-height:1.5}
+
+  /* ───── Team ───── */
+  .team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:24px}
+  .team-card .photo{aspect-ratio:1;background:var(--grey-box);border:0.5px solid var(--rule);display:flex;align-items:center;justify-content:center;font-family:var(--hand-tight);font-size:12px;color:var(--ink-mute);margin-bottom:18px}
+  .team-card .nm{font-family:var(--display);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--ink);margin-bottom:6px}
+  .team-card .role{font-family:var(--body);font-style:italic;font-size:14px;color:var(--ink-mute);margin-bottom:12px}
+
+  /* ───── Mobile frame ───── */
+  .mobile-shell{
+    width:340px;border:8px solid #1a1a1a;border-radius:36px;
+    background:var(--cream);overflow:hidden;
+    box-shadow:6px 6px 0 rgba(0,0,0,0.12);
+    position:relative;
+  }
+  .mobile-shell::before{
+    content:'';position:absolute;top:8px;left:50%;transform:translateX(-50%);
+    width:90px;height:18px;background:#1a1a1a;border-radius:0 0 14px 14px;z-index:5;
+  }
+  .mobile-shell .nav{padding:30px 18px 14px}
+  .mobile-shell .nav .logo{font-size:13px;letter-spacing:0.25em}
+  .mobile-shell .nav ul{gap:14px;font-size:8px;letter-spacing:0.22em}
+  .mobile-shell section{padding:24px 18px}
+  .mobile-shell .sec-title{font-size:20px}
+  .mobile-shell .session input{padding:10px 12px;font-size:13px}
+  .mobile-shell .session button{padding:10px 14px;font-size:9px}
+  .mobile-shell .cloth-viewer{padding:14px;min-height:auto}
+  .mobile-shell .cloth-grid{grid-template-columns:repeat(6,1fr);gap:10px}
+  .mobile-shell .reading-panel{position:static;width:auto;margin-top:18px}
+  .mobile-shell .scroll-hint{
+    position:absolute;right:8px;top:50%;width:4px;height:80px;background:rgba(201,168,76,0.35);border-radius:2px;
+  }
+
+  /* page-row layout for mobile + annotation */
+  .mobile-row{display:grid;grid-template-columns:380px 1fr;gap:48px;align-items:flex-start}
+  .mobile-notes{padding-top:60px}
+  .mobile-notes h3{font-family:var(--display);font-size:11px;letter-spacing:0.3em;color:var(--rust);text-transform:uppercase;margin-bottom:14px}
+  .mobile-notes p{font-family:var(--hand-tight);font-size:14px;color:var(--ink-mid);margin-bottom:14px;line-height:1.55}
+  .mobile-notes p strong{font-family:var(--display);font-size:9px;letter-spacing:0.25em;color:var(--ink);text-transform:uppercase;font-weight:400;display:block;margin-bottom:2px}
+
+  /* ───── Two-col + utility ───── */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:flex-start}
+  .three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
+  .stack > * + *{margin-top:12px}
+  .source-block{
+    border-left:2px solid var(--rust);padding:6px 0 6px 14px;margin:14px 0;
+    font-family:var(--hand-tight);font-size:12px;color:var(--rust);line-height:1.5;
+  }
+  .source-block strong{font-family:var(--display);font-size:8px;letter-spacing:0.3em;text-transform:uppercase;display:block;margin-bottom:2px}
+  .void .source-block{border-color:var(--gold);color:var(--gold)}
+
+  .preview-cloth{
+    aspect-ratio:16/7;background:var(--void);border:0.5px solid rgba(201,168,76,0.2);
+    display:grid;grid-template-columns:repeat(20,1fr);gap:10px;padding:24px;
+  }
+  .preview-cloth svg{width:100%;height:100%;opacity:0.55}
+
+  .count-strip{
+    display:flex;align-items:baseline;gap:14px;margin-top:18px;
+    font-family:var(--display);color:var(--gold);font-size:11px;letter-spacing:0.3em;text-transform:uppercase;
+  }
+  .count-strip .num{font-family:var(--body);font-style:italic;font-size:32px;color:var(--cream);letter-spacing:0;text-transform:none}
+
+  .cta{
+    display:inline-block;border:0.5px solid var(--gold);padding:14px 28px;
+    font-family:var(--display);font-size:10px;letter-spacing:0.3em;color:var(--gold);text-transform:uppercase;margin-top:20px;
+  }
+  .void .cta{background:transparent}
+
+  .video-frame{
+    aspect-ratio:16/9;background:var(--grey-box);border:0.5px solid var(--rule);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--hand-tight);font-size:13px;color:var(--ink-mid);
+    position:relative;
+  }
+  .video-frame::before{
+    content:'';width:0;height:0;border-left:28px solid var(--ink-mid);border-top:18px solid transparent;border-bottom:18px solid transparent;
+  }
+  .video-frame .lbl{position:absolute;top:12px;left:12px;background:var(--cream);border:0.5px solid var(--rule);padding:4px 10px;font-family:var(--display);font-size:9px;letter-spacing:0.25em;color:var(--rust);text-transform:uppercase}
+
+  .phase2-banner{
+    border:1px dashed var(--note);background:var(--note-bg);
+    padding:18px 22px;margin-top:24px;
+    font-family:var(--hand-tight);font-size:13px;color:var(--note);
+  }
+  .phase2-banner strong{font-family:var(--display);font-size:9px;letter-spacing:0.3em;color:var(--note);text-transform:uppercase;display:block;margin-bottom:4px}
+
+  .step-list{margin-top:18px}
+  .step-list .row{
+    display:grid;grid-template-columns:40px 1fr;gap:18px;padding:14px 0;border-bottom:0.5px solid var(--rule);
+  }
+  .step-list .num{font-family:var(--display);font-size:10px;letter-spacing:0.25em;color:var(--rust)}
+  .step-list .body{font-family:var(--hand-tight);font-size:13px;color:var(--ink-mid)}
+  .step-list .body strong{font-family:var(--display);font-size:9px;letter-spacing:0.25em;color:var(--ink);text-transform:uppercase;display:block;margin-bottom:4px}
+
+  .ai-pill{
+    display:inline-block;border:0.5px solid var(--rust);padding:3px 9px;margin:0 4px 4px 0;
+    font-family:var(--display);font-size:9px;letter-spacing:0.22em;color:var(--rust);text-transform:uppercase;
+  }
+
+  /* annotation arrow positioning helpers */
+  .pin-wrap{position:relative}
+
+  /* Disclosure note used at the top of the doc */
+  .doc-key{
+    max-width:1120px;margin:0 auto 56px;background:#fdf7e8;border:1px dashed #c9a84c;
+    padding:18px 22px;font-family:var(--hand-tight);font-size:13px;color:var(--ink-mid);line-height:1.55;
+  }
+  .doc-key strong{font-family:var(--display);font-size:10px;letter-spacing:0.3em;color:var(--rust);text-transform:uppercase;display:block;margin-bottom:6px}
+
+  /* ───── PRINT ───── */
+  @media print {
+    @page { size: A3 portrait; margin: 12mm; }
+    html, body {
+      background: #e6e1d6 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    *, *::before, *::after {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .workbench { padding: 0 !important; background: #e6e1d6 !important; }
+    .wb-title, .wb-legend, .doc-key { max-width: 100% !important; margin-left: 0 !important; margin-right: 0 !important; }
+    .wb-title { break-after: page; }
+    .wb-legend, .doc-key { break-inside: avoid; }
+    .page {
+      max-width: 100% !important;
+      margin: 0 0 0 0 !important;
+      box-shadow: none !important;
+      border: 0.5px solid #6a6a6a !important;
+      break-before: page;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    .page-tag { top: 4px !important; left: 12px !important; }
+    section { break-inside: avoid; page-break-inside: avoid; }
+    .mark-card, .team-card, .exchange-step, .step-list .row { break-inside: avoid; page-break-inside: avoid; }
+    .anno { box-shadow: none !important; }
+    /* Hide nothing — wireframes are the deliverable */
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════ WORKBENCH ════════════ -->
+<div class="workbench">
+
+  <header class="wb-title">
+    <div>
+      <h1>ORACLE</h1>
+      <div style="font-family:var(--display);font-size:9px;letter-spacing:0.35em;color:var(--ink-mute);text-transform:uppercase;margin-top:4px">Website wireframes · mid-fidelity</div>
+    </div>
+    <div class="meta">
+      <div>Five pages · v1.0</div>
+      <div>IADE M-CCIA · April 2026</div>
+    </div>
+  </header>
+
+  <div class="wb-legend">
+    <div class="swatch"><span class="chip cream"></span><div><strong>Document</strong>cream `#f7f4ef` — default register, four of five pages</div></div>
+    <div class="swatch"><span class="chip void"></span><div><strong>Installation</strong>void `#0a0a12` — hero + cloth viewer only</div></div>
+    <div class="swatch"><span class="chip box"></span><div><strong>Image stand-in</strong>grey box, real labels for all text</div></div>
+    <div class="swatch"><span class="chip note"></span><div><strong>Annotation</strong>orange-dashed — wireframe notes, not in build</div></div>
+  </div>
+
+  <div class="doc-key">
+    <strong>How to read this</strong>
+    Each page is shown inside a mock browser frame at desktop width (1120px content, but wireframe shrinks to ~960). The persistent nav repeats on every page. <em>The Cloth</em> also includes a mobile rendering — the QR-code destination from the printed receipt. Annotations in orange dashed boxes call out structural intent and content sources. Real copy from <em>oracle_narrative.html</em> is referenced inline; lorem text would mislead this team.
+  </div>
+
+  <!-- ════════════ PAGE 1 — HOME ════════════ -->
+  <div class="page" id="p1">
+    <div class="page-tag">Page 1<span class="small">/ home</span></div>
+    <div class="browser-bar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="url">oracle.iade.pt/</div>
+      <div>desktop · 1280</div>
+    </div>
+
+    <!-- nav -->
+    <nav class="nav">
+      <div class="logo">ORACLE</div>
+      <ul>
+        <li class="active">Home</li>
+        <li>The Cloth</li>
+        <li>The Marks</li>
+        <li>About</li>
+        <li>Team</li>
+      </ul>
+    </nav>
+
+    <!-- §1 Hero -->
+    <section class="void hero-void pin-wrap" style="border-top:none">
+      <div class="anno" style="left:32px;top:24px">
+        <strong>§1 · Hero</strong>
+        Full-bleed void. Portrait centred. Eight marks rotate beneath title in slow fade — no labels, intrigue only.
+      </div>
+
+      <div class="hero-portrait">[ Oracle portrait<br>gold liquid figure ]</div>
+      <div class="hero-title">The Oracle That Wears Us</div>
+
+      <div class="hero-marks pin-wrap">
+        <!-- Eight reduced marks — one bright, others dim; placeholder rotation -->
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/><polyline points="12,30 18,22 24,38 30,22 36,38 42,22 48,30"/></g></svg>
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><circle cx="30" cy="30" r="22"/><circle cx="30" cy="30" r="9"/><circle cx="30" cy="30" r="2.5" fill="#c9a84c"/></g></svg>
+        <svg viewBox="0 0 60 60" class="bright"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="30"/><line x1="30" y1="30" x2="48" y2="48"/><line x1="30" y1="30" x2="30" y2="55"/><line x1="30" y1="30" x2="12" y2="48"/><line x1="30" y1="30" x2="5" y2="30"/><line x1="30" y1="30" x2="12" y2="12"/><line x1="30" y1="30" x2="30" y2="5"/><line x1="30" y1="30" x2="48" y2="12"/></g></svg>
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/><line x1="6" y1="44" x2="54" y2="44"/></g></svg>
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/><path d="M5 46 Q 30 8 55 46" opacity="0.6"/></g></svg>
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/><line x1="14" y1="14" x2="30" y2="30"/><line x1="46" y1="14" x2="30" y2="30"/><line x1="14" y1="46" x2="30" y2="30"/><line x1="46" y1="46" x2="30" y2="30"/><circle cx="30" cy="30" r="2.5" fill="#c9a84c"/></g></svg>
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M14 20 L14 44"/><path d="M22 20 L24 44"/><path d="M30 20 L28 44"/><path d="M38 20 L40 44"/><path d="M46 20 L44 44"/></g></svg>
+        <svg viewBox="0 0 60 60" class="dim"><g stroke="#c9a84c" stroke-width="1.8" fill="none" stroke-linecap="round"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg>
+      </div>
+
+      <div class="anno" style="right:32px;bottom:24px">
+        <strong>Marks rotation</strong>
+        All 8 SVGs cycle in slow fade (visual rhythm only). Wireframe shows a frozen frame with one bright + seven dim.
+      </div>
+    </section>
+
+    <!-- §2 Session lookup -->
+    <section class="pin-wrap">
+      <div class="sec-label">§2 · Session lookup</div>
+      <h2 class="sec-title" style="text-align:center;margin-bottom:36px">— most important interaction on the page —</h2>
+
+      <div class="session">
+        <div class="lbl">Find your mark</div>
+        <div class="row">
+          <input value="Enter your session ID" />
+          <button>Find</button>
+        </div>
+        <p class="help">Your session ID is printed on your receipt.</p>
+      </div>
+
+      <div class="anno" style="right:32px;top:48px">
+        <strong>Submit behaviour</strong>
+        On submit → navigates to <em>/cloth?session=[id]</em>. Same component repeats on Page 2.
+      </div>
+    </section>
+
+    <!-- §3 What the oracle is -->
+    <section class="pin-wrap">
+      <div class="sec-label">§3 · What the oracle is</div>
+      <h2 class="sec-title">What the oracle is</h2>
+
+      <div style="max-width:680px">
+        <p style="font-size:17px;line-height:1.85;margin-bottom:18px;color:var(--ink-mid)">
+          The Oracle That Wears Us is a ritual installation. It takes the form of a golden figure — ancient, liquid, unplaceable — that listens to you speak, reads something in your voice that you did not choose to reveal, and draws a mark from what it found.
+        </p>
+        <p style="font-size:17px;line-height:1.85;margin-bottom:18px;color:var(--ink-mid)">
+          The oracle is not a mirror. It does not show you what you look like. It shows you what you sounded like — distilled into a single drawn line, pressed into fabric by a machine that moves with the deliberateness of a hand.
+        </p>
+        <p style="font-size:17px;line-height:1.85;color:var(--ink-mid)">
+          The exchange is not symmetrical. You speak. The oracle listens across four turns of conversation, each one drawing it closer. By the end, it has taken your likeness into itself — your face appearing within its own as you speak, the oracle gradually wearing you. When the session ends, it releases you. But the mark remains.
+        </p>
+        <span class="source-tag">↳ oracle_narrative.html · Chapter I (¶1–3, verbatim)</span>
+      </div>
+
+      <div class="anno" style="right:32px;top:80px">
+        <strong>No images</strong>
+        Pure prose. Brief writes "no images" — enforced.
+      </div>
+    </section>
+
+    <!-- §4 The cloth preview -->
+    <section class="void pin-wrap">
+      <div class="sec-label">§4 · The cloth preview</div>
+      <h2 class="sec-title">A small cloth, growing —</h2>
+
+      <div class="preview-cloth">
+        <!-- 20 tiny marks placeholder -->
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/><polyline points="12,30 18,22 24,38 30,22 36,38 42,22 48,30"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="20"/><line x1="30" y1="30" x2="50" y2="50"/><line x1="30" y1="30" x2="20" y2="55"/><line x1="30" y1="30" x2="6" y2="40"/><line x1="30" y1="30" x2="10" y2="14"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/><line x1="14" y1="14" x2="30" y2="30"/><line x1="46" y1="14" x2="30" y2="30"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M14 20 L14 44"/><path d="M22 20 L24 44"/><path d="M38 20 L40 44"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="20"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M22 20 L24 44"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><line x1="8" y1="30" x2="52" y2="30"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none"><circle cx="30" cy="30" r="20"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44"/></g></svg>
+        <svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/></g></svg>
+      </div>
+
+      <div class="count-strip">
+        <span class="num">47</span><span>Marks drawn</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+        <div class="cta">View the cloth →</div>
+        <span class="source-tag">↳ count from Firebase (live)</span>
+      </div>
+
+      <div class="anno" style="right:32px;top:64px">
+        <strong>Live preview</strong>
+        Small static or live preview of the collective cloth + live count from Firebase. CTA → /cloth.
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ════════════ PAGE 2 — THE CLOTH ════════════ -->
+  <div class="page" id="p2">
+    <div class="page-tag">Page 2<span class="small">/ the cloth · QR destination</span></div>
+    <div class="browser-bar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="url">oracle.iade.pt/cloth?session=2026-04-30-0147</div>
+      <div>desktop · 1280</div>
+    </div>
+
+    <nav class="nav">
+      <div class="logo">ORACLE</div>
+      <ul>
+        <li>Home</li>
+        <li class="active">The Cloth</li>
+        <li>The Marks</li>
+        <li>About</li>
+        <li>Team</li>
+      </ul>
+    </nav>
+
+    <!-- §1 Session lookup (repeated) -->
+    <section class="pin-wrap">
+      <div class="sec-label">§1 · Session lookup <em style="font-style:italic;color:var(--ink-mute);font-family:var(--body);font-size:11px;letter-spacing:0.05em;text-transform:none;margin-left:4px">— same component as Home</em></div>
+
+      <div class="session">
+        <div class="lbl">Find your mark</div>
+        <div class="row">
+          <input value="2026-04-30-0147" style="color:var(--ink);font-style:normal" />
+          <button>Find</button>
+        </div>
+        <p class="help">No receipt? <span style="border-bottom:0.5px solid var(--rust);color:var(--rust)">Browse The Marks</span> to find yours.</p>
+      </div>
+
+      <div class="anno" style="right:32px;top:48px">
+        <strong>Direct arrival</strong>
+        QR visitors land here. Lookup repeats so they can re-query. Help line links to /marks for failsafe.
+      </div>
+    </section>
+
+    <!-- §2 Live cloth viewer -->
+    <section class="void pin-wrap" style="padding:48px">
+      <div class="sec-label">§2 · Live cloth viewer</div>
+      <h2 class="sec-title">— full-width canvas · two data layers —</h2>
+
+      <div class="cloth-viewer pin-wrap">
+        <!-- The 36+ cell grid -->
+        <div class="cloth-grid">
+          <!-- mostly background pool, one match -->
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg></div>
+          <div class="cloth-cell real dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/><polyline points="12,30 18,22 24,38 30,22 36,38 42,22 48,30"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="20"/><line x1="30" y1="30" x2="50" y2="50"/><line x1="30" y1="30" x2="20" y2="55"/><line x1="30" y1="30" x2="6" y2="40"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/><line x1="14" y1="14" x2="30" y2="30"/><line x1="46" y1="14" x2="30" y2="30"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M14 20 L14 44"/><path d="M22 20 L24 44"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg></div>
+
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg></div>
+          <!-- THE MATCH -->
+          <div class="cloth-cell match"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="30"/><line x1="30" y1="30" x2="48" y2="48"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M22 20 L24 44"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><line x1="8" y1="30" x2="52" y2="30"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="20"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/></g></svg></div>
+
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="20"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M22 20 L24 44"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg></div>
+
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><line x1="8" y1="30" x2="52" y2="30"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="20"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M22 20 L24 44"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="50" y2="50"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg></div>
+          <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg></div>
+        </div>
+
+        <!-- Reading panel (appears on match) -->
+        <aside class="reading-panel">
+          <div class="em">Calm</div>
+          <div class="nm">The Sky Eye</div>
+          <p class="read">"The oracle heard patience. A voice that was not rushing toward anything."</p>
+          <div class="share">↗ Share your mark</div>
+        </aside>
+      </div>
+
+      <!-- Layered annotation diagram -->
+      <div class="anno" style="left:48px;top:120px;max-width:220px">
+        <strong>Layer A · background</strong>
+        Pre-generated SVG pool (static assets). Visual texture only — not queryable. Visitor never knows these are not real sessions.
+      </div>
+      <div class="anno" style="left:48px;top:260px;max-width:220px">
+        <strong>Layer B · live</strong>
+        Real session marks (Firebase). Respond to lookup. Highlighted on match.
+      </div>
+      <div class="anno" style="right:300px;top:88px;max-width:220px">
+        <strong>On match</strong>
+        Visitor's mark glows gold, others dim, viewer scrolls to position, reading panel appears.
+      </div>
+      <div class="anno" style="right:48px;bottom:64px;max-width:220px">
+        <strong>Share</strong>
+        Generates shareable image: mark SVG + name on void.
+      </div>
+    </section>
+
+    <!-- §3 About the cloth -->
+    <section class="pin-wrap">
+      <div class="sec-label">§3 · About the cloth</div>
+      <h2 class="sec-title">What remains</h2>
+
+      <div style="max-width:680px">
+        <p style="font-size:17px;line-height:1.85;margin-bottom:18px;color:var(--ink-mid)">
+          When the installation ends, the fabric is what remains. Not a photograph of the installation, not a documentation of it — the thing itself. Every mark drawn onto it was placed there by a voice, by an exchange, by a person who stood in front of the oracle and spoke honestly enough for it to hear something real.
+        </p>
+        <p style="font-size:17px;line-height:1.85;color:var(--ink-mid)">
+          The marks do not identify anyone. The oracle does not remember names, faces, or words. It remembers only what it drew — the geometry it produced from the acoustic texture of a voice. That geometry is permanent. The voice that produced it has left.
+        </p>
+        <span class="source-tag">↳ oracle_narrative.html · Chapter V (¶1–2, verbatim)</span>
+      </div>
+    </section>
+
+    <!-- ── Mobile rendering of /cloth ── -->
+    <section class="pin-wrap">
+      <div class="sec-label">§ · Mobile · /cloth — QR destination</div>
+      <h2 class="sec-title">Mobile rendering</h2>
+
+      <div class="mobile-row">
+        <div class="mobile-shell">
+          <nav class="nav">
+            <div class="logo">ORACLE</div>
+            <ul>
+              <li>Home</li>
+              <li class="active" style="color:var(--rust)">Cloth</li>
+              <li>Marks</li>
+              <li>About</li>
+              <li>Team</li>
+            </ul>
+          </nav>
+
+          <section style="padding:20px 18px">
+            <div style="font-family:var(--display);font-size:8px;letter-spacing:0.35em;color:var(--rust);text-transform:uppercase;margin-bottom:10px">Find your mark</div>
+            <div class="session">
+              <div class="row">
+                <input value="2026-04-30-0147" style="color:var(--ink);font-style:normal"/>
+                <button>Find</button>
+              </div>
+              <p class="help" style="font-size:11px">No receipt? Browse The Marks.</p>
+            </div>
+          </section>
+
+          <section class="void" style="padding:18px;border:none">
+            <div class="cloth-viewer" style="padding:14px">
+              <div class="cloth-grid" style="grid-template-columns:repeat(6,1fr);gap:10px">
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none"><line x1="8" y1="30" x2="52" y2="30"/><line x1="30" y1="10" x2="30" y2="50"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,46"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none" stroke-linecap="round"><rect x="8" y="18" width="44" height="24"/><polyline points="12,30 18,22 24,38 30,22 36,38 42,22 48,30"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none"><circle cx="30" cy="30" r="3" fill="#c9a84c"/><line x1="30" y1="30" x2="55" y2="20"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none" stroke-linecap="round"><rect x="14" y="14" width="32" height="32"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none" stroke-linecap="round"><line x1="6" y1="20" x2="54" y2="20"/><path d="M22 20 L24 44"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none" stroke-linecap="round"><line x1="8" y1="46" x2="52" y2="46"/><path d="M12 46 Q 30 18 48 46"/></g></svg></div>
+                <div class="cloth-cell match"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.6" fill="none"><circle cx="30" cy="30" r="20"/><circle cx="30" cy="30" r="8"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none"><line x1="8" y1="30" x2="52" y2="30"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none"><circle cx="30" cy="30" r="20"/></g></svg></div>
+                <div class="cloth-cell dim"><svg viewBox="0 0 60 60"><g stroke="#c9a84c" stroke-width="2.4" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44"/></g></svg></div>
+              </div>
+
+              <aside class="reading-panel" style="position:static;width:auto;margin-top:18px;padding:14px">
+                <div class="em">Calm</div>
+                <div class="nm" style="font-size:12px">The Sky Eye</div>
+                <p class="read" style="font-size:12px">"The oracle heard patience."</p>
+                <div class="share" style="font-size:8px">↗ Share your mark</div>
+              </aside>
+              <div class="scroll-hint"></div>
+            </div>
+          </section>
+
+          <section style="padding:18px;border:none">
+            <p style="font-size:13px;line-height:1.7;color:var(--ink-mid)">
+              When the installation ends, the fabric is what remains…
+            </p>
+            <span class="source-tag" style="font-size:9px">↳ Chapter V</span>
+          </section>
+        </div>
+
+        <div class="mobile-notes">
+          <h3>Mobile notes</h3>
+          <p><strong>Why mobile-first here</strong>This page is the QR-code destination from the printed receipt — the visitor pulls out their phone in the gallery. All other pages can be desktop-first.</p>
+          <p><strong>Nav</strong>Four links visible. No hamburger (per brief).</p>
+          <p><strong>Cloth viewer</strong>Single column. Pinch-zoomable. Vertical scroll within the viewer (scroll bar shown right).</p>
+          <p><strong>Lookup</strong>Stays above viewer. Receipt in hand → type ID → match scrolls into view.</p>
+          <p><strong>Reading panel</strong>Stacks below viewer instead of overlay (no room).</p>
+          <p><strong>Share</strong>Same affordance, generates shareable PNG. Native share sheet on tap.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ════════════ PAGE 3 — THE MARKS ════════════ -->
+  <div class="page" id="p3">
+    <div class="page-tag">Page 3<span class="small">/ the marks · failsafe lookup</span></div>
+    <div class="browser-bar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="url">oracle.iade.pt/marks</div>
+      <div>desktop · 1280</div>
+    </div>
+
+    <nav class="nav">
+      <div class="logo">ORACLE</div>
+      <ul>
+        <li>Home</li>
+        <li>The Cloth</li>
+        <li class="active">The Marks</li>
+        <li>About</li>
+        <li>Team</li>
+      </ul>
+    </nav>
+
+    <!-- §1 Framing -->
+    <section class="pin-wrap">
+      <div class="sec-label">§1 · Framing</div>
+      <div style="max-width:680px">
+        <p style="font-style:italic;font-size:22px;line-height:1.6;color:var(--ink);margin-bottom:24px">
+          "These signs were once used by itinerant workers to leave messages for those who came after — the oracle has learned to read them differently."
+        </p>
+        <span class="source-tag">↳ oracle_narrative.html · Chapter IV, opening sentence</span>
+
+        <p style="margin-top:32px;font-style:italic;color:var(--ink-mute);font-size:15px">
+          Didn't receive your receipt? Browse the eight marks below to find yours.
+        </p>
+      </div>
+
+      <div class="anno" style="right:32px;top:48px">
+        <strong>Failsafe</strong>
+        If Firebase isn't ready by May 20, QR points here instead of /cloth.
+      </div>
+    </section>
+
+    <!-- §2 Eight mark cards -->
+    <section class="pin-wrap" style="background:#efeae1">
+      <div class="sec-label">§2 · The eight marks</div>
+      <h2 class="sec-title">— full grid · all eight, copy verbatim from Ch. IV —</h2>
+
+      <div class="marks-page-grid">
+        <!-- THE THORNS -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="2" fill="none" stroke-linecap="round"><rect x="6" y="14" width="68" height="32"/><polyline points="10,30 16,18 22,42 28,18 34,42 40,18 46,42 52,18 58,42 64,18 70,30"/></g></svg>
+            <div class="em">Anger</div>
+            <div class="nm">The Thorns</div>
+          </div>
+          <div class="txt">
+            <p class="desc">A closed boundary containing a jagged wave. The hostility is held inside — contained, not discharged. The mark does not burst outward. It holds its shape.</p>
+            <p class="read">The oracle heard something pressed down. Energy that has not been released.</p>
+          </div>
+        </div>
+
+        <!-- THE SKY EYE -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.9" fill="none"><circle cx="40" cy="30" r="24"/><circle cx="40" cy="30" r="11"/><circle cx="40" cy="30" r="3" fill="#c9a84c"/></g></svg>
+            <div class="em">Calm</div>
+            <div class="nm">The Sky Eye</div>
+          </div>
+          <div class="txt">
+            <p class="desc">A spiral unwinding outward from a centre, orbited by a single ring at a fixed distance. The mark expands without urgency. It has nowhere particular to arrive.</p>
+            <p class="read">The oracle heard patience. A voice that was not rushing toward anything.</p>
+          </div>
+        </div>
+
+        <!-- THE SHRIEK -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.9" fill="none" stroke-linecap="round"><circle cx="40" cy="30" r="3" fill="#c9a84c"/><line x1="40" y1="30" x2="74" y2="30"/><line x1="40" y1="30" x2="65" y2="52"/><line x1="40" y1="30" x2="40" y2="56"/><line x1="40" y1="30" x2="15" y2="52"/><line x1="40" y1="30" x2="6" y2="30"/><line x1="40" y1="30" x2="15" y2="8"/><line x1="40" y1="30" x2="40" y2="4"/><line x1="40" y1="30" x2="65" y2="8"/></g></svg>
+            <div class="em">Surprise</div>
+            <div class="nm">The Shriek</div>
+          </div>
+          <div class="txt">
+            <p class="desc">Rays radiating outward in all directions from a small circle at the centre. The centre holds still. Everything else departs from it simultaneously.</p>
+            <p class="read">The oracle heard an opening — something that arrived without warning and reorganised what came before it.</p>
+          </div>
+        </div>
+
+        <!-- THE PITIFUL STORY -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.8" fill="none" stroke-linecap="round"><polyline points="6,46 14,16 22,44 30,16 38,44 46,16 54,44 62,16 70,46"/><line x1="6" y1="44" x2="74" y2="44"/></g></svg>
+            <div class="em">Sadness</div>
+            <div class="nm">The Pitiful Story</div>
+          </div>
+          <div class="txt">
+            <p class="desc">Triangular peaks rising repeatedly from a shared baseline. The gesture is the same each time. The baseline holds regardless of how many times the peaks rise above it.</p>
+            <p class="read">The oracle heard something said more than once — a weight returned to, not resolved.</p>
+          </div>
+        </div>
+
+        <!-- THE KIND SOUL -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.9" fill="none" stroke-linecap="round"><line x1="6" y1="48" x2="74" y2="48"/><path d="M18 48 Q 40 24 62 48"/><path d="M10 48 Q 40 12 70 48" opacity="0.7"/><path d="M2 48 Q 40 0 78 48" opacity="0.45"/></g></svg>
+            <div class="em">Happy</div>
+            <div class="nm">The Kind Soul</div>
+          </div>
+          <div class="txt">
+            <p class="desc">Arcs ascending from a horizontal baseline, each one larger and fainter than the last. The mark grows as it recedes. It is the only mark in the oracle's lexicon that increases in scale as it moves away from you.</p>
+            <p class="read">The oracle heard warmth. A voice that was giving something.</p>
+          </div>
+        </div>
+
+        <!-- THE WATCHER -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.9" fill="none" stroke-linecap="round"><rect x="14" y="6" width="52" height="48"/><line x1="14" y1="6" x2="40" y2="30"/><line x1="66" y1="6" x2="40" y2="30"/><line x1="14" y1="54" x2="40" y2="30"/><line x1="66" y1="54" x2="40" y2="30"/><circle cx="40" cy="30" r="3" fill="#c9a84c"/></g></svg>
+            <div class="em">Fear</div>
+            <div class="nm">The Watcher</div>
+          </div>
+          <div class="txt">
+            <p class="desc">A rectangular perimeter with lines cutting inward from all four corners toward a small circle at the centre. Every approach is attended to. No side of the space is unobserved.</p>
+            <p class="read">The oracle heard vigilance — a voice alert to what surrounds it.</p>
+          </div>
+        </div>
+
+        <!-- THE BITTER ROOT -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.9" fill="none" stroke-linecap="round"><line x1="6" y1="18" x2="74" y2="18"/><path d="M14 18 C 16 28, 22 36, 18 50"/><path d="M28 18 C 30 30, 34 36, 32 48"/><path d="M40 18 C 44 30, 38 38, 42 52"/><path d="M52 18 C 50 28, 58 34, 54 50"/><path d="M64 18 C 66 28, 60 38, 64 52"/></g></svg>
+            <div class="em">Disgust</div>
+            <div class="nm">The Bitter Root</div>
+          </div>
+          <div class="txt">
+            <p class="desc">A horizontal trunk from which roots descend unevenly — each one bending at a different angle, reaching a different depth. None of them reach the same place. The asymmetry is not an error.</p>
+            <p class="read">The oracle heard particularity — a refusal that is specific, not general.</p>
+          </div>
+        </div>
+
+        <!-- THE HORIZON -->
+        <div class="mark-card">
+          <div class="vis">
+            <svg viewBox="0 0 80 60"><g stroke="#c9a84c" stroke-width="1.9" fill="none" stroke-linecap="round"><line x1="6" y1="30" x2="74" y2="30"/><line x1="40" y1="6" x2="40" y2="54"/></g></svg>
+            <div class="em">Neutral</div>
+            <div class="nm">The Horizon</div>
+          </div>
+          <div class="txt">
+            <p class="desc">A horizontal line crossed by a vertical. The simplest possible mark. A position — here, at this intersection. Neither more nor less than necessary.</p>
+            <p class="read">The oracle heard steadiness. A voice that was present without excess. This is also the fallback: when no single emotion is dominant, the oracle draws this.</p>
+          </div>
+        </div>
+      </div>
+
+      <span class="source-tag" style="margin-top:24px">↳ All eight cards · oracle_narrative.html Ch. IV (verbatim — do not rewrite)</span>
+
+      <div class="anno" style="right:32px;top:64px;max-width:200px">
+        <strong>Card structure</strong>
+        Void left panel (SVG, emotion, name) · cream right panel (description, oracle reading).
+      </div>
+    </section>
+
+    <!-- §3 AI transparency -->
+    <section class="pin-wrap">
+      <div class="sec-label">§3 · AI transparency</div>
+      <div style="max-width:680px">
+        <p style="font-size:16px;line-height:1.85;color:var(--ink-mid)">
+          The oracle does not understand your words. It listens to the texture of your voice — pitch, energy, rhythm — and a small machine-learning model trained on thousands of recorded voices selects one of these eight marks. The mark is then drawn by a CNC plotter onto the fabric. No recordings are kept; only the mark remains.
+        </p>
+        <span class="source-tag">↳ oracle_website_brief.html · §02 · The Marks copy block (plain language, no jargon)</span>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ════════════ PAGE 4 — ABOUT ════════════ -->
+  <div class="page" id="p4">
+    <div class="page-tag">Page 4<span class="small">/ about</span></div>
+    <div class="browser-bar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="url">oracle.iade.pt/about</div>
+      <div>desktop · 1280</div>
+    </div>
+
+    <nav class="nav">
+      <div class="logo">ORACLE</div>
+      <ul>
+        <li>Home</li>
+        <li>The Cloth</li>
+        <li>The Marks</li>
+        <li class="active">About</li>
+        <li>Team</li>
+      </ul>
+    </nav>
+
+    <!-- §1 The project -->
+    <section class="pin-wrap">
+      <div class="sec-label">§1 · The project</div>
+      <h2 class="sec-title">About</h2>
+
+      <div style="max-width:680px;border:1px dashed var(--note);padding:22px;background:var(--note-bg)">
+        <div style="font-family:var(--display);font-size:9px;letter-spacing:0.3em;color:var(--note);text-transform:uppercase;margin-bottom:8px">Team-written paragraph · placeholder</div>
+        <p style="font-family:var(--hand-tight);font-size:14px;color:var(--note);line-height:1.6">
+          One paragraph: what Oracle is, course context (IADE M-CCIA), when and where it was shown. Factual, not promotional. <strong>Andrey or team to write.</strong> The only copy on the site not pre-written.
+        </p>
+      </div>
+      <div style="max-width:680px;margin-top:24px;color:var(--ink-mute);font-style:italic;font-size:14px">
+        — paragraph appears here once written —
+      </div>
+    </section>
+
+    <!-- §2 Video -->
+    <section class="pin-wrap">
+      <div class="sec-label">§2 · Video</div>
+      <h2 class="sec-title">Inside the installation</h2>
+
+      <div class="video-frame" style="max-width:860px;margin:0 auto">
+        <span class="lbl">[ Dmitrii's video — embed here ]</span>
+      </div>
+      <p style="text-align:center;margin-top:14px;font-style:italic;color:var(--ink-mute);font-size:13px">
+        Full width or centred · cream register · placeholder for embed
+      </p>
+    </section>
+
+    <!-- §3 How it works -->
+    <section class="pin-wrap" style="background:#efeae1">
+      <div class="sec-label">§3 · How it works</div>
+      <h2 class="sec-title">How it works</h2>
+
+      <div style="max-width:760px">
+        <p style="font-size:15px;color:var(--ink-mute);font-style:italic;margin-bottom:18px">Plain language · one sentence per step.</p>
+        <div class="step-list">
+          <div class="row"><div class="num">01</div><div class="body"><strong>Listen</strong>The oracle records your voice as you speak across four turns of conversation.</div></div>
+          <div class="row"><div class="num">02</div><div class="body"><strong>Transcribe</strong>An offline speech-to-text engine writes down what was said, locally on the machine.</div></div>
+          <div class="row"><div class="num">03</div><div class="body"><strong>Reply</strong>A local language model composes the oracle's next question — the conversation never leaves the room.</div></div>
+          <div class="row"><div class="num">04</div><div class="body"><strong>Read the voice</strong>A small neural model trained on a public emotion dataset reads pitch, energy and rhythm — not the words.</div></div>
+          <div class="row"><div class="num">05</div><div class="body"><strong>Choose a mark</strong>The model maps the acoustic signature to one of eight marks.</div></div>
+          <div class="row"><div class="num">06</div><div class="body"><strong>Draw</strong>A CNC plotter inscribes the mark onto fabric, and a thermal printer prints your receipt.</div></div>
+        </div>
+
+        <div style="margin-top:28px">
+          <div style="font-family:var(--display);font-size:10px;letter-spacing:0.3em;color:var(--rust);text-transform:uppercase;margin-bottom:10px">Systems named</div>
+          <span class="ai-pill">Vosk</span>
+          <span class="ai-pill">Ollama</span>
+          <span class="ai-pill">RAVDESS</span>
+          <span class="ai-pill">ONNX</span>
+          <span class="ai-pill">KittenTTS</span>
+        </div>
+        <span class="source-tag" style="margin-top:24px">↳ oracle_website_brief.html · About copy block</span>
+      </div>
+    </section>
+
+    <!-- §4 Making-of -->
+    <section class="pin-wrap">
+      <div class="sec-label">§4 · Making-of</div>
+      <h2 class="sec-title">Making-of</h2>
+
+      <div class="phase2-banner" style="max-width:860px">
+        <strong>Phase 2 — not required for May 20 launch</strong>
+        Photo / video grid placeholder. Defer until installation has been documented in situ.
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:24px;max-width:860px">
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 1</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 2</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 3</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Video clip</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 4</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 5</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 6</span></div>
+        <div class="box diag" style="aspect-ratio:1"><span class="label">Photo 7</span></div>
+      </div>
+    </section>
+  </div>
+
+
+  <!-- ════════════ PAGE 5 — TEAM ════════════ -->
+  <div class="page" id="p5">
+    <div class="page-tag">Page 5<span class="small">/ team</span></div>
+    <div class="browser-bar">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <div class="url">oracle.iade.pt/team</div>
+      <div>desktop · 1280</div>
+    </div>
+
+    <nav class="nav">
+      <div class="logo">ORACLE</div>
+      <ul>
+        <li>Home</li>
+        <li>The Cloth</li>
+        <li>The Marks</li>
+        <li>About</li>
+        <li class="active">Team</li>
+      </ul>
+    </nav>
+
+    <section class="pin-wrap">
+      <div class="sec-label">§1 · Team</div>
+      <h2 class="sec-title">Team</h2>
+      <p style="max-width:560px;color:var(--ink-mute);font-style:italic;font-size:15px;margin-bottom:32px">
+        Three entries — one per team member. Cream register. Simple layout — no complex components.
+      </p>
+
+      <div class="team-grid">
+        <div class="team-card">
+          <div class="photo">[ photo · placeholder ]</div>
+          <div class="nm">Member one</div>
+          <div class="role">Role · one line</div>
+          <div class="text-line long"></div>
+          <div class="text-line long"></div>
+          <div class="text-line med"></div>
+          <div class="text-line long"></div>
+          <div class="text-line short"></div>
+          <span class="source-tag" style="margin-top:14px">↳ bio 4–6 sentences · team-written</span>
+        </div>
+
+        <div class="team-card">
+          <div class="photo">[ photo · placeholder ]</div>
+          <div class="nm">Member two</div>
+          <div class="role">Role · one line</div>
+          <div class="text-line long"></div>
+          <div class="text-line med"></div>
+          <div class="text-line long"></div>
+          <div class="text-line long"></div>
+          <div class="text-line short"></div>
+          <span class="source-tag" style="margin-top:14px">↳ bio 4–6 sentences · team-written</span>
+        </div>
+
+        <div class="team-card">
+          <div class="photo" style="background:repeating-linear-gradient(45deg,#d9d3c6 0 8px,#cfc8b8 8px 16px)">[ omit if no photo ]</div>
+          <div class="nm">Member three</div>
+          <div class="role">Role · one line</div>
+          <div class="text-line long"></div>
+          <div class="text-line long"></div>
+          <div class="text-line med"></div>
+          <div class="text-line short"></div>
+          <span class="source-tag" style="margin-top:14px">↳ photo placeholder shown — omit in build if no high-quality image</span>
+        </div>
+      </div>
+
+      <div class="anno" style="right:32px;top:64px;max-width:220px">
+        <strong>Photo rule</strong>
+        Include only if a high-quality image is available. Omit gracefully — name + role + bio still reads.
+      </div>
+    </section>
+
+    <!-- closing void (echoes narrative) -->
+    <section class="void" style="text-align:center;padding:80px 48px">
+      <div style="font-family:var(--display);font-size:9px;letter-spacing:0.4em;color:var(--gold);text-transform:uppercase;margin-bottom:18px">Oracle · The Oracle That Wears Us</div>
+      <div style="font-family:var(--body);font-style:italic;color:rgba(247,244,239,0.5);font-size:14px">This fragment remains.</div>
+    </section>
+  </div>
+
+
+  <!-- Build phasing footer -->
+  <div style="max-width:1120px;margin:0 auto">
+    <div class="doc-key" style="margin:0">
+      <strong>Build priorities (from brief)</strong>
+      <strong style="display:inline;color:var(--ink);font-size:9px">Phase 1 · May 10</strong> — Home (no session lookup yet) · Marks · About · Team. Static, no Firebase.<br>
+      <strong style="display:inline;color:var(--ink);font-size:9px">Phase 2 · May 14</strong> — The Cloth, static SVGs, no live updates.<br>
+      <strong style="display:inline;color:var(--ink);font-size:9px">Phase 3 · May 20</strong> — Firebase · session lookup · live cloth.<br>
+      <strong style="display:inline;color:var(--ink);font-size:9px">Phase 4 · May 20</strong> — Social sharing · QR deep link.<br>
+      <em style="display:block;margin-top:8px;color:var(--ink-mute)">If Phase 3 isn't ready before opening: QR points to /marks temporarily.</em>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(async () => {
+  try { if (document.fonts && document.fonts.ready) { await document.fonts.ready; } } catch (e) {}
+  await new Promise(r => setTimeout(r, 700));
+  window.print();
+})();
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@
 
 ## Реализованная архитектура
 
-- **Mac mini / TouchDesigner:** TouchDesigner только создаёт session folders. На Mac mini запускается `neje-uploader-agent`, которым управляет главный GUI по `NEJE_MACMINI_AGENT_URL`.
+- **Mac mini / TouchDesigner:** TouchDesigner только создаёт session folders. В реальной sessions-папке Mac mini есть один операторский файл `START_ORACLE_UPLOADER.command`; он делает setup при необходимости и запускает только `neje-uploader-agent`.
 - **MacBook / Operator + Plotter:** `neje-gui` запускает локальный `PlotterDaemon` в background thread через `SupervisorService`.
 - **Runtime source of truth:** `runtime/oracle_runtime.sqlite3` хранит component states, plotter config, print control, selected system mode, preflight result и real FluidNC arm state.
 - **Logs:** supervisor/preflight/uploader/plotter actions пишутся в `logs/oracle_supervisor.log`, путь задаётся `NEJE_ORACLE_LOGS_ROOT`.
@@ -24,7 +24,7 @@
 
 ## Operator workflow
 
-1. Запустить `neje-uploader-agent` на Mac mini.
+1. Запустить `assets/sessions/START_ORACLE_UPLOADER.command` на Mac mini.
 2. Запустить `neje-gui` на operator/plotter MacBook.
 3. Выбрать режим: `TEST`, `EXHIBITION DRY` или `EXHIBITION REAL`.
 4. Нажать `START SYSTEM`.

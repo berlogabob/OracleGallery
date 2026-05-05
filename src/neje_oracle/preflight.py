@@ -80,12 +80,18 @@ class PreflightService:
     def _check_fluidnc(self, mode: SystemMode) -> PreflightCheck:
         if self.fluidnc_checker is not None:
             online, message = self.fluidnc_checker(1.5)
+            detail = {}
         else:
-            online, message = FluidNCTransport(self.plotter_settings).check_connection(timeout_seconds=1.5)
+            probe = FluidNCTransport(self.plotter_settings).probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
+            online = probe.online and probe.controller.is_idle
+            message = probe.message
+            detail = probe.to_dict()
+            if probe.online and not probe.controller.is_idle:
+                message = f"{probe.message}; controller must be Idle for real print"
         if online:
-            return PreflightCheck("fluidnc", PreflightLevel.OK, message)
+            return PreflightCheck("fluidnc", PreflightLevel.OK, message, detail=detail)
         level = PreflightLevel.CRITICAL if mode_policy(mode).real_fluidnc_required else PreflightLevel.WARNING
-        return PreflightCheck("fluidnc", level, message)
+        return PreflightCheck("fluidnc", level, message, detail=detail)
 
     def _check_spool_write(self) -> PreflightCheck:
         try:

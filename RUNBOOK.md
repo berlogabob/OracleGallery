@@ -27,9 +27,17 @@ NEJE_FIREBASE_CREDENTIALS=/absolute/path/to/serviceAccountKey.json
 NEJE_GALLERY_BASE_URL=https://berlogabob.github.io/OracleGallery
 ```
 
-## 2. Oracle Mac Mini: Uploader Agent
+## 2. Oracle Mac Mini: One Safe Uploader Launcher
 
-The Mac mini should run the lightweight uploader agent. The main GUI on the MacBook can then start, stop, restart, scan once, and monitor the uploader over the local network.
+The Mac mini should run only TouchDesigner and the lightweight uploader agent. The operator should launch one file and do nothing else on that machine:
+
+```text
+assets/sessions/START_ORACLE_UPLOADER.command
+```
+
+This single file performs setup if needed, writes/updates the repo `.env`, runs `uv sync`, validates Firebase/session paths, and starts only `neje-uploader-agent`. It must not generate fake sessions, open the GUI, or start the plotter.
+
+The main GUI on the MacBook can then start, stop, restart, scan once, and monitor the uploader over the local network.
 
 Required session folder shape:
 
@@ -42,30 +50,24 @@ Required session folder shape:
 
 The uploader ignores photos, audio, and transcripts. It publishes normalized SVG, raw SVG backup, receipt TXT, QR PNG, and manifest JSON.
 
-Terminal start:
+Developer terminal start, only for debugging:
 
 ```bash
 uv run neje-uploader-agent
 ```
 
-Double-click start from repository root:
+There is no separate setup launcher anymore. There are no generator or GUI launchers in the real Mac mini sessions folder.
 
-```text
-start_uploader_agent.command
-```
+## 3. Test Generation
 
-Double-click start from the real TouchDesigner sessions folder:
+Use this when TouchDesigner is not running or when testing live Firebase upload and print queue behavior. The safe operator path is the main MacBook GUI in `TEST` mode.
 
-```text
-assets/sessions/SETUP_ORACLE_UPLOADER.command
-assets/sessions/START_ORACLE_UPLOADER.command
-```
+Mac mini rule:
 
-Legacy direct uploader launchers still work for backup/debugging, but the exhibition path should be `neje-uploader-agent` plus the main GUI supervisor.
+- `EXHIBITION DRY` / `EXHIBITION REAL`: Mac mini only uploads real TouchDesigner sessions.
+- `TEST`: fake session generation is allowed only from the main GUI. The Mac mini uploader agent may upload those fake sessions if the GUI writes them into the watched folder.
 
-## 3. Test Generator
-
-Use this when TouchDesigner is not running or when testing live Firebase upload and print queue behavior.
+Developer-only CLI:
 
 Generate one fake user session into `NEJE_UPLOADER_SESSION_ROOT`:
 
@@ -83,18 +85,6 @@ Generate fake user sessions into a specific folder:
 
 ```bash
 uv run neje-generate-sessions --mode user --count 3 --output-root /absolute/path/to/sessions
-```
-
-Double-click from repository root:
-
-```text
-generate_test_sessions.command
-```
-
-Double-click from the real sessions folder:
-
-```text
-assets/sessions/GENERATE_TEST_SESSION.command
 ```
 
 If the uploader is already running, every generated user session will be uploaded to Firebase and will create a `plot_jobs/{session_id}` document.
@@ -115,12 +105,6 @@ Double-click:
 start_oracle_gui.command
 ```
 
-Double-click from the real sessions folder:
-
-```text
-assets/sessions/START_ORACLE_GUI.command
-```
-
 Default address:
 
 ```text
@@ -129,8 +113,8 @@ http://127.0.0.1:8787/
 
 GUI sections:
 
-- Top status strip: `System`, `Mac mini uploader`, `Firebase`, `Plotter`, `FluidNC`, `Queue`, `Print`, `Preflight`.
-- Top controls: `START SYSTEM`, `STOP SYSTEM`, `PREFLIGHT`, `CHECK`, `ARM REAL FLUIDNC`, `START PRINT`, `STOP AFTER SHEET`.
+- Top controls: `START SYSTEM`, `STOP SYSTEM`, current mode, dry/real transport, and calculated capacity.
+- `Plotter Console` contains the plotter sequence: `Connect`, `Manual control`, then `Print`.
 - Top mode selector: choose one mode only: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
 - `TEST`: fake sessions, idle bank, preview, and dry-run only.
 - `EXHIBITION DRY`: real sessions/uploader/queue, but physical FluidNC output is blocked and sheets go to dry-run/spool.
@@ -140,6 +124,7 @@ GUI sections:
 - Test mode: generate local double-circle idle SVG files in `assets/generated_idle_symbols`.
 - `Sheet Preview`: static schematic preview of current placement, not a plotter animation.
 - `Plotter Status`: read local plotter runtime state, latest spool manifest, and confirm reload.
+- `FluidNC Control`: check WebUI/Telnet/status, home, jog, unlock alarm, feed hold, resume, and soft reset.
 - `Logs`: shows the last local supervisor/preflight/uploader/plotter log lines from `logs/oracle_supervisor.log`.
 - `Symbol Scale Correction`: edit `assets/symbols/symbol_scales.json` with global and per-symbol scale controls.
 - Scale values can go up to `5.0`. Values above `1.0` intentionally may overlap neighbouring cells; use dry-run before enabling real FluidNC.
@@ -149,13 +134,25 @@ Important behavior:
 - On launch, nothing starts automatically. Press `START SYSTEM` to start supervised components in safe mode.
 - `START SYSTEM` starts the local plotter daemon, checks Firebase/FluidNC, and contacts `NEJE_MACMINI_AGENT_URL`.
 - `PREFLIGHT` checks folders, symbols, idle bank, Firebase config, Mac mini/uploader path assumptions, FluidNC, spool write access, and dry-run G-code generation.
+- `CHECK FLUIDNC` must show WebUI online, Telnet online, and controller state `Idle` before real print is armed.
 - `ARM REAL FLUIDNC` is reset whenever the mode changes. It is never restored automatically after GUI restart.
 - The GUI writes layout settings to `runtime/oracle_runtime.sqlite3`; the plotter daemon reads this before every new sheet.
 - If the Mac mini uploader agent is running and started, GUI-generated or TouchDesigner session folders are published to Firebase and become `plot_jobs`.
 - `Generate dry-run sheet` writes local G-code and manifest to `spool/`; it does not send anything to the physical plotter.
 - `STOP AFTER SHEET` is a safe stop. It prevents the next sheet from starting; it does not interrupt a FluidNC stream already in progress.
+- `EMERGENCY STOP` sends FluidNC realtime feed hold `!`, disables print, and disarms real FluidNC. It is software safety only, not a replacement for a physical emergency stop.
 - `Confirm reload` updates the local plotter runtime state in SQLite, equivalent to confirming reload in the operator dashboard.
 - The GUI keeps settings in `runtime/gui_settings.json`.
+
+FluidNC manual controls:
+
+- `HOME ALL` sends `$H` and requires confirmation.
+- `HOME X` / `HOME Y` send `$H=X` / `$H=Y`; use only if the FluidNC config supports single-axis homing.
+- Jog buttons send `$J=G91 G21 X/Y... F...`; available steps are `1`, `5`, `10`, `25`, `50`, and `100 mm`.
+- Manual jog/home commands pause print before moving and are blocked while G-code is actively streaming.
+- `UNLOCK ALARM` sends `$X` only when the controller is in `Alarm`.
+- `RESUME` sends realtime `~` only after a hold.
+- `SOFT RESET` sends `Ctrl-X`, disables print, and should be treated as abort/reset.
 
 ## 5. Idle Symbol Bank
 
@@ -333,9 +330,11 @@ Updated CORS for gs://oraclegallery.firebasestorage.app
 Uploader path:
 
 ```bash
-uv run neje-generate-sessions --mode user --count 1
 uv run neje-uploader-agent
+uv run neje-gui
 ```
+
+In the GUI select `TEST`, press `START SYSTEM`, generate one test user session, then press `PREFLIGHT`.
 
 Check Firebase:
 
@@ -349,8 +348,10 @@ Check Firebase:
 Plotter dry-run path:
 
 ```bash
-NEJE_PLOTTER_DRY_RUN=true uv run neje-plotter
+uv run neje-gui
 ```
+
+In the GUI select `EXHIBITION DRY`, press `START SYSTEM`, press `PREFLIGHT`, then `START PRINT`.
 
 Check:
 
@@ -401,6 +402,7 @@ Then in the GUI:
 Real FluidNC smoke path:
 
 - select `EXHIBITION REAL`;
+- press `CHECK FLUIDNC` and confirm `WebUI online`, `Telnet online`, and `State: Idle`;
 - press `PREFLIGHT`;
 - confirm no critical failures and `FluidNC` is online;
 - press `ARM REAL FLUIDNC`;
@@ -413,15 +415,11 @@ If SVG images show endless loading in the website, apply Storage CORS and hard-r
 
 If uploader does nothing, check that the session folder has both `*_plotter.svg` and `*_receipt.txt`, or create `READY`.
 
-If generated sessions do not upload, confirm that `NEJE_UPLOADER_SESSION_ROOT` points to the same folder used by the generator.
+If GUI-generated test sessions do not upload, confirm that `NEJE_UPLOADER_SESSION_ROOT` points to the same folder watched by `neje-uploader-agent`.
 
 If a session uploads twice, check `runtime/uploader.sqlite3`; the uploader uses it to remember published source folders.
 
-If plotter has no idle symbols, run:
-
-```bash
-uv run neje-generate-sessions --mode idle --count 8
-```
+If plotter has no idle symbols, open GUI `TEST`, generate the idle bank, then return to `EXHIBITION DRY` or `EXHIBITION REAL`.
 
 If plotter cannot claim Firebase jobs, check service account path and Firestore permissions.
 
@@ -429,8 +427,16 @@ If real plotting starts too early, do not use `EXHIBITION REAL`. Use `EXHIBITION
 
 If the GUI does not open, check `NEJE_GUI_HOST` and `NEJE_GUI_PORT`, then open `http://127.0.0.1:8787/` manually.
 
-If GUI-generated sessions do not become Firebase jobs, start `neje-uploader-agent`, press `START SYSTEM`, and confirm Mac mini agent plus GUI use the same `NEJE_UPLOADER_SESSION_ROOT`.
+If GUI-generated sessions do not become Firebase jobs, start `assets/sessions/START_ORACLE_UPLOADER.command` on the Mac mini, press `START SYSTEM` in the MacBook GUI, and confirm Mac mini agent plus GUI use the same `NEJE_UPLOADER_SESSION_ROOT`.
 
 If `START PRINT` is disabled in `EXHIBITION REAL`, run `PREFLIGHT`, fix critical failures, confirm `FluidNC` is online, then press `ARM REAL FLUIDNC`.
+
+If FluidNC WebUI opens but GUI says FluidNC is not ready, check the Telnet side separately. The sender requires Telnet `10.198.21.74:23`, a valid `?` status response, and state `Idle`; HTTP dashboard access alone is not enough.
+
+If FluidNC state is `Alarm`, inspect the machine physically, then use `UNLOCK ALARM` only when safe.
+
+If FluidNC state is `Hold`, use `RESUME` only when the tool path is safe to continue.
+
+If a G-code stream fails with `error`, `ALARM`, disconnect, or timeout waiting for `ok`, the GUI disables print and disarms real FluidNC. Run `CHECK FLUIDNC`, inspect logs, and restart with dry-run before arming real output again.
 
 If the Logs panel is empty, perform an action such as `PREFLIGHT` or `CHECK`, then refresh logs. Logs are written to `NEJE_ORACLE_LOGS_ROOT/oracle_supervisor.log`.

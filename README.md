@@ -7,7 +7,7 @@ This repository contains the local uploader, public Flutter gallery, plotter dae
 - Oracle Mac mini: TouchDesigner writes finished session folders; `neje-uploader-agent` lets the main GUI start/stop/monitor uploads to Firebase.
 - Public web: `public_gallery/` is Flutter Web, built into root `docs/` for GitHub Pages.
 - Plotter MacBook: `neje-gui` is the main supervisor. It starts/stops the local plotter daemon, controls print state, previews sheets, and monitors Mac mini uploader/Firebase/FluidNC.
-- Test workflow: `neje-generate-sessions` creates fake Oracle sessions from the 8 base symbols, so Firebase upload and print queue behavior can be tested without running TouchDesigner.
+- Test workflow: `neje-gui` in `TEST` mode creates fake Oracle sessions from the 8 base symbols, so Firebase upload and print queue behavior can be tested without running TouchDesigner.
 - Operator GUI: `neje-gui` opens a local NiceGUI browser panel for generator controls, layout preview, scale correction, idle bank generation, preflight, logs, and plotter status.
 
 The TouchDesigner computer should only run TouchDesigner and the lightweight uploader. Plot orchestration stays on the plotter MacBook.
@@ -40,7 +40,13 @@ Run the central operator GUI on the MacBook:
 uv run neje-gui
 ```
 
-Run the Mac mini uploader agent on the TouchDesigner machine:
+On the real TouchDesigner Mac mini, launch exactly one file from the real sessions folder:
+
+```text
+assets/sessions/START_ORACLE_UPLOADER.command
+```
+
+It performs setup if needed and starts only `neje-uploader-agent`. For developer terminal debugging, the equivalent command is:
 
 ```bash
 uv run neje-uploader-agent
@@ -48,7 +54,7 @@ uv run neje-uploader-agent
 
 Recommended operator flow:
 
-1. Start `neje-uploader-agent` on the Mac mini.
+1. Start `assets/sessions/START_ORACLE_UPLOADER.command` on the Mac mini.
 2. Start `neje-gui` on the plotter/operator MacBook.
 3. Select one GUI mode: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
 4. Press `START SYSTEM`.
@@ -62,20 +68,28 @@ GUI modes:
 - `EXHIBITION DRY`: real Mac mini/Firebase/queue flow, but sheets are written to local dry-run/spool only.
 - `EXHIBITION REAL`: real queue and real FluidNC output. This mode requires preflight and explicit arming every time.
 
-Legacy direct services are still available for backup/debugging:
+FluidNC control:
+
+- Configure the plotter with `NEJE_PLOTTER_FLUIDNC_HTTP_URL=http://10.198.21.74` and `NEJE_PLOTTER_FLUIDNC_TELNET_HOST=10.198.21.74`.
+- The GUI `CHECK FLUIDNC` action verifies both WebUI/HTTP and Telnet, then reads `?` status and `$G` modal state.
+- WebUI online is not enough for real sending. Real G-code streaming requires Telnet port `23` and an `Idle` controller state.
+- GUI jog/homing controls use FluidNC commands: `$H`, `$H=X`, `$H=Y`, `$X`, `$J=G91 G21 ...`, realtime `!`, `~`, and `Ctrl-X`.
+- `EMERGENCY STOP` is software feed hold `!`; keep a physical emergency stop/power cut available.
+
+Developer-only direct services are still available for debugging:
 
 ```bash
 uv run neje-uploader
 uv run neje-plotter
 ```
 
-Generate one fake user session into the configured uploader sessions folder:
+Developer-only CLI for fake sessions remains available, but operators should use the GUI `TEST` mode instead:
 
 ```bash
 uv run neje-generate-sessions --mode user --count 1
 ```
 
-Generate local idle/filling symbols with double circles:
+Developer-only CLI for local idle/filling symbols also remains available; the operator path is GUI `TEST` mode:
 
 ```bash
 uv run neje-generate-sessions --mode idle --count 8
@@ -93,14 +107,10 @@ The legacy plotter daemon serves an operator dashboard on `http://localhost:8765
 
 Use these files directly from Finder:
 
-- `start_oracle_uploader.command` on the Mac mini with TouchDesigner.
-- `start_uploader_agent.command` on the Mac mini when the main GUI should control uploader start/stop/status.
-- `start_plotter_daemon.command` on the MacBook that drives the plotter.
+- `assets/sessions/START_ORACLE_UPLOADER.command` is the only file that should be placed in or launched from the real Mac mini TouchDesigner sessions folder. It performs setup if needed and starts only `neje-uploader-agent`.
+- `start_uploader_agent.command` is a developer/root launcher for the same uploader agent, not the exhibition Mac mini operator path.
+- `start_plotter_daemon.command` is a developer/backup launcher on the MacBook that drives the plotter.
 - `start_oracle_gui.command` for the main supervised operator GUI.
-- `generate_test_sessions.command` to create fake user sessions from the repo root.
-- `assets/sessions/GENERATE_TEST_SESSION.command` to create one fake user session directly in the real sessions folder.
-- `assets/sessions/START_ORACLE_GUI.command` to launch the GUI from the real TouchDesigner sessions folder.
-- `assets/sessions/SETUP_ORACLE_UPLOADER.command` and `assets/sessions/START_ORACLE_UPLOADER.command` are designed to live inside the actual TouchDesigner sessions folder on the Mac mini.
 
 Matching `.sh` files are included for Terminal/manual use. The launchers:
 
@@ -177,7 +187,6 @@ The fixed viewport is intentional. Scale values above `1.0` may overlap neighbou
 - `NEJE_PLOTTER_CELL_DIAMETER_MM`: physical packing cell diameter and the visible cell size in the operator preview.
 - `NEJE_PLOTTER_CELL_GAP_MM`: physical empty distance between neighbouring cell circles.
 - `NEJE_PLOTTER_LAYOUT_MODE`: `hex` or `grid`.
-- `NEJE_GENERATOR_COUNT`: count used by double-click test generator launchers.
 - `NEJE_GUI_HOST`, `NEJE_GUI_PORT`: local NiceGUI bind address, default `127.0.0.1:8787`.
 
 ## Verification
@@ -188,4 +197,4 @@ cd public_gallery && flutter analyze
 ./scripts/build_gallery_docs.sh
 ```
 
-The current GUI/supervisor tests cover mode mapping, preflight behavior, real FluidNC safety gates, runtime store persistence, GUI settings migration, plotter runtime config handoff, uploader agent control, and SVG/G-code helpers.
+The current GUI/supervisor tests cover mode mapping, preflight behavior, real FluidNC safety gates, runtime store persistence, GUI settings migration, plotter runtime config handoff, uploader agent control, FluidNC probe/ack streaming/control commands, and SVG/G-code helpers.

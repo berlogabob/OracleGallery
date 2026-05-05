@@ -1,5 +1,6 @@
 #!/bin/zsh
 
+set -e
 setopt pipefail
 
 SCRIPT_DIR="${0:A:h}"
@@ -9,18 +10,24 @@ source_if_exists() {
   local profile_file="$1"
   if [[ -f "$profile_file" ]]; then
     local original_path="$PATH"
-    source "$profile_file" >/dev/null 2>&1 || true
+    set +e
+    source "$profile_file" >/dev/null 2>&1
+    set -e
     if ! command -v tr >/dev/null 2>&1 || ! command -v mv >/dev/null 2>&1; then
       PATH="$original_path"
     fi
   fi
 }
 
-fail_before_common() {
-  echo
-  echo "ERROR: $1"
+pause() {
   echo
   read '?Press Enter to close...'
+}
+
+fail() {
+  echo
+  echo "ERROR: $1"
+  pause
   exit 1
 }
 
@@ -48,29 +55,122 @@ find_repo_dir() {
   return 1
 }
 
+find_uv() {
+  local discovered
+  discovered="$(command -v uv 2>/dev/null || true)"
+  local -a candidates=(
+    "$discovered"
+    "/opt/homebrew/bin/uv"
+    "/usr/local/bin/uv"
+    "$HOME/.local/bin/uv"
+  )
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+upsert_env() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  local tmp
+  tmp="$(mktemp)"
+  touch "$file"
+  UPSERT_VALUE="$value" awk -v key="$key" '
+    BEGIN { found = 0 }
+    $0 ~ "^" key "=" {
+      if (!found) {
+        print key "=" ENVIRON["UPSERT_VALUE"]
+        found = 1
+      }
+      next
+    }
+    { print }
+    END {
+      if (!found) {
+        print key "=" ENVIRON["UPSERT_VALUE"]
+      }
+    }
+  ' "$file" > "$tmp"
+  mv "$tmp" "$file"
+}
+
 source_if_exists "$HOME/.zprofile"
 source_if_exists "$HOME/.zshrc"
 source_if_exists "$HOME/.bash_profile"
 source_if_exists "$HOME/.profile"
 source_if_exists "$LOCAL_ENV"
 
-REPO_DIR="$(find_repo_dir)" || fail_before_common "Cannot find OracleGallery project. Run SETUP_ORACLE_UPLOADER.command first or set ORACLE_REPO_DIR in $LOCAL_ENV."
+REPO_DIR="$(find_repo_dir)" || fail "Cannot find Oracle project. Put this sessions folder inside the repo or set ORACLE_REPO_DIR in $LOCAL_ENV."
+UV_BIN="$(find_uv)" || fail "uv was not found. Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
+ENV_FILE="$REPO_DIR/.env"
 
-source "$REPO_DIR/scripts/launcher_common.sh" || fail_before_common "Cannot load launcher helper from $REPO_DIR."
-launcher_bootstrap "Oracle Firebase Uploader" "$REPO_DIR"
+FIREBASE_PROJECT_ID="${NEJE_FIREBASE_PROJECT_ID:-oraclegallery}"
+FIREBASE_STORAGE_BUCKET="${NEJE_FIREBASE_STORAGE_BUCKET:-oraclegallery.firebasestorage.app}"
+FIREBASE_CREDENTIALS="${NEJE_FIREBASE_CREDENTIALS:-/Users/berloga/Downloads/oraclegallery-firebase-adminsdk-fbsvc-002b89a837.json}"
+GALLERY_BASE_URL="${NEJE_GALLERY_BASE_URL:-https://berlogabob.github.io/OracleGallery}"
 
-export NEJE_UPLOADER_SESSION_ROOT="$SCRIPT_DIR"
+mkdir -p "$REPO_DIR/runtime" "$REPO_DIR/sessions_public"
 
-launcher_require_var "NEJE_FIREBASE_PROJECT_ID" "Run SETUP_ORACLE_UPLOADER.command first."
-launcher_require_var "NEJE_FIREBASE_STORAGE_BUCKET" "Run SETUP_ORACLE_UPLOADER.command first."
-launcher_require_existing_file_var "NEJE_FIREBASE_CREDENTIALS" "Point this to your Firebase service account JSON in $REPO_DIR/.env."
-launcher_require_var "NEJE_GALLERY_BASE_URL" "Run SETUP_ORACLE_UPLOADER.command first."
-launcher_require_existing_dir_var "NEJE_UPLOADER_SESSION_ROOT" "This should be the TouchDesigner sessions folder."
-launcher_ensure_dir_var "NEJE_UPLOADER_PUBLIC_ROOT" "Run SETUP_ORACLE_UPLOADER.command first."
+cat > "$LOCAL_ENV" <<EOF
+ORACLE_REPO_DIR=$REPO_DIR
+EOF
 
-echo "Watching:   $NEJE_UPLOADER_SESSION_ROOT"
-echo "Publishing: $NEJE_UPLOADER_PUBLIC_ROOT"
-echo "Gallery:    $NEJE_GALLERY_BASE_URL"
+upsert_env "$ENV_FILE" "NEJE_FIREBASE_PROJECT_ID" "$FIREBASE_PROJECT_ID"
+upsert_env "$ENV_FILE" "NEJE_FIREBASE_STORAGE_BUCKET" "$FIREBASE_STORAGE_BUCKET"
+upsert_env "$ENV_FILE" "NEJE_FIREBASE_CREDENTIALS" "$FIREBASE_CREDENTIALS"
+upsert_env "$ENV_FILE" "NEJE_GALLERY_BASE_URL" "$GALLERY_BASE_URL"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_SESSION_ROOT" "$SCRIPT_DIR"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_PUBLIC_ROOT" "$REPO_DIR/sessions_public"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_DB_PATH" "$REPO_DIR/runtime/uploader.sqlite3"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_REQUIRE_READY_MARKER" "false"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_STABILITY_SECONDS" "8"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_POLL_SECONDS" "2"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_AGENT_HOST" "0.0.0.0"
+upsert_env "$ENV_FILE" "NEJE_UPLOADER_AGENT_PORT" "8790"
+
+clear || true
+echo "========================================"
+echo "  Oracle Mac mini Uploader"
+echo "========================================"
+echo "Sessions folder: $SCRIPT_DIR"
+echo "Project folder:  $REPO_DIR"
+echo "Config file:     $ENV_FILE"
+echo "Agent:           http://0.0.0.0:8790/"
 echo
 
-launcher_run_service "neje-uploader"
+if [[ ! -f "$FIREBASE_CREDENTIALS" ]]; then
+  echo "WARNING: Firebase service account file not found:"
+  echo "$FIREBASE_CREDENTIALS"
+  echo "Put the JSON key there or edit NEJE_FIREBASE_CREDENTIALS in $ENV_FILE."
+  echo
+fi
+
+cd "$REPO_DIR"
+"$UV_BIN" sync --extra dev || fail "Dependency setup failed."
+
+set -a
+source "$ENV_FILE"
+set +a
+
+[[ -f "$NEJE_FIREBASE_CREDENTIALS" ]] || fail "NEJE_FIREBASE_CREDENTIALS points to a missing file: $NEJE_FIREBASE_CREDENTIALS"
+[[ -d "$NEJE_UPLOADER_SESSION_ROOT" ]] || fail "NEJE_UPLOADER_SESSION_ROOT points to a missing folder: $NEJE_UPLOADER_SESSION_ROOT"
+mkdir -p "$NEJE_UPLOADER_PUBLIC_ROOT" || fail "Cannot create NEJE_UPLOADER_PUBLIC_ROOT: $NEJE_UPLOADER_PUBLIC_ROOT"
+
+echo "Starting uploader agent only."
+echo "The Mac mini must not run generators, GUI, or plotter launchers during exhibition."
+echo
+
+"$UV_BIN" run neje-uploader-agent
+exit_code=$?
+
+echo
+echo "Oracle Mac mini Uploader stopped with exit code $exit_code."
+pause
+exit "$exit_code"

@@ -17,8 +17,6 @@ from .gui_ui import (
     primary_action_button,
     safe_action_button,
     slider_control,
-    status_pill,
-    update_status_pill,
     warning_banner,
 )
 from .models import ComponentStatus, PreflightLevel, SystemMode
@@ -58,7 +56,7 @@ def build_page() -> None:
     symbol_previews: dict[str, Any] = {}
     control_labels: dict[str, Any] = {}
     plotter_labels: dict[str, Any] = {}
-    component_labels: dict[str, Any] = {}
+    fluidnc_labels: dict[str, Any] = {}
     cycle_state = {"index": 0}
     supervisor = SupervisorService()
 
@@ -86,6 +84,11 @@ def build_page() -> None:
           .mode-badge { border: 1px solid #9a5b24; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; color: #8f4f2b; }
           .warning-banner { background: #fff4df; border: 1px solid #c99743; border-radius: 10px; color: #8f4f2b; padding: 6px 8px; font-size: 12px; }
           .log-viewer textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.35; }
+          .plotter-console .q-btn { min-height: 28px; padding: 3px 8px; }
+          .mini-metric { border: 1px solid #e1d3ba; border-radius: 10px; padding: 5px 7px; background: rgba(255,255,255,0.45); }
+          .mini-metric .label { font-size: 9px; letter-spacing: 0.16em; color: #8f4f2b; text-transform: uppercase; }
+          .mini-metric .value { font-size: 12px; font-weight: 700; color: #1f1a17; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .jog-pad .q-btn { width: 54px; }
         </style>
         """
     )
@@ -249,10 +252,7 @@ def build_page() -> None:
         refresh_component_status()
 
     def refresh_component_status() -> None:
-        states = supervisor.refresh_all_status()
-        for component, label in component_labels.items():
-            state = states.get(component)
-            update_status_pill(label, state, component.replace("_", " "))
+        supervisor.refresh_all_status()
 
     def start_system() -> None:
         pull_settings_from_fields()
@@ -338,9 +338,65 @@ def build_page() -> None:
         result = check_fluidnc_connection()
         supervisor.check_fluidnc()
         color = "positive" if result["online"] else "negative"
-        fluidnc_status_label.set_text(result["message"])
+        update_fluidnc_labels(result)
         ui.notify(result["message"], color=color)
         refresh_logs()
+
+    def update_fluidnc_labels(result: dict[str, Any]) -> None:
+        if "top_status" in fluidnc_labels:
+            fluidnc_labels["top_status"].set_text(
+                f"Plotter: {result.get('message') or '-'}"
+            )
+        fluidnc_labels["webui"].set_text("online" if result.get("http_online") else "offline")
+        fluidnc_labels["telnet"].set_text("online" if result.get("telnet_online") else "offline")
+        fluidnc_labels["state"].set_text(str(result.get("controller_state") or "Unknown"))
+        fluidnc_labels["mpos"].set_text(_format_gui_tuple(result.get("machine_position")))
+        fluidnc_labels["modal"].set_text(str(result.get("modal_state") or "-").replace("\n", " | "))
+        fluidnc_labels["target"].set_text(f"{result.get('http_url') or '-'} · {result.get('host')}:{result.get('port')}")
+        fluidnc_labels["message"].set_text(str(result.get("message") or result.get("last_error") or "-"))
+
+    def confirm_action(title: str, message: str, action: Any) -> None:
+        with ui.dialog() as dialog, ui.card().classes("oracle-card"):
+            ui.label(title).classes("text-sm font-bold")
+            ui.label(message).classes("text-xs text-[#8f4f2b]")
+            with ui.row().classes("gap-2"):
+                ui.button("Cancel", on_click=dialog.close).props("dense flat")
+                ui.button("Confirm", on_click=lambda: (dialog.close(), action())).props("dense color=warning")
+        dialog.open()
+
+    def fluidnc_action(label: str, action: Any, *, refresh_probe: bool = True) -> None:
+        state = action()
+        ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
+        if refresh_probe:
+            check_fluidnc()
+        refresh_status()
+        refresh_logs()
+
+    def home_all() -> None:
+        confirm_action("HOME ALL", "The plotter will run FluidNC homing command $H. Confirm only if the machine is physically clear.", lambda: fluidnc_action("home", lambda: supervisor.home_fluidnc()))
+
+    def home_axis(axis: str) -> None:
+        confirm_action(f"HOME {axis}", f"Single-axis homing sends $H={axis}. Use only if this FluidNC config supports it.", lambda: fluidnc_action(f"home {axis}", lambda: supervisor.home_fluidnc(axis)))
+
+    def jog(axis: str, sign: float) -> None:
+        distance = sign * float(fields["jog_step"].value or 1)
+        feed = float(fields["jog_feed"].value or 1000)
+        fluidnc_action(f"jog {axis}", lambda: supervisor.jog_fluidnc(axis, distance, feed))
+
+    def unlock_alarm() -> None:
+        confirm_action("UNLOCK ALARM", "This sends $X. It clears FluidNC alarm state without moving the machine.", lambda: fluidnc_action("unlock", supervisor.unlock_fluidnc_alarm))
+
+    def emergency_stop() -> None:
+        state = supervisor.emergency_stop_fluidnc()
+        ui.notify(state.message, color="negative")
+        refresh_status()
+        refresh_logs()
+
+    def resume_after_hold() -> None:
+        confirm_action("RESUME AFTER HOLD", "This sends realtime cycle start ~. Confirm only if the machine is safe to resume.", lambda: fluidnc_action("resume", supervisor.resume_fluidnc))
+
+    def soft_reset() -> None:
+        confirm_action("SOFT RESET / ABORT", "This sends Ctrl-X and disables print. Use only to abort/reset FluidNC.", lambda: fluidnc_action("soft reset", supervisor.soft_reset_fluidnc))
 
     def toggle_live() -> None:
         pull_settings_from_fields()
@@ -390,17 +446,8 @@ def build_page() -> None:
                 transport_label = ui.label("-").classes("text-xs font-bold")
                 primary_action_button("START SYSTEM", start_system)
                 danger_action_button("STOP SYSTEM", stop_system)
-                safe_action_button("PREFLIGHT", run_preflight)
-                safe_action_button("CHECK", check_system)
-                arm_button = danger_action_button("ARM REAL FLUIDNC", arm_real_fluidnc)
-                start_print_button = primary_action_button("START PRINT", start_print)
-                danger_action_button("STOP AFTER SHEET", stop_print)
                 ui.label("capacity").classes("text-xs text-[#8f4f2b]")
                 capacity_label = ui.label("-").classes("text-sm font-bold")
-
-        with ui.row().classes("w-full gap-1"):
-            for component in ("system", "macmini_uploader", "firebase", "plotter", "fluidnc", "queue", "print", "preflight"):
-                component_labels[component] = status_pill(component.replace("_", " "))
 
         with ui.card().classes("oracle-card compact-card w-full"):
             with ui.row().classes("w-full items-end gap-2"):
@@ -418,12 +465,15 @@ def build_page() -> None:
                 fields["include_rings"] = ui.switch("Rings", value=settings.include_rings).on_value_change(persist_and_refresh)
             real_warning = warning_banner("REAL mode is locked until preflight passes and ARM REAL FLUIDNC is pressed.")
             preflight_label = ui.label("Preflight: not run").classes("text-xs text-[#8f4f2b]")
+            with ui.row().classes("w-full items-center gap-2"):
+                ui.icon("precision_manufacturing").classes("text-[#8f4f2b]")
+                fluidnc_labels["top_status"] = ui.label("Plotter: not connected. Use Plotter Console -> Connect.").classes("text-xs font-bold")
 
         with ui.grid(columns="300px 1fr 360px").classes("w-full gap-2 min-h-0"):
             with ui.column().classes("gap-2 min-h-0"):
                 with ui.column().classes("gap-2 w-full") as test_panel:
                     with ui.card().classes("oracle-card compact-card w-full"):
-                        with ui.expansion("Test Generator", icon="science", group="left-column", value=True).classes("w-full"):
+                        with ui.expansion("Test Generator", icon="science", group="left-column", value=False).classes("w-full"):
                             symbol_options = {"__cycle__": "ALL 8 / cycle one-by-one"}
                             symbol_options.update({symbol.name: symbol.stem for symbol in symbols})
                             fields["selected_symbol"] = ui.select(
@@ -467,32 +517,79 @@ def build_page() -> None:
                         ui.label("Controlled through NEJE_MACMINI_AGENT_URL").classes("text-xs text-[#8f4f2b]")
 
                 with ui.card().classes("oracle-card compact-card w-full"):
-                    with ui.expansion("Plotter", icon="precision_manufacturing", group="left-column", value=False).classes("w-full"):
-                        with ui.column().classes("gap-1 w-full"):
-                            ui.label("PRINT STATE").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
-                            plotter_labels["state"] = ui.label("-").classes("text-sm font-bold")
-                            plotter_labels["mode"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                    with ui.expansion("Plotter Console", icon="precision_manufacturing", group="left-column", value=True).classes("w-full plotter-console"):
+                        ui.label("1. Connect").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                        with ui.row().classes("gap-1"):
+                            ui.button("Connect / Probe", on_click=check_fluidnc).props("dense color=positive")
+                            ui.button("Emergency Stop", on_click=emergency_stop).props("dense color=negative")
+                        with ui.grid(columns=2).classes("w-full gap-1"):
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("WebUI").classes("label")
+                                fluidnc_labels["webui"] = ui.label("-").classes("value")
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("Telnet").classes("label")
+                                fluidnc_labels["telnet"] = ui.label("-").classes("value")
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("State").classes("label")
+                                fluidnc_labels["state"] = ui.label("-").classes("value")
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("MPos").classes("label")
+                                fluidnc_labels["mpos"] = ui.label("-").classes("value")
+                        fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
+                        fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
+                        fluidnc_labels["modal"] = ui.label("-").classes("hidden")
                         ui.separator()
-                        with ui.column().classes("gap-1 w-full"):
-                            ui.label("SHEET").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
-                            plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
-                            plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
-                            plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                        ui.label("2. Manual control").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                        ui.label("Manual commands pause print before moving. They are blocked while G-code is streaming.").classes("text-[10px] text-[#8f4f2b]")
+                        with ui.row().classes("gap-1 items-end"):
+                            fields["jog_step"] = ui.select(
+                                {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},
+                                value=1.0,
+                                label="Step mm",
+                            ).props("dense outlined").classes("w-20")
+                            fields["jog_feed"] = ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-20")
+                            ui.button("Home", on_click=home_all).props("dense color=warning")
+                        with ui.grid(columns=3).classes("w-full gap-1 jog-pad"):
+                            ui.label("")
+                            ui.button("Y+", on_click=lambda: jog("Y", 1)).props("dense")
+                            ui.label("")
+                            ui.button("X-", on_click=lambda: jog("X", -1)).props("dense")
+                            ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
+                            ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
+                        with ui.row().classes("gap-1"):
+                            ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
+                            ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
+                            ui.button("Unlock", on_click=unlock_alarm).props("dense color=warning")
+                            ui.button("Resume", on_click=resume_after_hold).props("dense flat")
+                            ui.button("Reset", on_click=soft_reset).props("dense color=negative")
+                        ui.separator()
+                        ui.label("3. Print").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                        with ui.row().classes("gap-1"):
+                            safe_action_button("Preflight", run_preflight)
+                            arm_button = danger_action_button("Arm Real", arm_real_fluidnc)
+                        with ui.row().classes("gap-1"):
+                            start_print_button = ui.button("Start Print", on_click=start_print).props("dense color=positive")
+                            ui.button("Stop After Sheet", on_click=stop_print).props("dense color=warning")
+                            reload_button = ui.button("Reload OK", on_click=confirm_reload).props("dense")
+                        with ui.row().classes("gap-1"):
+                            ui.button("Dry-run Sheet", on_click=generate_dry_run).props("dense")
+                            ui.button("Spool", on_click=open_spool).props("dense flat")
+                            ui.button("Refresh", on_click=refresh_status).props("dense flat")
+                        with ui.grid(columns=2).classes("w-full gap-1"):
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("Print").classes("label")
+                                plotter_labels["state"] = ui.label("-").classes("value")
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("Mode").classes("label")
+                                plotter_labels["mode"] = ui.label("-").classes("value")
+                        plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
+                        plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
                         progress = ui.linear_progress(value=0).classes("w-full")
+                        plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
                         plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
                         status_labels["pending_reload"] = ui.label("-").classes("hidden")
                         status_labels["latest_manifest"] = ui.label("-").classes("hidden")
                         status_labels["last_sheet_path"] = ui.label("-").classes("hidden")
-                        with ui.row().classes("gap-1"):
-                            ui.button("Start", on_click=start_print).props("dense color=positive")
-                            ui.button("Stop", on_click=stop_print).props("dense color=warning")
-                            reload_button = ui.button("Reload OK", on_click=confirm_reload).props("dense")
-                        with ui.row().classes("gap-1"):
-                            ui.button("Dry-run sheet", on_click=generate_dry_run).props("dense")
-                            ui.button("FluidNC", on_click=check_fluidnc).props("dense")
-                            ui.button("Spool", on_click=open_spool).props("dense")
-                            ui.button("Refresh", on_click=refresh_status).props("dense flat")
-                        fluidnc_status_label = ui.label("FluidNC: not checked").classes("path-label text-xs")
 
                 with ui.card().classes("oracle-card compact-card w-full"):
                     with ui.expansion("Logs", icon="receipt_long", group="left-column", value=False).classes("w-full"):
@@ -538,6 +635,15 @@ def build_page() -> None:
     live_timer = ui.timer(settings.live_interval_seconds, generate_user_sessions, active=False)
     ui.timer(2.0, refresh_status)
     persist_and_refresh()
+
+
+def _format_gui_tuple(value: Any) -> str:
+    if not value:
+        return "-"
+    try:
+        return ",".join(f"{float(item):.3f}" for item in value)
+    except Exception:  # noqa: BLE001
+        return str(value)
 
 
 def main() -> None:

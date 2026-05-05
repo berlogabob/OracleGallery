@@ -154,6 +154,44 @@ def test_plotter_stops_before_next_sheet_when_operator_disabled(tmp_path: Path) 
     assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
 
 
+def test_plotter_transport_failure_does_not_mark_job_printed(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=False))
+    remote = FakeRemoteRepository(
+        [
+            PlotJobLease(
+                session_id="session_fail",
+                title="fail",
+                summary="",
+                created_at=datetime.now(tz=UTC),
+                priority="user",
+                queue="user",
+                svg_storage_path="sessions/fail/artwork.svg",
+                svg_url="",
+            )
+        ]
+    )
+
+    class FailingTransport:
+        def send(self, **kwargs):
+            raise RuntimeError("fluidnc timeout")
+
+    daemon = PlotterDaemon(settings, store, remote, FailingTransport(), oracle_store=oracle_store)  # type: ignore[arg-type]
+
+    daemon.run_cycle()
+
+    assert ("session_fail", PlotStatus.FAILED.value, daemon.get_state().current_sheet_id) in remote.updates
+    assert all(update[1] != PlotStatus.PRINTED.value for update in remote.updates)
+    assert oracle_store.load_print_control().print_enabled is False
+    assert oracle_store.load_real_fluidnc_armed() is False
+
+
 def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> None:
     placeholder_root = tmp_path / "placeholders"
     placeholder_root.mkdir(parents=True)

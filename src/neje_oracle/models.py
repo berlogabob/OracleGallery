@@ -53,6 +53,17 @@ class PreflightLevel(str, Enum):
     CRITICAL = "critical"
 
 
+class FluidNCState(str, Enum):
+    IDLE = "Idle"
+    RUN = "Run"
+    HOLD = "Hold"
+    ALARM = "Alarm"
+    SLEEP = "Sleep"
+    DOOR = "Door"
+    JOG = "Jog"
+    UNKNOWN = "Unknown"
+
+
 def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
@@ -247,6 +258,81 @@ class ComponentState:
             if payload.get("updated_at")
             else utcnow(),
         )
+
+
+@dataclass
+class FluidNCControllerState:
+    state: FluidNCState = FluidNCState.UNKNOWN
+    machine_position: tuple[float, float, float] | None = None
+    feed_rate: float | None = None
+    spindle_speed: float | None = None
+    overrides: tuple[int, int, int] | None = None
+    raw_status: str = ""
+    modal_state: str = ""
+
+    @property
+    def is_idle(self) -> bool:
+        return self.state == FluidNCState.IDLE
+
+    @property
+    def is_alarm(self) -> bool:
+        return self.state == FluidNCState.ALARM
+
+    @property
+    def is_hold(self) -> bool:
+        return self.state == FluidNCState.HOLD
+
+
+@dataclass
+class FluidNCProbeResult:
+    http_online: bool = False
+    telnet_online: bool = False
+    ok: bool = False
+    message: str = ""
+    http_url: str = ""
+    telnet_host: str = ""
+    telnet_port: int = 23
+    controller: FluidNCControllerState = field(default_factory=FluidNCControllerState)
+    last_response: str = ""
+    last_error: str = ""
+
+    @property
+    def online(self) -> bool:
+        return self.ok
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "http_online": self.http_online,
+            "telnet_online": self.telnet_online,
+            "ok": self.ok,
+            "message": self.message,
+            "http_url": self.http_url,
+            "telnet_host": self.telnet_host,
+            "telnet_port": self.telnet_port,
+            "controller_state": self.controller.state.value,
+            "machine_position": self.controller.machine_position,
+            "feed_rate": self.controller.feed_rate,
+            "spindle_speed": self.controller.spindle_speed,
+            "overrides": self.controller.overrides,
+            "raw_status": self.controller.raw_status,
+            "modal_state": self.controller.modal_state,
+            "last_response": self.last_response,
+            "last_error": self.last_error,
+        }
+
+
+@dataclass
+class FluidNCCommandResult:
+    ok: bool
+    command: str
+    response_lines: list[str] = field(default_factory=list)
+    error: str = ""
+
+    @property
+    def message(self) -> str:
+        if self.ok:
+            return "\n".join(self.response_lines) or "ok"
+        return self.error or "\n".join(self.response_lines) or "failed"
 
 
 @dataclass

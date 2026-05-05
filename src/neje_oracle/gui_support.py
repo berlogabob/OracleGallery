@@ -407,13 +407,14 @@ def confirm_plotter_reload(db_path: Path | None = None) -> bool:
 
 def check_fluidnc_connection(settings: PlotterSettings | None = None) -> dict[str, Any]:
     resolved_settings = settings or PlotterSettings()
-    online, message = FluidNCTransport(resolved_settings).check_connection(timeout_seconds=1.5)
+    probe = FluidNCTransport(resolved_settings).probe(timeout_seconds=resolved_settings.fluidnc_connect_timeout_seconds)
     return {
-        "online": online,
-        "status": "online" if online else "offline",
-        "message": message,
-        "host": resolved_settings.fluidnc_host,
-        "port": resolved_settings.fluidnc_port,
+        **probe.to_dict(),
+        "online": probe.online,
+        "status": "online" if probe.online else "offline",
+        "message": probe.message,
+        "host": resolved_settings.fluidnc_telnet_host,
+        "port": resolved_settings.fluidnc_telnet_port,
     }
 
 

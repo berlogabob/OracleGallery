@@ -17,10 +17,7 @@ sessions_raw/*
 sessions_public/
 spool/
 assets/sessions/*
-!assets/sessions/SETUP_ORACLE_UPLOADER.command
 !assets/sessions/START_ORACLE_UPLOADER.command
-!assets/sessions/GENERATE_TEST_SESSION.command
-!assets/sessions/START_ORACLE_GUI.command
 assets/generated_idle_symbols/
 public_gallery/build/
 public_gallery/.dart_tool/

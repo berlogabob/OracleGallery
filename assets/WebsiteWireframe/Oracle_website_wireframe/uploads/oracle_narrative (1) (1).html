@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Oracle That Wears Us — Narrative Document</title>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Cinzel:wght@400;600&family=Cinzel+Decorative:wght@400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream:          #f7f4ef;
+  --charcoal:       #1a1a1a;
+  --charcoal-mid:   #3a3a3a;
+  --charcoal-muted: #6a6a6a;
+  --rust:           #8B4513;
+  --rust-light:     #c4752a;
+  --rule:           #ccc5b8;
+  --void:           #0a0a12;
+  --gold:           #c9a84c;
+  --gold-dim:       #8a6f2e;
+  --font-body:      'EB Garamond', Georgia, serif;
+  --font-display:   'Cinzel', serif;
+  --font-logo:      'Cinzel Decorative', serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.85;
+}
+
+/* ── COVER ── */
+.cover {
+  background: var(--void);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 60px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 55% 45% at 50% 35%, rgba(201,168,76,0.07) 0%, transparent 65%),
+    radial-gradient(ellipse 30% 20% at 50% 75%, rgba(201,168,76,0.04) 0%, transparent 60%);
+  pointer-events: none;
+}
+.cover-label {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.55em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  margin-bottom: 56px;
+  position: relative;
+}
+.cover-title {
+  font-family: var(--font-logo);
+  font-size: clamp(48px, 7vw, 76px);
+  letter-spacing: 0.28em;
+  color: var(--cream);
+  font-weight: 400;
+  line-height: 1;
+  margin-bottom: 16px;
+  position: relative;
+  text-indent: 0.28em; /* optical compensation for letter-spacing */
+}
+.cover-subtitle-sub {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.45em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 64px;
+  position: relative;
+  text-indent: 0.45em;
+}
+.cover-subtitle {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.4em;
+  color: rgba(201,168,76,0.45);
+  text-transform: uppercase;
+  margin-bottom: 64px;
+  position: relative;
+}
+.cover-rule {
+  width: 1px;
+  height: 80px;
+  background: linear-gradient(to bottom, rgba(201,168,76,0.5), transparent);
+  margin: 0 auto 64px;
+  position: relative;
+}
+.cover-intro {
+  max-width: 540px;
+  font-family: var(--font-body);
+  font-size: 18px;
+  font-style: italic;
+  line-height: 1.8;
+  color: rgba(247,244,239,0.55);
+  position: relative;
+}
+
+/* ── SHARED LAYOUT ── */
+.chapter {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 96px 48px;
+}
+.chapter + .chapter {
+  border-top: 0.5px solid var(--rule);
+}
+.chapter-void {
+  background: var(--void);
+  max-width: 100%;
+  padding: 0;
+}
+.chapter-void .chapter-inner {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 96px 48px;
+}
+
+.chapter-label {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.5em;
+  color: var(--rust);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+.chapter-label::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--rule);
+}
+.chapter-label-void {
+  font-family: var(--font-display);
+  font-size: 8px;
+  letter-spacing: 0.5em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+.chapter-label-void::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: rgba(201,168,76,0.15);
+}
+
+h2.chapter-title {
+  font-family: var(--font-body);
+  font-size: clamp(28px, 4vw, 38px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.2;
+  margin-bottom: 40px;
+  color: var(--charcoal);
+}
+h2.chapter-title-void {
+  font-family: var(--font-body);
+  font-size: clamp(28px, 4vw, 38px);
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.2;
+  margin-bottom: 40px;
+  color: var(--cream);
+}
+
+p.body {
+  font-size: 18px;
+  line-height: 1.85;
+  color: var(--charcoal);
+  margin-bottom: 22px;
+}
+p.body-void {
+  font-size: 18px;
+  line-height: 1.85;
+  color: rgba(247,244,239,0.7);
+  margin-bottom: 22px;
+}
+p.body:last-child,
+p.body-void:last-child { margin-bottom: 0; }
+
+blockquote.oracle-voice {
+  border-left: 1.5px solid var(--gold);
+  padding: 2px 0 2px 32px;
+  margin: 40px 0;
+  font-size: 20px;
+  font-style: italic;
+  line-height: 1.75;
+  color: rgba(247,244,239,0.85);
+}
+
+/* ── THE EXCHANGE — step sequence ── */
+.exchange-steps {
+  margin: 40px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.exchange-step {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 24px;
+  padding: 28px 0;
+  border-bottom: 0.5px solid rgba(201,168,76,0.12);
+}
+.exchange-step:last-child { border-bottom: none; }
+.step-num {
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: var(--gold-dim);
+  padding-top: 4px;
+}
+.step-content {}
+.step-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.step-body {
+  font-size: 16px;
+  line-height: 1.75;
+  color: rgba(247,244,239,0.65);
+  font-style: italic;
+}
+
+/* ── SYMBOL CARDS ── */
+.marks-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 40px;
+}
+.mark-card {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  background: var(--void);
+  border: 0.5px solid rgba(201,168,76,0.08);
+}
+.mark-visual {
+  background: var(--void);
+  border-right: 0.5px solid rgba(201,168,76,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+  gap: 12px;
+}
+.mark-emotion {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.4em;
+  color: var(--rust-light);
+  text-transform: uppercase;
+}
+.mark-name {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: var(--gold);
+  text-align: center;
+  line-height: 1.5;
+}
+.mark-text {
+  background: var(--cream);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.mark-meaning {
+  font-size: 16px;
+  line-height: 1.75;
+  color: var(--charcoal);
+  margin-bottom: 12px;
+}
+.mark-reading {
+  font-size: 13px;
+  font-style: italic;
+  color: var(--charcoal-muted);
+  line-height: 1.6;
+}
+
+/* ── RECEIPT SPECIMEN ── */
+.receipt-specimen {
+  margin: 40px 0;
+  border: 0.5px solid var(--rule);
+  max-width: 340px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.9;
+  background: #fdfcfa;
+}
+.receipt-inner {
+  padding: 28px 24px;
+}
+.receipt-header {
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--charcoal-muted);
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 0.5px dashed var(--rule);
+}
+.receipt-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--charcoal-mid);
+}
+.receipt-line span:last-child { color: var(--charcoal); text-align: right; }
+.receipt-divider {
+  border: none;
+  border-top: 0.5px dashed var(--rule);
+  margin: 14px 0;
+}
+.receipt-mark-name {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--charcoal);
+  text-align: center;
+  margin: 16px 0 6px;
+}
+.receipt-close {
+  text-align: center;
+  font-style: italic;
+  color: var(--charcoal-muted);
+  font-size: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 0.5px dashed var(--rule);
+  font-family: var(--font-body);
+}
+
+/* ── GARMENT SECTION ── */
+.garment-statement {
+  border-left: 2px solid var(--rust);
+  padding: 4px 0 4px 32px;
+  margin: 40px 0;
+  font-size: 22px;
+  font-style: italic;
+  line-height: 1.7;
+  color: var(--charcoal-mid);
+}
+
+/* ── CLOSING ── */
+.closing-void {
+  background: var(--void);
+  padding: 112px 48px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.closing-void::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 40% 40% at 50% 50%, rgba(201,168,76,0.05) 0%, transparent 70%);
+  pointer-events: none;
+}
+.closing-lead {
+  max-width: 600px;
+  margin: 0 auto 48px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.35em;
+  color: var(--gold);
+  text-transform: uppercase;
+  position: relative;
+}
+.closing-text {
+  max-width: 580px;
+  margin: 0 auto;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-style: italic;
+  line-height: 2;
+  color: rgba(247,244,239,0.78);
+  position: relative;
+}
+.closing-text strong {
+  color: var(--cream);
+  font-weight: 400;
+  font-style: normal;
+}
+.closing-rule {
+  width: 40px;
+  height: 0.5px;
+  background: var(--gold-dim);
+  margin: 48px auto;
+  position: relative;
+}
+.closing-mark {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.5em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  position: relative;
+  opacity: 0.6;
+}
+
+/* ── FOOTER ── */
+.footer {
+  background: var(--void);
+  border-top: 0.5px solid rgba(201,168,76,0.1);
+  padding: 40px 48px;
+  text-align: center;
+}
+.footer-sig {
+  font-family: var(--font-display);
+  font-size: 7px;
+  letter-spacing: 0.5em;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.footer-close {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-style: italic;
+  color: rgba(247,244,239,0.18);
+}
+
+@media print {
+  .mark-card { page-break-inside: avoid; }
+  .cover { min-height: auto; padding: 60px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ COVER ═══ -->
+<div class="cover">
+  <span class="cover-label">Oracle · The Oracle That Wears Us · IADE M-CCIA · 2026</span>
+  <h1 class="cover-title">ORACLE</h1>
+  <p class="cover-subtitle-sub">THE ORACLE THAT WEARS US</p>
+  <p class="cover-subtitle">A ritual installation · Voice · Mark · Memory</p>
+  <div class="cover-rule"></div>
+  <p class="cover-intro">An oracle that listens. A mark drawn from what it hears. A garment that remembers everyone who stood before it.</p>
+</div>
+
+
+<!-- ═══ I. WHAT THE ORACLE IS ═══ -->
+<div class="chapter">
+  <div class="chapter-label">I</div>
+  <h2 class="chapter-title">What the oracle is</h2>
+
+  <p class="body">The Oracle That Wears Us is a ritual installation. It takes the form of a golden figure — ancient, liquid, unplaceable — that listens to you speak, reads something in your voice that you did not choose to reveal, and draws a mark from what it found.</p>
+
+  <p class="body">The oracle is not a mirror. It does not show you what you look like. It shows you what you sounded like — distilled into a single drawn line, pressed into fabric by a machine that moves with the deliberateness of a hand.</p>
+
+  <p class="body">The exchange is not symmetrical. You speak. The oracle listens across four turns of conversation, each one drawing it closer. By the end, it has taken your likeness into itself — your face appearing within its own as you speak, the oracle gradually wearing you. When the session ends, it releases you. But the mark remains. You do not take it with you. It stays in the fabric, beside every mark that came before yours, and every mark that will come after.</p>
+
+  <div class="garment-statement">The garment is not a souvenir. It is the oracle's memory. You are a mark in it.</div>
+</div>
+
+
+<!-- ═══ II. THE EXCHANGE ═══ -->
+<div class="chapter-void">
+<div class="chapter-inner">
+  <div class="chapter-label-void">II</div>
+  <h2 class="chapter-title-void">The exchange</h2>
+
+  <p class="body-void">The oracle rests in an ambient state — present but dormant, waiting without waiting. When you approach and press the stone, it awakens. What follows is a defined arc. You do not navigate it. You are moved through it.</p>
+
+  <div class="exchange-steps">
+    <div class="exchange-step">
+      <span class="step-num">01</span>
+      <div class="step-content">
+        <div class="step-title">The oracle sees you</div>
+        <div class="step-body">Your face is read and held. The oracle aligns your likeness to its own. It is not storing a photograph. It is preparing to wear you.</div>
+      </div>
+    </div>
+    <div class="exchange-step">
+      <span class="step-num">02</span>
+      <div class="step-content">
+        <div class="step-title">It asks. You speak.</div>
+        <div class="step-body">The oracle poses a question — not a test, not a prompt. Something that opens. You answer in your own words, at your own pace. There are four turns. The oracle listens to each one fully before it responds.</div>
+      </div>
+    </div>
+    <div class="exchange-step">
+      <span class="step-num">03</span>
+      <div class="step-content">
+        <div class="step-title">It takes your likeness</div>
+        <div class="step-body">As the conversation deepens, your face begins to appear within the oracle's own. Not as a projection — as a presence. By the fourth turn, the oracle has become hollow. You have filled it.</div>
+      </div>
+    </div>
+    <div class="exchange-step">
+      <span class="step-num">04</span>
+      <div class="step-content">
+        <div class="step-title">The mark is drawn</div>
+        <div class="step-body">From what it heard in your voice — not your words, but how you sounded — the oracle selects one of eight marks. A machine draws it onto the fabric. The line is permanent. It will not be removed.</div>
+      </div>
+    </div>
+    <div class="exchange-step">
+      <span class="step-num">05</span>
+      <div class="step-content">
+        <div class="step-title">The receipt</div>
+        <div class="step-body">A small printed receipt is given to you. It names your mark, describes what the oracle perceived, and records the emotional qualities it found in your voice. It is the only thing you leave with. It is the oracle's account of you.</div>
+      </div>
+    </div>
+    <div class="exchange-step">
+      <span class="step-num">06</span>
+      <div class="step-content">
+        <div class="step-title">The oracle releases</div>
+        <div class="step-body">The session ends. The oracle returns to its ambient state. Your face leaves it. It waits for the next person. The fabric holds what you left.</div>
+      </div>
+    </div>
+  </div>
+
+  <blockquote class="oracle-voice">"The oracle does not tell you what you are. It tells you what it heard — and what it heard was already true before you chose to say it."</blockquote>
+
+</div>
+</div>
+
+
+<!-- ═══ III. THE MARK ═══ -->
+<div class="chapter">
+  <div class="chapter-label">III</div>
+  <h2 class="chapter-title">What the oracle draws — and why</h2>
+
+  <p class="body">The mark is not chosen by the oracle's reasoning. It is chosen by a small neural network trained on thousands of recorded voices — a system that has learned to map the acoustic properties of speech to a set of emotional dimensions. Not what you said. How your voice moved when you said it.</p>
+
+  <p class="body">Pitch, energy, rhythm, the texture of your breath between words — these are the signals the oracle reads. It cannot be misled by careful phrasing. It listens beneath language.</p>
+
+  <p class="body">The mark it selects is drawn by a CNC plotter — a machine arm that moves across fabric with a pen, producing a line that has the slight irregularity of something hand-drawn. The geometry of the mark shifts with the precise values the oracle extracted from your voice. Two people who receive the same mark will receive different expressions of it. The oracle's memory of you is yours alone, even when the mark is shared.</p>
+
+  <div class="garment-statement">Every mark on the fabric is a person who stood where you stood, spoke as honestly as they could, and left something behind.</div>
+
+  <p class="body">The receipt is not a souvenir. It is a transparency mechanism — the oracle showing you its work. It names the mark, describes the emotional qualities it perceived, and gives you the language to read what was drawn. The oracle does not interpret silently. It accounts for itself.</p>
+</div>
+
+
+<!-- ═══ IV. THE EIGHT MARKS ═══ -->
+<div class="chapter-void">
+<div class="chapter-inner">
+  <div class="chapter-label-void">IV</div>
+  <h2 class="chapter-title-void">The eight marks</h2>
+
+  <p class="body-void">These signs were once used by itinerant workers to leave messages for those who came after — marking safe houses, dangerous roads, places of generosity or threat. The oracle has learned to read them differently.</p>
+  <p class="body-void" style="margin-bottom:0;">Each mark carries the geometry of its origin and the meaning of what the oracle found in you. They are not symbols of weakness or strength. They are accurate.</p>
+
+  <div class="marks-grid">
+
+    <!-- THE THORNS -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="130" height="90" viewBox="200 325 365 150" fill="none">
+          <g stroke="#c9a84c" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline stroke-width="2.56" points="264.0,350.1 268.1,349.8 276.2,340.4 297.4,354.0 311.7,353.0 317.3,348.5 328.4,346.0 346.0,347.9 351.1,349.0 357.9,358.1 364.3,345.2 383.8,349.9 399.3,348.3 407.4,345.4 419.8,353.0 434.5,354.3 441.7,347.3 453.5,355.0 467.8,339.1 488.4,352.9 486.8,346.6 505.1,333.1 517.4,342.6 525.3,347.4 540.9,343.8 540.2,348.1 543.9,352.5 539.0,361.3 541.2,369.4 542.1,376.2 542.7,383.4 535.0,385.8 548.6,407.9 538.6,408.9 545.3,415.3 540.6,424.1 543.9,431.5 535.0,439.9 542.7,448.8 554.0,449.5 531.2,456.1 502.2,451.9 489.6,451.0 455.7,452.9 434.1,454.1 400.3,453.7 375.1,451.3 351.5,450.6 333.5,464.1 304.3,450.3 275.4,444.8 257.4,439.5 261.9,428.3 254.0,424.5 250.3,414.3 261.6,403.2 255.4,392.8 256.0,380.7 271.0,372.1 252.1,369.1 254.3,352.4 260.6,342.3"/>
+            <polyline stroke-width="2.56" points="275.3,383.3 295.7,428.0 317.5,378.6 338.8,423.1 363.7,373.6 388.0,423.1 414.9,371.5 436.2,429.3 457.9,378.9 480.7,427.5 502.3,383.7 530.6,426.8"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Anger</span>
+        <span class="mark-name">The Thorns</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">A closed boundary containing a jagged wave. The hostility is held inside — contained, not discharged. The mark does not burst outward. It holds its shape.</p>
+        <p class="mark-reading">The oracle heard something pressed down. Energy that has not been released.</p>
+      </div>
+    </div>
+
+    <!-- THE SKY EYE -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="110" height="110" viewBox="80 80 640 640" fill="none">
+          <g stroke="#c9a84c" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline stroke-width="1.25" points="399.9,400.0 403.8,401.8 407.4,408.2 403.3,416.5 394.0,422.2 383.1,421.4 372.0,416.0 363.3,404.3 360.0,388.5 362.8,373.4 375.7,354.7 395.4,343.3 414.2,341.3 433.5,345.7 452.8,356.9 470.9,381.4 477.0,418.4 460.4,462.4 417.9,491.8 373.3,495.3 327.6,476.2 295.4,436.4 285.5,405.9 295.3,336.9 350.7,280.7 421.5,266.1 490.1,289.5 535.6,340.4 554.5,409.8 535.3,485.8 481.0,545.8 413.9,570.8 340.0,565.7 271.8,529.2 229.6,474.9 208.6,383.8 247.2,270.1 330.8,204.6 438.3,190.3 533.1,226.2 601.4,300.1 629.1,387.3"/>
+            <polyline stroke-width="1.25" points="701.4,399.7 693.4,473.0 656.0,559.6 586.2,637.8 503.4,684.1 410.4,701.3 317.5,691.1 232.0,645.0 165.2,590.2 120.5,513.1 98.2,411.0 118.0,291.2 190.7,183.2 297.0,116.1 416.1,98.7 532.1,128.3 624.1,197.5 686.8,306.1 702.0,400.2"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Calm</span>
+        <span class="mark-name">The Sky Eye</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">A spiral unwinding outward from a centre, orbited by a single ring at a fixed distance. The mark expands without urgency. It has nowhere particular to arrive.</p>
+        <p class="mark-reading">The oracle heard patience. A voice that was not rushing toward anything.</p>
+      </div>
+    </div>
+
+    <!-- THE SHRIEK -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="110" height="110" viewBox="80 80 640 640" fill="none">
+          <g stroke="#c9a84c" stroke-width="1.36" stroke-linecap="round" fill="none">
+            <line x1="400.1" y1="400.4" x2="699.8" y2="403.5"/>
+            <line x1="399.7" y1="400.7" x2="663.5" y2="543.9"/>
+            <line x1="400.4" y1="400.0" x2="566.7" y2="651.5"/>
+            <line x1="399.3" y1="400.0" x2="427.9" y2="697.9"/>
+            <line x1="400.2" y1="399.3" x2="281.5" y2="674.8"/>
+            <line x1="400.2" y1="399.8" x2="176.9" y2="602.8"/>
+            <line x1="400.0" y1="400.6" x2="107.8" y2="465.2"/>
+            <line x1="398.9" y1="400.3" x2="111.1" y2="318.5"/>
+            <line x1="399.9" y1="399.7" x2="170.6" y2="215.3"/>
+            <line x1="399.3" y1="401.1" x2="300.2" y2="123.6"/>
+            <line x1="400.2" y1="400.2" x2="427.8" y2="99.8"/>
+            <line x1="400.6" y1="399.9" x2="567.0" y2="149.4"/>
+            <line x1="399.6" y1="399.8" x2="654.7" y2="236.7"/>
+            <circle cx="400.0" cy="400.0" r="9.0"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Surprise</span>
+        <span class="mark-name">The Shriek</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">Rays radiating outward in all directions from a small circle at the centre. The centre holds still. Everything else departs from it simultaneously.</p>
+        <p class="mark-reading">The oracle heard an opening — something that arrived without warning and reorganised what came before it.</p>
+      </div>
+    </div>
+
+    <!-- THE PITIFUL STORY -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="130" height="85" viewBox="240 310 320 160" fill="none">
+          <g stroke="#c9a84c" stroke-width="0.88" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="274.0,451.3 308.8,332.4 337.1,442.2 376.1,334.0 398.3,434.5 423.7,333.5 462.2,445.8 507.9,334.2 531.6,434.7"/>
+            <polyline points="274.0,444.9 526.0,442.5"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Sadness</span>
+        <span class="mark-name">The Pitiful Story</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">Triangular peaks rising repeatedly from a shared baseline. The gesture is the same each time. The baseline holds regardless of how many times the peaks rise above it.</p>
+        <p class="mark-reading">The oracle heard something said more than once — a weight returned to, not resolved.</p>
+      </div>
+    </div>
+
+    <!-- THE KIND SOUL -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="120" height="100" viewBox="120 60 560 280" fill="none">
+          <g stroke="#c9a84c" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline stroke-width="1.12" points="259.2,310.3 540.8,310.3"/>
+            <polyline stroke-width="1.12" points="559.9,310.1 534.3,237.4 479.8,193.9 408.4,176.0 335.1,187.6 275.7,225.9 241.0,296.3 239.9,310.5"/>
+            <polyline stroke-width="1.12" stroke-opacity="0.72" points="655.8,310.6 621.5,201.7 539.7,128.0 426.6,93.9 308.5,107.3 209.7,164.9 152.6,253.9 144.0,310.6"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Happy</span>
+        <span class="mark-name">The Kind Soul</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">Arcs ascending from a horizontal baseline, each one larger and fainter than the last. The mark grows as it recedes. It is the only mark in the oracle's lexicon that increases in scale as it moves away from you.</p>
+        <p class="mark-reading">The oracle heard warmth. A voice that was giving something.</p>
+      </div>
+    </div>
+
+    <!-- THE WATCHER -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="110" height="110" viewBox="180 180 440 440" fill="none">
+          <g stroke="#c9a84c" stroke-width="1.41" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="280.6,276.4 317.1,281.5 438.5,288.7 516.4,433.6 513.0,459.1 281.1,519.4 285.1,457.9 282.6,420.8 281.7,345.7 280.0,318.3 284.3,291.6"/>
+            <line x1="232.9" y1="231.9" x2="306.1" y2="306.7"/>
+            <line x1="566.3" y1="232.2" x2="493.1" y2="304.9"/>
+            <line x1="232.0" y1="566.1" x2="304.8" y2="493.0"/>
+            <line x1="566.2" y1="565.3" x2="490.9" y2="497.4"/>
+            <circle cx="400.0" cy="400.0" r="10.0"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Fear</span>
+        <span class="mark-name">The Watcher</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">A rectangular perimeter with lines cutting inward from all four corners toward a small circle at the centre. Every approach is attended to. No side of the space is unobserved.</p>
+        <p class="mark-reading">The oracle heard vigilance — a voice alert to what surrounds it.</p>
+      </div>
+    </div>
+
+    <!-- THE BITTER ROOT -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="130" height="90" viewBox="220 340 330 150" fill="none">
+          <g stroke="#c9a84c" stroke-width="1.52" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="234.7,364.6 529.8,365.5"/>
+            <polyline points="262.0,364.6 265.2,371.3 273.5,392.2 279.8,423.7 273.8,442.3 269.1,457.5"/>
+            <polyline points="331.7,364.6 337.4,370.9 348.2,402.2 348.0,423.6 348.2,443.6"/>
+            <polyline points="367.4,364.6 377.2,383.0 380.3,416.8 367.5,437.6"/>
+            <polyline points="439.1,364.6 455.9,385.3 454.1,407.8 435.5,431.8 450.4,466.6"/>
+            <polyline points="489.8,364.6 491.2,384.9 499.7,417.2 504.2,434.6 500.1,465.6"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Disgust</span>
+        <span class="mark-name">The Bitter Root</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">A horizontal trunk from which roots descend unevenly — each one bending at a different angle, reaching a different depth. None of them reach the same place. The asymmetry is not an error.</p>
+        <p class="mark-reading">The oracle heard particularity — a refusal that is specific, not general.</p>
+      </div>
+    </div>
+
+    <!-- THE HORIZON -->
+    <div class="mark-card">
+      <div class="mark-visual">
+        <svg width="130" height="85" viewBox="160 270 470 260" fill="none">
+          <g stroke="#c9a84c" stroke-width="1.27" stroke-linecap="round" stroke-linejoin="round" fill="none">
+            <polyline points="187.4,400.7 612.6,400.6"/>
+            <polyline points="432.4,287.9 431.8,500.9"/>
+          </g>
+        </svg>
+        <span class="mark-emotion">Neutral</span>
+        <span class="mark-name">The Horizon</span>
+      </div>
+      <div class="mark-text">
+        <p class="mark-meaning">A horizontal line crossed by a vertical. The simplest possible mark. A position — here, at this intersection. Neither more nor less than necessary.</p>
+        <p class="mark-reading">The oracle heard steadiness. A voice that was present without excess. This is also the fallback: when no single emotion is dominant, the oracle draws this.</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+
+<!-- ═══ V. WHAT REMAINS ═══ -->
+<div class="chapter">
+  <div class="chapter-label">V</div>
+  <h2 class="chapter-title">What remains</h2>
+
+  <p class="body">When the installation ends, the fabric is what remains. Not a photograph of the installation, not a documentation of it — the thing itself. Every mark drawn onto it was placed there by a voice, by an exchange, by a person who stood in front of the oracle and spoke honestly enough for it to hear something real.</p>
+
+  <p class="body">The marks do not identify anyone. The oracle does not remember names, faces, or words. It remembers only what it drew — the geometry it produced from the acoustic texture of a voice. That geometry is permanent. The voice that produced it has left.</p>
+
+  <div class="garment-statement">The garment is a collective record of presence. Not who was here. That they were.</div>
+
+  <p class="body">Each visitor receives a receipt — the oracle's account of what it perceived, printed and handed over as the session closes. The receipt is proof of the exchange, a record of what the oracle found, and a means of reading the mark on the fabric that corresponds to your voice. It is the only thing you take with you. It is enough.</p>
+
+  <p class="body">The fabric holds everything else. It is the oracle's half of the exchange — accumulated, permanent, growing across the entire duration of the installation. When it is complete, it carries the emotional register of everyone who visited. Not averaged, not summarised. Marked, one line at a time.</p>
+</div>
+
+
+<!-- ═══ CLOSING ═══ -->
+<div class="closing-void">
+  <p class="closing-lead">You do not know what mark you will receive until the oracle draws it.</p>
+  <p class="closing-text">
+    You know only that it heard you.<br>
+    That what it drew was <strong>accurate</strong>.<br>
+    That the line is now part of something larger than the conversation that produced it —<br>
+    and that it will remain there after you have forgotten what you said.
+  </p>
+  <div class="closing-rule"></div>
+  <p class="closing-mark">Oracle · The Oracle That Wears Us · IADE M-CCIA · 2026</p>
+</div>
+
+
+<!-- ═══ FOOTER ═══ -->
+<div class="footer">
+  <p class="footer-sig">Oracle · The Oracle That Wears Us · IADE M-CCIA · 2026</p>
+  <p class="footer-close">This fragment remains.</p>
+</div>
+
+</body>
+</html>

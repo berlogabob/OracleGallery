@@ -10,7 +10,18 @@ from .config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
 from .firebase_io import FirebaseRemoteRepository
 from .gui_modes import mode_to_control
 from .gui_support import GuiSettings
-from .models import ComponentState, ComponentStatus, PlotterControlState, PlotterRuntimeConfig, PreflightLevel, PreflightResult, SystemMode
+from .models import (
+    ComponentState,
+    ComponentStatus,
+    FluidNCCommandResult,
+    FluidNCProbeResult,
+    PlotterControlState,
+    PlotterRuntimeConfig,
+    PreflightLevel,
+    PreflightResult,
+    RuntimeStatus,
+    SystemMode,
+)
 from .oracle_logging import append_log
 from .plotter_daemon import PlotterDaemon
 from .preflight import PreflightService
@@ -92,7 +103,6 @@ class SupervisorService:
         result = PreflightService(
             supervisor_settings=self.settings,
             plotter_settings=self.plotter_settings,
-            fluidnc_checker=lambda timeout: self.transport_factory(self.plotter_settings).check_connection(timeout_seconds=timeout),
         ).run(
             mode=mode,
             gui_settings=gui_settings,
@@ -127,7 +137,7 @@ class SupervisorService:
         if fluidnc_state.status != ComponentStatus.RUNNING:
             self.runtime_store.save_real_fluidnc_armed(False)
             append_log("plotter", "Real FluidNC arm blocked: FluidNC offline", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="FluidNC is offline; REAL print blocked")
+            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="FluidNC is not Idle/online; REAL print blocked")
         self.runtime_store.save_real_fluidnc_armed(True)
         append_log("plotter", "REAL FluidNC armed by operator", level="warning", settings=self.settings)
         return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="REAL FluidNC armed; START PRINT will send to plotter", heartbeat=True)
@@ -137,6 +147,12 @@ class SupervisorService:
         if mode == SystemMode.EXHIBITION_REAL and not self.runtime_store.load_real_fluidnc_armed():
             append_log("plotter", "Start print blocked: REAL FluidNC not armed", level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="REAL FluidNC is not armed")
+        if mode == SystemMode.EXHIBITION_REAL:
+            fluidnc_state = self.check_fluidnc()
+            if fluidnc_state.status != ComponentStatus.RUNNING:
+                self.runtime_store.save_real_fluidnc_armed(False)
+                append_log("plotter", "Start print blocked: FluidNC not Idle/online", level="warning", settings=self.settings)
+                return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="FluidNC must be online and Idle before real print")
         self.runtime_store.save_print_control(control)
         PlotterStore(self.plotter_settings.db_path).save_control_state(control)
         append_log("plotter", f"Print enabled in {mode.value}", level="warning" if not control.dry_run else "info", settings=self.settings)
@@ -196,14 +212,77 @@ class SupervisorService:
         return self.runtime_store.set_component("firebase", ComponentStatus.RUNNING, message=f"Configured: {firebase.project_id}", heartbeat=True)
 
     def check_fluidnc(self) -> ComponentState:
-        online, message = self.transport_factory(self.plotter_settings).check_connection(timeout_seconds=1.5)
-        append_log("plotter", f"FluidNC check: {message}", level="info" if online else "warning", settings=self.settings)
+        probe = self.probe_fluidnc()
+        online = probe.online and probe.controller.is_idle
+        status = ComponentStatus.RUNNING if online else ComponentStatus.WARNING if probe.online else ComponentStatus.OFFLINE
+        append_log("plotter", f"FluidNC check: {probe.message}", level="info" if online else "warning", settings=self.settings)
         return self.runtime_store.set_component(
             "fluidnc",
-            ComponentStatus.RUNNING if online else ComponentStatus.OFFLINE,
-            message=message,
+            status,
+            message=probe.message,
+            last_error=probe.last_error,
             heartbeat=online,
         )
+
+    def probe_fluidnc(self) -> FluidNCProbeResult:
+        probe = self.transport_factory(self.plotter_settings).probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
+        self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
+        return probe
+
+    def home_fluidnc(self, axis: str | None = None) -> ComponentState:
+        if not self._manual_control_allowed("home"):
+            return self.runtime_store.load_component_state("fluidnc")
+        result = self.transport_factory(self.plotter_settings).home(axis)
+        return self._record_fluidnc_command(result, f"Home {axis or 'all'}")
+
+    def jog_fluidnc(self, axis: str, distance: float, feed: float) -> ComponentState:
+        if not self._manual_control_allowed("jog"):
+            return self.runtime_store.load_component_state("fluidnc")
+        result = self.transport_factory(self.plotter_settings).jog(axis, distance, feed)
+        return self._record_fluidnc_command(result, f"Jog {axis} {distance:g}mm F{feed:g}")
+
+    def unlock_fluidnc_alarm(self) -> ComponentState:
+        probe = self.probe_fluidnc()
+        if not probe.controller.is_alarm:
+            return self.runtime_store.set_component("fluidnc", ComponentStatus.WARNING, message=f"Unlock skipped: FluidNC state is {probe.controller.state.value}")
+        result = self.transport_factory(self.plotter_settings).unlock_alarm()
+        return self._record_fluidnc_command(result, "Unlock alarm")
+
+    def emergency_stop_fluidnc(self) -> ComponentState:
+        result = self.transport_factory(self.plotter_settings).feed_hold()
+        self.runtime_store.save_real_fluidnc_armed(False)
+        control = self.runtime_store.load_print_control()
+        control.print_enabled = False
+        control.operator_paused = True
+        self.runtime_store.save_print_control(control)
+        PlotterStore(self.plotter_settings.db_path).save_control_state(control)
+        level = "warning" if result.ok else "error"
+        append_log("plotter", f"Emergency stop/feed hold: {result.message}", level=level, settings=self.settings)
+        self.runtime_store.set_component("print", ComponentStatus.STOPPED, message="Emergency stop sent; print disabled")
+        return self.runtime_store.set_component(
+            "fluidnc",
+            ComponentStatus.WARNING if result.ok else ComponentStatus.ERROR,
+            message="Emergency stop/feed hold sent" if result.ok else result.message,
+            last_error="" if result.ok else result.message,
+            heartbeat=result.ok,
+        )
+
+    def resume_fluidnc(self) -> ComponentState:
+        probe = self.probe_fluidnc()
+        if not probe.controller.is_hold:
+            return self.runtime_store.set_component("fluidnc", ComponentStatus.WARNING, message=f"Resume skipped: FluidNC state is {probe.controller.state.value}")
+        result = self.transport_factory(self.plotter_settings).cycle_start()
+        return self._record_fluidnc_command(result, "Resume/cycle start")
+
+    def soft_reset_fluidnc(self) -> ComponentState:
+        result = self.transport_factory(self.plotter_settings).soft_reset()
+        self.runtime_store.save_real_fluidnc_armed(False)
+        control = self.runtime_store.load_print_control()
+        control.print_enabled = False
+        control.operator_paused = True
+        self.runtime_store.save_print_control(control)
+        PlotterStore(self.plotter_settings.db_path).save_control_state(control)
+        return self._record_fluidnc_command(result, "Soft reset/abort")
 
     def check_macmini_agent(self) -> ComponentState:
         if not self.settings.macmini_agent_url:
@@ -256,6 +335,41 @@ class SupervisorService:
         if self._plotter_thread and self._plotter_thread.is_alive():
             states["plotter"] = self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message=states["plotter"].message or "Local plotter daemon running", heartbeat=True)
         return states
+
+    def _manual_control_allowed(self, action: str) -> bool:
+        state = PlotterStore(self.plotter_settings.db_path).load_runtime_state()
+        if state.status == RuntimeStatus.PRINTING:
+            self.runtime_store.set_component("fluidnc", ComponentStatus.WARNING, message=f"{action} blocked while plotter is printing")
+            return False
+        control = self.runtime_store.load_print_control()
+        if control.print_enabled:
+            control.print_enabled = False
+            control.operator_paused = True
+            self.runtime_store.save_print_control(control)
+            PlotterStore(self.plotter_settings.db_path).save_control_state(control)
+            self.runtime_store.save_real_fluidnc_armed(False)
+            self.runtime_store.set_component("print", ComponentStatus.STOPPED, message=f"Print paused before manual {action}")
+            append_log("plotter", f"Print paused before manual {action}", level="warning", settings=self.settings)
+        return True
+
+    def _record_fluidnc_command(self, result: FluidNCCommandResult, label: str) -> ComponentState:
+        level = "info" if result.ok else "error"
+        append_log("plotter", f"FluidNC {label}: {result.message}", level=level, settings=self.settings)
+        if not result.ok:
+            self.runtime_store.save_real_fluidnc_armed(False)
+            control = self.runtime_store.load_print_control()
+            control.print_enabled = False
+            control.operator_paused = True
+            self.runtime_store.save_print_control(control)
+            PlotterStore(self.plotter_settings.db_path).save_control_state(control)
+            self.runtime_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {result.message}")
+        return self.runtime_store.set_component(
+            "fluidnc",
+            ComponentStatus.RUNNING if result.ok else ComponentStatus.ERROR,
+            message=f"{label}: {result.message}",
+            last_error="" if result.ok else result.message,
+            heartbeat=result.ok,
+        )
 
     def component_summary(self) -> dict[str, dict[str, Any]]:
         return {name: state.to_dict() for name, state in self.refresh_all_status().items()}

@@ -3,8 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 
 from neje_oracle.config import OracleSupervisorSettings, PlotterSettings
-from neje_oracle.models import ComponentStatus, PlotterRuntimeConfig, PreflightCheck, PreflightLevel, PreflightResult, SystemMode
-from neje_oracle.store import OracleRuntimeStore
+from neje_oracle.models import (
+    ComponentStatus,
+    FluidNCCommandResult,
+    FluidNCControllerState,
+    FluidNCProbeResult,
+    FluidNCState,
+    PlotterRuntimeConfig,
+    PlotterRuntimeState,
+    PreflightCheck,
+    PreflightLevel,
+    PreflightResult,
+    RuntimeStatus,
+    SystemMode,
+)
+from neje_oracle.store import OracleRuntimeStore, PlotterStore
 from neje_oracle.supervisor import SupervisorService
 
 
@@ -19,6 +32,21 @@ class DryTransport:
 
     def check_connection(self, *, timeout_seconds: float = 2.0):
         return True, "fake fluidnc online"
+
+    def probe(self, *, timeout_seconds: float = 2.0):
+        return FluidNCProbeResult(
+            http_online=True,
+            telnet_online=True,
+            ok=True,
+            message="fake fluidnc online",
+            controller=FluidNCControllerState(state=FluidNCState.IDLE),
+        )
+
+    def feed_hold(self):
+        return FluidNCCommandResult(ok=True, command="!", response_lines=["sent"])
+
+    def jog(self, axis: str, distance_mm: float, feed_mm_min: float):
+        return FluidNCCommandResult(ok=True, command=f"$J={axis}{distance_mm}")
 
     def send(self, *, gcode: str, sheet_id: str, dry_run=None, progress_callback=None):
         path = self.settings.spool_root / f"{sheet_id}.gcode"
@@ -124,3 +152,57 @@ def test_real_print_requires_arm_and_successful_preflight(tmp_path: Path) -> Non
     assert started.status == ComponentStatus.RUNNING
     assert supervisor.runtime_store.load_print_control().print_enabled is True
     assert supervisor.runtime_store.load_print_control().dry_run is False
+
+
+def test_emergency_stop_disables_print_and_disarms_real_mode(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_real_fluidnc_armed(True)
+    supervisor.start_print(SystemMode.TEST)
+
+    state = supervisor.emergency_stop_fluidnc()
+
+    assert state.status == ComponentStatus.WARNING
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
+    assert supervisor.runtime_store.load_real_fluidnc_armed() is False
+
+
+def test_jog_blocked_while_printing(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    PlotterStore(plotter_settings.db_path).save_runtime_state(PlotterRuntimeState(status=RuntimeStatus.PRINTING))
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
+    )
+
+    supervisor.jog_fluidnc("X", 1.0, 1000)
+
+    assert supervisor.runtime_store.load_component_state("fluidnc").status == ComponentStatus.WARNING
+
+
+def test_manual_control_pauses_enabled_print_before_jog(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
+    )
+    supervisor.start_print(SystemMode.TEST)
+    assert supervisor.runtime_store.load_print_control().print_enabled is True
+
+    state = supervisor.jog_fluidnc("X", 5.0, 1000)
+
+    assert state.status == ComponentStatus.RUNNING
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
+    assert supervisor.runtime_store.load_real_fluidnc_armed() is False

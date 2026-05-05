@@ -194,6 +194,13 @@ class PlotterDaemon:
             for job in user_jobs:
                 self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
                 self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+            if self.oracle_store is not None:
+                control = self.oracle_store.load_print_control()
+                control.print_enabled = False
+                control.operator_paused = True
+                self.oracle_store.save_print_control(control)
+                self.oracle_store.save_real_fluidnc_armed(False)
+                self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
             self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed: {exc}", sheet_id=sheet_id)
             return
 

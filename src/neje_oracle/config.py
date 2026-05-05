@@ -74,8 +74,19 @@ class PlotterSettings:
     pen_up_command: str = os.getenv("NEJE_PLOTTER_PEN_UP", "M5")
     pen_down_command: str = os.getenv("NEJE_PLOTTER_PEN_DOWN", "M3 S15")
     dry_run: bool = _env_bool("NEJE_PLOTTER_DRY_RUN", True)
-    fluidnc_host: str = os.getenv("NEJE_PLOTTER_FLUIDNC_HOST", "fluidnc.local")
-    fluidnc_port: int = _env_int("NEJE_PLOTTER_FLUIDNC_PORT", 23)
+    fluidnc_http_url: str = os.getenv("NEJE_PLOTTER_FLUIDNC_HTTP_URL", "http://10.198.21.74")
+    fluidnc_telnet_host: str = os.getenv(
+        "NEJE_PLOTTER_FLUIDNC_TELNET_HOST",
+        os.getenv("NEJE_PLOTTER_FLUIDNC_HOST", "10.198.21.74"),
+    )
+    fluidnc_telnet_port: int = _env_int(
+        "NEJE_PLOTTER_FLUIDNC_TELNET_PORT",
+        _env_int("NEJE_PLOTTER_FLUIDNC_PORT", 23),
+    )
+    fluidnc_connect_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_CONNECT_TIMEOUT_SECONDS", 3.0)
+    fluidnc_ack_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_ACK_TIMEOUT_SECONDS", 10.0)
+    fluidnc_host: str = fluidnc_telnet_host
+    fluidnc_port: int = fluidnc_telnet_port
     operator_host: str = os.getenv("NEJE_PLOTTER_OPERATOR_HOST", "0.0.0.0")
     operator_port: int = _env_int("NEJE_PLOTTER_OPERATOR_PORT", 8765)
 
