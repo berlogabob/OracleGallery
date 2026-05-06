@@ -61,14 +61,22 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       FilledButton(
                         onPressed: () => context.go('/cloth'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: OracleColors.gold,
+                          foregroundColor: OracleColors.voidColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
+                          textStyle: GoogleFonts.ebGaramond(fontSize: 19, fontWeight: FontWeight.w700),
+                        ),
                         child: const Text('Enter the cloth'),
                       ),
                       OutlinedButton(
                         onPressed: () => context.go('/marks'),
+                        style: _heroOutlineButtonStyle(),
                         child: const Text('The marks'),
                       ),
                       OutlinedButton(
                         onPressed: () => context.go('/about'),
+                        style: _heroOutlineButtonStyle(),
                         child: const Text('About'),
                       ),
                     ],
@@ -107,5 +115,21 @@ class _HomePageState extends State<HomePage> {
     if (sessionId.isNotEmpty) {
       context.go('/session/$sessionId');
     }
+  }
+
+  ButtonStyle _heroOutlineButtonStyle() {
+    return OutlinedButton.styleFrom(
+      foregroundColor: OracleColors.cream,
+      side: const BorderSide(color: OracleColors.rule, width: 1.1),
+      padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
+      textStyle: GoogleFonts.ebGaramond(fontSize: 19, fontWeight: FontWeight.w700),
+    ).copyWith(
+      overlayColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.hovered) || states.contains(WidgetState.pressed)) {
+          return OracleColors.gold.withValues(alpha: 0.16);
+        }
+        return null;
+      }),
+    );
   }
 }

@@ -126,6 +126,18 @@ Build GitHub Pages output into root `docs/`:
 
 Deploy is manual by pushing `main`; GitHub Pages serves from `main` branch `/docs`.
 
+## Project Folder Map
+
+- `src/neje_oracle/`: Python uploader, GUI supervisor, plotter daemon, FluidNC transport, SVG/G-code logic.
+- `public_gallery/`: Flutter source for the read-only public gallery.
+- `docs/`: built Flutter Web output served by GitHub Pages.
+- `docs/plans/`: working plans, fix notes, and design/update checklists.
+- `assets/symbols/`: canonical 8 base SVG symbols and scale config.
+- `assets/sessions/`: Mac mini uploader launcher only; raw copied sessions are ignored.
+- `firebase/`: Firestore/Storage rules and indexes.
+- `archive/`: old briefs, screenshots, and conversation exports.
+- `runtime/`, `spool/`, `sessions_public/`, logs, caches, audio, and zip files are local generated data and are ignored.
+
 ## Operating Modes
 
 - `TEST`: fake sessions, idle bank generation, dry-run G-code, no real FluidNC output.

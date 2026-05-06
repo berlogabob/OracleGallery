@@ -32,3 +32,4 @@ __pycache__/
 *.mp3
 *.flac
 *.zip
+hermes_conversation_*.json

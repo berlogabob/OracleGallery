@@ -28,15 +28,27 @@ class SessionRepository {
   Stream<List<SessionData>> watchVisibleSessions({int limit = 150}) {
     return _firestore
         .collection('sessions')
-        .where('status', isEqualTo: 'published')
-        .orderBy('createdAt', descending: true)
         .limit(limit)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs
+      final sessions = snapshot.docs
           .map(SessionData.fromDoc)
-          .where((session) => session.isPublicInLibrary)
-          .toList(growable: false);
+          .where((session) => session.isPublished && session.isPublicInLibrary)
+          .toList();
+      sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return sessions;
+    });
+  }
+
+  Stream<List<SessionData>> watchAllSessions({int limit = 300}) {
+    return _firestore
+        .collection('sessions')
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      final sessions = snapshot.docs.map(SessionData.fromDoc).toList();
+      sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return sessions;
     });
   }
 }

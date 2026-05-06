@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import 'pages/about_page.dart';
 import 'pages/cloth_page.dart';
+import 'pages/debug_sessions_page.dart';
 import 'pages/home_page.dart';
 import 'pages/marks_page.dart';
 import 'pages/session_receipt_page.dart';
@@ -33,6 +34,10 @@ class OracleGalleryApp extends StatelessWidget {
               ),
             ),
             GoRoute(path: '/library', redirect: (context, state) => '/cloth'),
+            GoRoute(
+              path: '/debug/sessions',
+              builder: (context, state) => DebugSessionsPage(firebaseReady: firebaseReady),
+            ),
             GoRoute(path: '/marks', builder: (context, state) => const MarksPage()),
             GoRoute(path: '/about', builder: (context, state) => const AboutPage()),
             GoRoute(

@@ -175,7 +175,12 @@ class _ClothToolbar extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                count,
+                Row(
+                  children: [
+                    Expanded(child: count),
+                    const _SecretDebugButton(),
+                  ],
+                ),
                 const SizedBox(height: 14),
                 lookup,
               ],
@@ -184,6 +189,8 @@ class _ClothToolbar extends StatelessWidget {
           return Row(
             children: [
               count,
+              const SizedBox(width: 10),
+              const _SecretDebugButton(),
               const SizedBox(width: 22),
               Expanded(child: lookup),
             ],
@@ -215,6 +222,35 @@ class _CountPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SecretDebugButton extends StatelessWidget {
+  const _SecretDebugButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Debug sessions',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(999),
+        onLongPress: () => context.go('/debug/sessions'),
+        onDoubleTap: () => context.go('/debug/sessions'),
+        child: const SizedBox(
+          width: 22,
+          height: 22,
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: OracleColors.rule,
+                shape: BoxShape.circle,
+              ),
+              child: SizedBox(width: 6, height: 6),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
