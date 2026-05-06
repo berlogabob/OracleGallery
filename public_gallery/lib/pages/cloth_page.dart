@@ -109,7 +109,8 @@ class _SessionStreamState extends State<_SessionStream> {
                 ),
               ),
             _ClothSurface(
-              sessions: sessions,
+              visibleCount: sessions.length,
+              highlighted: highlighted,
               highlightSessionId: widget.highlightSessionId,
             ),
           ],
@@ -267,109 +268,57 @@ class _LookupPanel extends StatelessWidget {
 }
 
 class _ClothSurface extends StatelessWidget {
-  const _ClothSurface({required this.sessions, required this.highlightSessionId});
+  const _ClothSurface({
+    required this.visibleCount,
+    required this.highlighted,
+    required this.highlightSessionId,
+  });
 
-  final List<SessionData> sessions;
+  final int visibleCount;
+  final bool highlighted;
   final String? highlightSessionId;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        final columns = width >= 1080 ? 8 : width >= 860 ? 7 : width >= 640 ? 5 : 3;
-        final cell = width / columns;
-        final rows = (sessions.length / columns).ceil().clamp(2, 1000);
-        final height = (rows * cell * 0.82) + 80;
-
-        return Container(
-          constraints: BoxConstraints(minHeight: height),
-          decoration: BoxDecoration(
-            color: OracleColors.paper,
-            border: Border.all(color: OracleColors.rule, width: 0.8),
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(child: CustomPaint(painter: _ClothWeavePainter())),
-              for (var index = 0; index < sessions.length; index++)
-                _ClothMark(
-                  session: sessions[index],
-                  index: index,
-                  columns: columns,
-                  cell: cell,
-                  highlighted: sessions[index].sessionId == highlightSessionId,
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ClothMark extends StatelessWidget {
-  const _ClothMark({
-    required this.session,
-    required this.index,
-    required this.columns,
-    required this.cell,
-    required this.highlighted,
-  });
-
-  final SessionData session;
-  final int index;
-  final int columns;
-  final double cell;
-  final bool highlighted;
-
-  @override
-  Widget build(BuildContext context) {
-    final row = index ~/ columns;
-    final column = index % columns;
-    final offsetX = row.isOdd ? cell * 0.44 : 0.0;
-    final jitterX = ((index * 37) % 17 - 8).toDouble();
-    final jitterY = ((index * 29) % 19 - 9).toDouble();
-    final size = cell * (highlighted ? 0.82 : 0.66);
-    final left = 28 + (column * cell) + offsetX + jitterX;
-    final top = 36 + (row * cell * 0.82) + jitterY;
-
-    return Positioned(
-      left: left,
-      top: top,
-      width: size,
-      height: size + 32,
-      child: Tooltip(
-        message: session.markName.isEmpty ? session.sessionId : session.markName,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(size),
-          onTap: () => context.go('/session/${session.sessionId}'),
-          child: Column(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: EdgeInsets.all(highlighted ? 6 : 10),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: highlighted ? OracleColors.gold : OracleColors.rule,
-                    width: highlighted ? 1.6 : 0.7,
-                  ),
-                  color: OracleColors.cream.withValues(alpha: highlighted ? 0.95 : 0.54),
-                ),
-                child: SymbolNetworkView(svgUrl: session.svgUrl, size: size - 22),
-              ),
-              if (highlighted) ...[
-                const SizedBox(height: 6),
+    return Container(
+      height: 420,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6DCC7),
+        border: Border.all(color: OracleColors.rule, width: 0.8),
+      ),
+      child: CustomPaint(
+        painter: _ClothPlaceholderPainter(
+          visibleCount: visibleCount,
+          highlighted: highlighted,
+        ),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+            decoration: BoxDecoration(
+              color: OracleColors.paper.withValues(alpha: 0.86),
+              border: Border.all(color: highlighted ? OracleColors.gold : OracleColors.rule, width: highlighted ? 1.2 : 0.7),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  'FOUND',
+                  'THE CLOTH',
                   style: GoogleFonts.cinzel(
-                    color: OracleColors.rust,
-                    fontSize: 9,
-                    letterSpacing: 2,
+                    color: highlighted ? OracleColors.rust : OracleColors.ink,
+                    fontSize: 13,
+                    letterSpacing: 4,
                   ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  highlighted && highlightSessionId != null
+                      ? 'Session found in the woven register'
+                      : '$visibleCount public marks woven into the register',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -377,18 +326,36 @@ class _ClothMark extends StatelessWidget {
   }
 }
 
-class _ClothWeavePainter extends CustomPainter {
+class _ClothPlaceholderPainter extends CustomPainter {
+  const _ClothPlaceholderPainter({required this.visibleCount, required this.highlighted});
+
+  final int visibleCount;
+  final bool highlighted;
+
   @override
   void paint(Canvas canvas, Size size) {
     final linePaint = Paint()
-      ..color = OracleColors.rule.withValues(alpha: 0.28)
+      ..color = OracleColors.rule.withValues(alpha: 0.42)
       ..strokeWidth = 0.6;
-    const step = 38.0;
+    const step = 32.0;
     for (var x = 0.0; x <= size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x + (size.height * 0.06), size.height), linePaint);
+      canvas.drawLine(Offset(x, 0), Offset(x + (size.height * 0.04), size.height), linePaint);
     }
     for (var y = 0.0; y <= size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y + (size.width * 0.018)), linePaint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y + (size.width * 0.012)), linePaint);
+    }
+
+    final markPaint = Paint()
+      ..color = (highlighted ? OracleColors.rust : OracleColors.goldDim).withValues(alpha: 0.38)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = highlighted ? 1.4 : 0.9;
+    final count = visibleCount.clamp(12, 72);
+    for (var index = 0; index < count; index++) {
+      final x = 28 + ((index * 61) % (size.width - 56).round()).toDouble();
+      final y = 26 + ((index * 43) % (size.height - 52).round()).toDouble();
+      final radius = 8 + ((index * 7) % 18).toDouble();
+      canvas.drawCircle(Offset(x, y), radius, markPaint);
+      canvas.drawLine(Offset(x - radius * 0.65, y), Offset(x + radius * 0.65, y + radius * 0.35), markPaint);
     }
   }
 
