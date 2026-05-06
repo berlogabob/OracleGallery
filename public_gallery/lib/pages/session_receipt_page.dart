@@ -150,8 +150,10 @@ class _Receipt extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.cinzel(color: OracleColors.goldDim, fontSize: 10, letterSpacing: 2.4),
               ),
-              const SizedBox(height: 22),
-              _SessionLinks(session: session),
+              if (session.qrImageUrl.isNotEmpty) ...[
+                const SizedBox(height: 22),
+                _QrImage(qrImageUrl: session.qrImageUrl),
+              ],
               const SizedBox(height: 22),
               OutlinedButton(
                 onPressed: () => context.go('/cloth?session=${Uri.encodeQueryComponent(session.sessionId)}'),
@@ -203,19 +205,13 @@ class _Receipt extends StatelessWidget {
   }
 }
 
-class _SessionLinks extends StatelessWidget {
-  const _SessionLinks({required this.session});
+class _QrImage extends StatelessWidget {
+  const _QrImage({required this.qrImageUrl});
 
-  final SessionData session;
+  final String qrImageUrl;
 
   @override
   Widget build(BuildContext context) {
-    final sessionUrl = session.sessionUrl.isNotEmpty ? session.sessionUrl : session.qrUrl;
-    final hasQrImage = session.qrImageUrl.isNotEmpty;
-    if (sessionUrl.isEmpty && !hasQrImage) {
-      return const SizedBox.shrink();
-    }
-
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -226,37 +222,27 @@ class _SessionLinks extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'SESSION LINK',
+            'QR RECEIPT',
             textAlign: TextAlign.center,
             style: GoogleFonts.cinzel(color: OracleColors.rust, fontSize: 10, letterSpacing: 3),
           ),
-          if (sessionUrl.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            SelectableText(
-              sessionUrl,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13),
-            ),
-          ],
-          if (hasQrImage) ...[
-            const SizedBox(height: 14),
-            Center(
-              child: SizedBox(
-                width: 96,
-                height: 96,
-                child: Image.network(
-                  session.qrImageUrl,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const StatusPanel(
-                      title: 'QR unavailable',
-                      message: 'The receipt link is still available above.',
-                    );
-                  },
-                ),
+          const SizedBox(height: 14),
+          Center(
+            child: SizedBox(
+              width: 96,
+              height: 96,
+              child: Image.network(
+                qrImageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const StatusPanel(
+                    title: 'QR unavailable',
+                    message: 'Open this receipt from the printed QR code.',
+                  );
+                },
               ),
             ),
-          ],
+          ),
         ],
       ),
     );

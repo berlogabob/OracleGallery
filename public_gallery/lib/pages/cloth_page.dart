@@ -108,28 +108,9 @@ class _SessionStreamState extends State<_SessionStream> {
                   message: 'Direct receipt links can open hidden or unpublished sessions, but the cloth shows only public real sessions.',
                 ),
               ),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 980 ? 4 : constraints.maxWidth > 680 ? 3 : 2;
-                return GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: sessions.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 0.74,
-                  ),
-                  itemBuilder: (context, index) {
-                    final session = sessions[index];
-                    return _SessionCard(
-                      session: session,
-                      highlighted: session.sessionId == widget.highlightSessionId,
-                    );
-                  },
-                );
-              },
+            _ClothSurface(
+              sessions: sessions,
+              highlightSessionId: widget.highlightSessionId,
             ),
           ],
         );
@@ -285,46 +266,132 @@ class _LookupPanel extends StatelessWidget {
   }
 }
 
-class _SessionCard extends StatelessWidget {
-  const _SessionCard({required this.session, required this.highlighted});
+class _ClothSurface extends StatelessWidget {
+  const _ClothSurface({required this.sessions, required this.highlightSessionId});
+
+  final List<SessionData> sessions;
+  final String? highlightSessionId;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final columns = width >= 1080 ? 8 : width >= 860 ? 7 : width >= 640 ? 5 : 3;
+        final cell = width / columns;
+        final rows = (sessions.length / columns).ceil().clamp(2, 1000);
+        final height = (rows * cell * 0.82) + 80;
+
+        return Container(
+          constraints: BoxConstraints(minHeight: height),
+          decoration: BoxDecoration(
+            color: OracleColors.paper,
+            border: Border.all(color: OracleColors.rule, width: 0.8),
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(child: CustomPaint(painter: _ClothWeavePainter())),
+              for (var index = 0; index < sessions.length; index++)
+                _ClothMark(
+                  session: sessions[index],
+                  index: index,
+                  columns: columns,
+                  cell: cell,
+                  highlighted: sessions[index].sessionId == highlightSessionId,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ClothMark extends StatelessWidget {
+  const _ClothMark({
+    required this.session,
+    required this.index,
+    required this.columns,
+    required this.cell,
+    required this.highlighted,
+  });
 
   final SessionData session;
+  final int index;
+  final int columns;
+  final double cell;
   final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () => context.go('/session/${session.sessionId}'),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: OracleColors.paper,
-          border: Border.all(color: highlighted ? OracleColors.gold : OracleColors.rule, width: highlighted ? 1.6 : 0.7),
-        ),
-        child: Column(
-          children: [
-            SymbolNetworkView(svgUrl: session.svgUrl, size: 132),
-            const SizedBox(height: 14),
-            Text(
-              session.markName.isEmpty ? 'UNNAMED MARK' : session.markName.toUpperCase(),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.cinzel(color: OracleColors.ink, fontSize: 12, letterSpacing: 1.6),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: Text(
-                session.oracleText,
-                textAlign: TextAlign.center,
-                maxLines: 5,
-                overflow: TextOverflow.fade,
-                style: Theme.of(context).textTheme.bodyMedium,
+    final row = index ~/ columns;
+    final column = index % columns;
+    final offsetX = row.isOdd ? cell * 0.44 : 0.0;
+    final jitterX = ((index * 37) % 17 - 8).toDouble();
+    final jitterY = ((index * 29) % 19 - 9).toDouble();
+    final size = cell * (highlighted ? 0.82 : 0.66);
+    final left = 28 + (column * cell) + offsetX + jitterX;
+    final top = 36 + (row * cell * 0.82) + jitterY;
+
+    return Positioned(
+      left: left,
+      top: top,
+      width: size,
+      height: size + 32,
+      child: Tooltip(
+        message: session.markName.isEmpty ? session.sessionId : session.markName,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(size),
+          onTap: () => context.go('/session/${session.sessionId}'),
+          child: Column(
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: EdgeInsets.all(highlighted ? 6 : 10),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: highlighted ? OracleColors.gold : OracleColors.rule,
+                    width: highlighted ? 1.6 : 0.7,
+                  ),
+                  color: OracleColors.cream.withValues(alpha: highlighted ? 0.95 : 0.54),
+                ),
+                child: SymbolNetworkView(svgUrl: session.svgUrl, size: size - 22),
               ),
-            ),
-          ],
+              if (highlighted) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'FOUND',
+                  style: GoogleFonts.cinzel(
+                    color: OracleColors.rust,
+                    fontSize: 9,
+                    letterSpacing: 2,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _ClothWeavePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final linePaint = Paint()
+      ..color = OracleColors.rule.withValues(alpha: 0.28)
+      ..strokeWidth = 0.6;
+    const step = 38.0;
+    for (var x = 0.0; x <= size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x + (size.height * 0.06), size.height), linePaint);
+    }
+    for (var y = 0.0; y <= size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y + (size.width * 0.018)), linePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
