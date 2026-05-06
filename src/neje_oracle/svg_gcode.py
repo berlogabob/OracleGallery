@@ -13,6 +13,22 @@ def symbol_diameter_for_cell(cell_diameter_mm: float) -> float:
     return max(0.0, cell_diameter_mm) * SYMBOL_FIT_RATIO
 
 
+def parse_cell_progress_markers(gcode: str) -> list[tuple[int, int]]:
+    """Return cell-start markers as ``(current_cell, total_cells)`` pairs."""
+    markers: list[tuple[int, int]] = []
+    for line in gcode.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("; cell-start "):
+            continue
+        raw = stripped.removeprefix("; cell-start ").strip()
+        try:
+            current, total = raw.split("/", 1)
+            markers.append((int(current), int(total)))
+        except ValueError:
+            continue
+    return markers
+
+
 def generate_sheet_gcode(
     items: list[SheetItem],
     placements: list[SheetPlacement],

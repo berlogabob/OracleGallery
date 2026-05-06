@@ -1,8 +1,6 @@
 name: public_gallery
-description: "A new Flutter project."
-# The following line prevents the package from being accidentally published to
-# pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+description: "Oracle public read-only gallery."
+publish_to: 'none'
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -32,28 +30,27 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
-  cloud_firestore: ^5.6.0
-  firebase_core: ^3.15.0
+  firebase_core: ^4.7.0
+  cloud_firestore: ^6.3.0
   flutter_svg: ^2.0.10+1
   go_router: ^15.1.2
   google_fonts: ^6.3.0
-  http: ^1.6.0
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
   uses-material-design: true
+  assets:
+    - ../assets/symbols/20260416_213514_plotter.svg
+    - ../assets/symbols/20260420_195415_plotter.svg
+    - ../assets/symbols/20260421_195713_plotter.svg
+    - ../assets/symbols/20260421_223735_plotter.svg
+    - ../assets/symbols/test_the_kind_soul_220047_plotter.svg
+    - ../assets/symbols/test_the_pitiful_story_215312_plotter.svg
+    - ../assets/symbols/test_the_shriek_220002_plotter.svg
+    - ../assets/symbols/test_the_thorns_215209_plotter.svg

@@ -1,32 +1,42 @@
-import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class SessionRepository {
-  final FirebaseFirestore _firestore;
+import '../models/session_data.dart';
 
+class SessionRepository {
   SessionRepository({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  Stream<DocumentSnapshot> getSessionStream(String sessionId) async* {
-    yield* _firestore.collection('sessions').doc(sessionId).snapshots();
+  final FirebaseFirestore _firestore;
+
+  Stream<SessionData?> watchSession(String sessionId) {
+    return _firestore.collection('sessions').doc(sessionId).snapshots().map((doc) {
+      if (!doc.exists) {
+        return null;
+      }
+      return SessionData.fromDoc(doc);
+    });
   }
 
-  Future<DocumentSnapshot> getSession(String sessionId) async {
-    try {
-      return await _firestore.collection('sessions').doc(sessionId).get();
-    } catch (e) {
-      return DocumentSnapshot(null, reference: null, error: e);
+  Future<SessionData?> fetchSession(String sessionId) async {
+    final doc = await _firestore.collection('sessions').doc(sessionId).get();
+    if (!doc.exists) {
+      return null;
     }
+    return SessionData.fromDoc(doc);
   }
 
-  Stream<QuerySnapshot> getVisibleSessionsStream() async* {
-    yield await _firestore
+  Stream<List<SessionData>> watchVisibleSessions({int limit = 150}) {
+    return _firestore
         .collection('sessions')
         .where('status', isEqualTo: 'published')
-        .where('visibleInLibrary', isEqualTo: true)
-        .where('origin', isNotEqualTo: 'test')
-        .orderBy('created_at', descending)
-        .limit(100)
-        .snapshots();
+        .orderBy('createdAt', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map(SessionData.fromDoc)
+          .where((session) => session.isPublicInLibrary)
+          .toList(growable: false);
+    });
   }
 }

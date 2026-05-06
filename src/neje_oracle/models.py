@@ -100,6 +100,8 @@ class SessionRecord:
     def to_manifest_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["created_at"] = self.created_at.isoformat()
+        payload["sessionUrl"] = self.qr_url
+        payload["qrImageUrl"] = self.public_qr_url
         payload["source_dir"] = str(self.source_dir)
         payload["svg_file"] = str(self.svg_file)
         payload["receipt_file"] = str(self.receipt_file)

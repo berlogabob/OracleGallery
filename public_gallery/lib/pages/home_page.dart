@@ -1,107 +1,111 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class HomePage extends StatelessWidget {
+import '../theme/oracle_theme.dart';
+import '../widgets/oracle_primitives.dart';
+
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final TextEditingController _sessionController = TextEditingController();
+
+  @override
+  void dispose() {
+    _sessionController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        color: const Color(0xFF1A1A1A),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'Oracle Gallery',
-              style: TextStyle(
-                color: const Color(0xFFC9A84C),
-                fontSize: 48,
-                fontFamily: 'Cinzel',
-                fontWeight: FontWeight.w700,
+    return OraclePage(
+      children: [
+        Container(
+          color: OracleColors.voidColor,
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 72),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 940),
+              child: Column(
+                children: [
+                  Text(
+                    'THE ORACLE',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.cinzelDecorative(
+                      color: OracleColors.gold,
+                      fontSize: 42,
+                      letterSpacing: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'A public cloth of generated marks, receipts, and printed fragments.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.ebGaramond(
+                      color: OracleColors.cream,
+                      fontSize: 22,
+                      fontStyle: FontStyle.italic,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 34),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 14,
+                    runSpacing: 14,
+                    children: [
+                      FilledButton(
+                        onPressed: () => context.go('/cloth'),
+                        child: const Text('Enter the cloth'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () => context.go('/marks'),
+                        child: const Text('The marks'),
+                      ),
+                      OutlinedButton(
+                        onPressed: () => context.go('/about'),
+                        child: const Text('About'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'Atmospheric intro text...',
-              style: TextStyle(
-                color: const Color(0xFFCCC5B8),
-                fontSize: 16,
-                fontFamily: 'EB Garamond',
-              ),
-            ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () {
-                // Navigate to cloth page
-                Navigator.pushNamed(context, '/cloth');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC9A84C),
-                foregroundColor: const Color(0xFF1A1A1A),
-                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-              child: const Text(
-                'Explore The Cloth',
-                style: TextStyle(
-                  color: const Color(0xFF1A1A1A),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Navigate to marks page
-                Navigator.pushNamed(context, '/marks');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFCCC5B8),
-                foregroundColor: const Color(0xFF1A1A1A),
-                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-              child: const Text(
-                'View The Marks',
-                style: TextStyle(
-                  color: const Color(0xFF1A1A1A),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Navigate to about page
-                Navigator.pushNamed(context, '/about');
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFCCC5B8),
-                foregroundColor: const Color(0xFF1A1A1A),
-                padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8.0),
-                ),
-              ),
-              child: const Text(
-                'About',
-                style: TextStyle(
-                  color: const Color(0xFF1A1A1A),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        OracleSection(
+          label: 'QR receipt',
+          title: 'Open a session directly from a printed receipt.',
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _sessionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Session ID',
+                    hintText: '20260428_183129',
+                  ),
+                  onSubmitted: _openSession,
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton(onPressed: () => _openSession(_sessionController.text), child: const Text('Open')),
+            ],
+          ),
+        ),
+      ],
     );
+  }
+
+  void _openSession(String value) {
+    final sessionId = value.trim();
+    if (sessionId.isNotEmpty) {
+      context.go('/session/$sessionId');
+    }
   }
 }

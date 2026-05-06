@@ -1,87 +1,210 @@
-# Firebase Setup for NejeDraw
+# Oracle Firebase Setup
 
-## Prerequisites
+Firebase is used for public receipt data, public SVG/TXT/QR assets, and real user plot jobs. It is not used to control idle/filler printing and the Flutter app is read-only.
 
-- Flutter SDK installed
-- Firebase project created
+## Project
 
-## 1. Install Firebase packages
+```text
+Project ID: oraclegallery
+Storage bucket: oraclegallery.firebasestorage.app
+Gallery URL: https://berlogabob.github.io/OracleGallery
+QR route: https://berlogabob.github.io/OracleGallery/#/session/<session_id>
+```
 
-Run the following command to install Firebase packages:
+Enable:
+
+- Cloud Firestore.
+- Firebase Storage.
+
+Not required for v1:
+
+- Firebase Auth.
+- Cloud Messaging.
+- Flutter client writes.
+
+## Python Admin Credentials
+
+Download the Firebase service account JSON and keep it outside git, for example:
+
+```text
+/Users/berloga/.oracle/secrets/oraclegallery-firebase-adminsdk.json
+```
+
+Set the Python service environment:
 
 ```bash
-flutter pub add firebase_core
-flutter pub add cloud_firestore
-flutter pub add firebase_auth
-flutter pub add firebase_storage
+NEJE_FIREBASE_PROJECT_ID=oraclegallery
+NEJE_FIREBASE_STORAGE_BUCKET=oraclegallery.firebasestorage.app
+NEJE_FIREBASE_CREDENTIALS=/Users/berloga/.oracle/secrets/oraclegallery-firebase-adminsdk.json
+NEJE_GALLERY_BASE_URL=https://berlogabob.github.io/OracleGallery
 ```
 
-## 2. Configure Firebase for iOS
+The uploader and plotter queue worker use the Admin SDK with this service account. Do not put the service account file in `public_gallery`, `docs`, or any committed folder.
 
-1. In Firebase Console, go to Project Settings
-2. Add iOS app with bundle ID `com.example.nejedraw`
-3. Download `GoogleService-Info.plist`
-4. Place it in `ios/Runner/`
-5. Add the following to `ios/Runner/Info.plist`:
+## Flutter Web Config
 
-```xml
-<key>FirebaseAppDelegateProxyEnabled</key>
-<false/>
+The public web config lives in:
+
+```text
+public_gallery/lib/firebase_config.dart
 ```
 
-## 3. Configure Firebase for Android
+Current web app values:
 
-1. In Firebase Console, go to Project Settings
-2. Add Android app with package name `com.example.neje_draw`
-3. Download `google-services.json`
-4. Place it in `android/app/`
-5. Add the following to `android/build.gradle`:
+```dart
+const FirebaseOptions(
+  apiKey: 'AIzaSyDqBzqcDefYypWiu6vC15WVQVlisgMypIg',
+  authDomain: 'oraclegallery.firebaseapp.com',
+  projectId: 'oraclegallery',
+  storageBucket: 'oraclegallery.firebasestorage.app',
+  messagingSenderId: '690305000229',
+  appId: '1:690305000229:web:63d9d74d5030dbaefcf0cc',
+  measurementId: 'G-2FXB448E74',
+)
+```
 
-```gradle
-dependencies {
-  implementation 'com.google.firebase:firebase-core:19.0.0'
-  implementation 'com.google.firebase:firebase-firestore:24.0.0'
-  implementation 'com.google.firebase:firebase-auth:23.0.0'
-  implementation 'com.google.firebase:firebase-storage:11.8.0'
+This key is public Firebase web config, not an Admin credential. Public gallery writes remain disabled by rules and by application code.
+
+## Firestore Contract
+
+Public session document:
+
+```text
+sessions/{session_id}
+```
+
+Required public fields:
+
+```text
+sessionId
+createdAt
+status
+plotStatus
+markName
+oracleText
+themes
+measures
+svgUrl
+receiptUrl
+sessionUrl
+qrUrl
+qrImageUrl
+assetUrls.svg
+assetUrls.receipt
+assetUrls.qr
+assetPaths.svg
+assetPaths.receipt
+assetPaths.qr
+origin
+tags
+visibleInLibrary
+```
+
+`sessionUrl` and `qrUrl` are page links. `qrImageUrl` and `assetUrls.qr` are PNG Storage URLs. Session documents are public-readable because direct QR links must show a publishing state instead of a permission error; no private photos, audio, or transcripts may be written to these documents.
+
+Print job document:
+
+```text
+plot_jobs/{session_id}
+```
+
+Important fields:
+
+```text
+sessionId
+createdAt
+status
+priority
+queue
+svgStoragePath
+svgUrl
+origin
+tags
+visibleInQueue
+```
+
+Test sessions:
+
+```text
+origin=test
+tags=["test", "generated"]
+visibleInLibrary=false
+```
+
+Real sessions:
+
+```text
+origin=oracle
+tags=["real"]
+visibleInLibrary=true
+```
+
+## Rules
+
+Firestore v1 rules:
+
+```javascript
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /plot_jobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
 }
 ```
 
-Add the following to `android/app/build.gradle`:
+Storage v1 rules:
 
-```gradle
-apply plugin: 'com.google.gms.google-services'
+```javascript
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /sessions/{sessionId}/{fileName} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
 ```
 
-## 4. Set up environment variables
-
-Create a `.env` file in the project root with the following content:
-
-```env
-FIREBASE_API_KEY=your_api_key_here
-FIREBASE_APP_ID=your_app_id_here
-FIREBASE_PROJECT_ID=your_project_id_here
-FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id_here
-FIREBASE_MEASUREMENT_ID=your_measurement_id_here
-```
-
-Replace `your_api_key_here`, `your_app_id_here`, etc. with actual values from Firebase Console.
-
-## 5. Run the application
+Deploy rules from the repository root:
 
 ```bash
-flutter pub get
-flutter run
+npx firebase-tools deploy --project oraclegallery --config firebase/firebase.json --only firestore:rules,firestore:indexes,storage
 ```
 
-## Troubleshooting
+If deployment fails with `serviceusage.services.use`, log in to the Firebase CLI with the Google account that owns the project or grant that account Service Usage Consumer/Owner on the Google Cloud project.
 
-- Make sure you have the latest Flutter SDK
-- Check Firebase Console for any configuration errors
-- Verify that the `.env` file is in the project root
-- Ensure that the Firebase configuration files are in the correct locations
+## Verification
 
-## Additional Notes
+Run:
 
-- For iOS, you may need to adjust the `GoogleService-Info.plist` file
-- For Android, ensure that the `google-services.json` file is correctly placed
-- Test the application on both iOS and Android devices
+```bash
+uv run pytest
+cd public_gallery && flutter analyze
+```
+
+Manual checks:
+
+- Upload one session folder with SVG/TXT/READY.
+- Confirm Storage has `artwork.svg`, `artwork_raw.svg`, `receipt.txt`, `qr.png`, `manifest.json`.
+- Confirm no visitor PNG/audio/transcript is uploaded.
+- Confirm Firestore `sessions/{id}.sessionUrl` opens `/#/session/<id>`.
+- Confirm Firestore `sessions/{id}.qrImageUrl` opens the PNG.
+- Confirm `plot_jobs/{id}` exists for a real user session.

@@ -305,6 +305,7 @@ The public routes are:
 
 ```text
 /#/
+/#/cloth
 /#/about
 /#/library
 /#/session/<session_id>
@@ -315,6 +316,13 @@ QR codes point to:
 ```text
 https://berlogabob.github.io/OracleGallery/#/session/<session_id>
 ```
+
+Firestore uses separate QR fields:
+
+- `sessionUrl`: public receipt page link.
+- `qrUrl`: backward-compatible public receipt page link.
+- `qrImageUrl`: Firebase Storage URL for `qr.png`.
+- `assetUrls.qr`: same QR PNG Storage URL.
 
 ## 9. Firebase Setup and Deploy
 
@@ -354,6 +362,8 @@ Check Firebase:
 - Storage has `sessions/<session_id>/qr.png`.
 - Storage has `sessions/<session_id>/manifest.json`.
 - Firestore has `sessions/<session_id>`.
+- `sessions/<session_id>.sessionUrl` opens the receipt page.
+- `sessions/<session_id>.qrImageUrl` opens the QR PNG.
 - Firestore has `plot_jobs/<session_id>`.
 
 Plotter dry-run path:

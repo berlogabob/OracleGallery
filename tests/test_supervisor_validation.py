@@ -1,145 +1,137 @@
-"""Тесты для валидации перед запуском в supervisor.py."""
 from pathlib import Path
-from random import Random
 
+from neje_oracle.config import OracleSupervisorSettings, PlotterSettings
+from neje_oracle.models import (
+    ComponentStatus,
+    FluidNCCommandResult,
+    FluidNCControllerState,
+    FluidNCProbeResult,
+    FluidNCState,
+    PlotterReadinessState,
+    PreflightCheck,
+    PreflightLevel,
+    PreflightResult,
+    SystemMode,
+)
 from neje_oracle.supervisor import SupervisorService
-from neje_oracle.config import PlotterSettings
-from neje_oracle.runtime_store import RuntimeStore
-from neje_oracle.svg_gcode import generate_sheet_gcode
-from neje_oracle.models import SheetItem, SheetPlacement, ComponentStatus, PlotStatus
 
-def test_start_system_fails_without_gcode_markers(tmp_path: Path) -> None:
-    """Проверяем, что start_system не запустится без G-code маркеров."""
-    svg_path = tmp_path / "test.svg"
-    svg_path.write_text(
+
+class EmptyRemote:
+    def claim_next_plot_job(self, consumer_id: str, *, run_started_at=None):
+        return None
+
+    def skip_pending_before(self, cutoff, *, reason: str = "before_run_started_at") -> int:
+        return 0
+
+
+class DryTransport:
+    def __init__(self, settings: PlotterSettings) -> None:
+        self.settings = settings
+
+    def probe(self, *, timeout_seconds: float = 2.0):
+        return FluidNCProbeResult(
+            http_online=True,
+            telnet_online=True,
+            ok=True,
+            message="fake fluidnc idle",
+            controller=FluidNCControllerState(state=FluidNCState.IDLE),
+        )
+
+    def feed_hold(self):
+        return FluidNCCommandResult(ok=True, command="!", response_lines=["sent"])
+
+
+class BusyTransport(DryTransport):
+    def probe(self, *, timeout_seconds: float = 2.0):
+        return FluidNCProbeResult(
+            http_online=True,
+            telnet_online=True,
+            ok=True,
+            message="fake fluidnc run",
+            controller=FluidNCControllerState(state=FluidNCState.RUN),
+        )
+
+
+def _plotter_settings(tmp_path: Path) -> PlotterSettings:
+    placeholders = tmp_path / "placeholders"
+    placeholders.mkdir(parents=True)
+    (placeholders / "idle.svg").write_text(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
-        "<path d='M10,10 L90,10 L90,90 L10,90 Z' stroke='black' fill='none'/>"
+        "<path d='M10,10 L90,90' stroke='black' fill='none'/>"
         "</svg>",
         encoding="utf-8",
     )
-
-    items = [SheetItem(source_kind="user", session_id="test", title="Test", svg_path=svg_path)]
-    placements = [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)]
-
-    gcode = generate_sheet_gcode(
-        items,
-        placements,
-        sample_step_mm=20,
-        cell_diameter_mm=40,
-        travel_rate=5000,
-        draw_rate=1800,
-        pen_up_command="M5",
-        pen_down_command="M3 S15",
-        include_rings=False,
+    return PlotterSettings(
+        db_path=tmp_path / "runtime" / "plotter.sqlite3",
+        placeholder_root=placeholders,
+        spool_root=tmp_path / "spool",
+        dry_run=True,
     )
 
-    # Удаляем маркеры
-    gcode_without_markers = "".join(
-        line for line in gcode.splitlines() if "; cell-start" not in line and "; cell-end" not in line
-    )
-    gcode_path = tmp_path / "test.gcode"
-    gcode_path.write_text(gcode_without_markers, encoding="utf-8")
 
-    runtime_store = RuntimeStore()
-    runtime_store.set_component("plotter", ComponentStatus.RUNNING, message="Running")
-    runtime_store.set_component("fluidnc", ComponentStatus.RUNNING, message="Connected")
-
-    supervisor = SupervisorService(
-        settings=PlotterSettings(),
-        runtime_store=runtime_store,
-        gcode_file=str(gcode_path),
+def _supervisor(tmp_path: Path, transport_cls=DryTransport) -> SupervisorService:
+    return SupervisorService(
+        settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3"),
+        plotter_settings=_plotter_settings(tmp_path),
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda settings: transport_cls(settings),  # type: ignore[arg-type]
     )
 
-    try:
-        supervisor.start_system()
-        assert False, "Should have raised an exception"
-    except RuntimeError as e:
-        assert "G-code file missing cell markers" in str(e)
 
-def test_start_system_fails_without_fluidnc_connection(tmp_path: Path) -> None:
-    """Проверяем, что start_system не запустится без подключения к FluidNC."""
-    svg_path = tmp_path / "test.svg"
-    svg_path.write_text(
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
-        "<path d='M10,10 L90,10 L90,90 L10,90 Z' stroke='black' fill='none'/>"
-        "</svg>",
-        encoding="utf-8",
+def _save_ok_preflight_and_ready(supervisor: SupervisorService) -> None:
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "idle")])
+    )
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
     )
 
-    items = [SheetItem(source_kind="user", session_id="test", title="Test", svg_path=svg_path)]
-    placements = [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)]
 
-    gcode = generate_sheet_gcode(
-        items,
-        placements,
-        sample_step_mm=20,
-        cell_diameter_mm=40,
-        travel_rate=5000,
-        draw_rate=1800,
-        pen_up_command="M5",
-        pen_down_command="M3 S15",
-        include_rings=False,
+def test_start_print_blocked_without_preflight(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
     )
 
-    gcode_path = tmp_path / "test.gcode"
-    gcode_path.write_text(gcode, encoding="utf-8")
+    state = supervisor.start_print(SystemMode.TEST)
 
-    runtime_store = RuntimeStore()
-    runtime_store.set_component("plotter", ComponentStatus.RUNNING, message="Running")
-    # FluidNC не подключен
+    assert state.status == ComponentStatus.WARNING
+    assert "preflight" in state.message.lower()
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
 
-    supervisor = SupervisorService(
-        settings=PlotterSettings(),
-        runtime_store=runtime_store,
-        gcode_file=str(gcode_path),
+
+def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "idle")])
     )
 
-    try:
-        supervisor.start_system()
-        assert False, "Should have raised an exception"
-    except RuntimeError as e:
-        assert "FluidNC not connected" in str(e)
+    state = supervisor.start_print(SystemMode.TEST)
 
-def test_start_system_fails_without_plotter_ready(tmp_path: Path) -> None:
-    """Проверяем, что start_system не запустится, если плоттер не готов."""
-    svg_path = tmp_path / "test.svg"
-    svg_path.write_text(
-        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
-        "<path d='M10,10 L90,10 L90,90 L10,90 Z' stroke='black' fill='none'/>"
-        "</svg>",
-        encoding="utf-8",
-    )
+    assert state.status == ComponentStatus.WARNING
+    assert "work zero" in state.message.lower()
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
 
-    items = [SheetItem(source_kind="user", session_id="test", title="Test", svg_path=svg_path)]
-    placements = [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)]
 
-    gcode = generate_sheet_gcode(
-        items,
-        placements,
-        sample_step_mm=20,
-        cell_diameter_mm=40,
-        travel_rate=5000,
-        draw_rate=1800,
-        pen_up_command="M5",
-        pen_down_command="M3 S15",
-        include_rings=False,
-    )
+def test_real_print_blocked_without_arm(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path)
+    _save_ok_preflight_and_ready(supervisor)
 
-    gcode_path = tmp_path / "test.gcode"
-    gcode_path.write_text(gcode, encoding="utf-8")
+    state = supervisor.start_print(SystemMode.EXHIBITION_REAL)
 
-    runtime_store = RuntimeStore()
-    runtime_store.set_component("fluidnc", ComponentStatus.RUNNING, message="Connected")
-    # Плоттер не готов
+    assert state.status == ComponentStatus.WARNING
+    assert "armed" in state.message.lower()
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
 
-    supervisor = SupervisorService(
-        settings=PlotterSettings(),
-        runtime_store=runtime_store,
-        gcode_file=str(gcode_path),
-    )
 
-    try:
-        supervisor.start_system()
-        assert False, "Should have raised an exception"
-    except RuntimeError as e:
-        assert "Plotter not ready" in str(e)
+def test_real_print_blocked_when_fluidnc_not_idle(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path, BusyTransport)
+    _save_ok_preflight_and_ready(supervisor)
+    supervisor.runtime_store.save_real_fluidnc_armed(True)
+
+    state = supervisor.start_print(SystemMode.EXHIBITION_REAL)
+
+    assert state.status == ComponentStatus.WARNING
+    assert "fluidnc" in state.message.lower()
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
+    assert supervisor.runtime_store.load_real_fluidnc_armed() is False

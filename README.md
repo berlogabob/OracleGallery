@@ -1,264 +1,135 @@
-# Neje Oracle Orchestrator
+# Oracle Gallery
 
-This repository contains the local uploader, public Flutter gallery, plotter daemon, and test tooling for the Oracle exhibition system.
+Local exhibition system for TouchDesigner session folders, Firebase publication, a read-only Flutter Web receipt gallery, and FluidNC plotter output.
 
 ## Architecture
 
-- Oracle Mac mini: TouchDesigner writes finished session folders; `neje-uploader-agent` lets the main GUI start/stop/monitor uploads to Firebase.
-- Public web: `public_gallery/` is Flutter Web, built into root `docs/` for GitHub Pages.
-- Plotter MacBook: `neje-gui` is the main supervisor. It starts/stops the local plotter daemon, controls print state, previews sheets, and monitors Mac mini uploader/Firebase/FluidNC.
-- Test workflow: `neje-gui` in `TEST` mode creates fake Oracle sessions from the 8 base symbols, so Firebase upload and print queue behavior can be tested without running TouchDesigner.
-- Operator GUI: `neje-gui` opens a local NiceGUI browser panel for generator controls, layout preview, scale correction, idle bank generation, preflight, logs, and plotter status.
+- Oracle Mac mini: runs TouchDesigner and the lightweight uploader agent only.
+- MacBook operator station: runs `neje-gui`, the main supervisor for plotter control, preflight, logs, layout, scale, and test generation.
+- Firebase: stores public session documents, public SVG/TXT/QR assets, and real user print jobs.
+- Flutter Web: static GitHub Pages app at `https://berlogabob.github.io/OracleGallery/`, read-only against Firestore.
+- Plotter/FluidNC: controlled locally from `neje-gui`; real output is disabled until preflight, work zero, ready check, and explicit arm.
 
-The TouchDesigner computer should only run TouchDesigner and the lightweight uploader. Plot orchestration stays on the plotter MacBook.
+## Session Contract
 
-## Session contract
-
-Each finished real or generated session folder must look like:
+TouchDesigner writes one folder per visitor:
 
 ```text
 sessions_raw/<session_id>/
   <session_id>_plotter.svg
   <session_id>_receipt.txt
-  metadata.json   # optional
-  READY           # optional but recommended
+  READY
 ```
 
-The uploader ignores visitor photos, audio, transcript files, and `*_visitor.png`. It publishes normalized `artwork.svg`, raw backup `artwork_raw.svg`, `receipt.txt`, `qr.png`, and `manifest.json`. It also reads `session_log.csv` from the sessions root for `intensity`, `instability`, and `confidence`.
+Ignored by the public pipeline:
+
+```text
+*_visitor.png
+*.wav
+transcripts
+raw audio
+```
+
+The uploader publishes only:
+
+```text
+sessions/<session_id>/artwork.svg
+sessions/<session_id>/artwork_raw.svg
+sessions/<session_id>/receipt.txt
+sessions/<session_id>/qr.png
+sessions/<session_id>/manifest.json
+```
+
+QR deep link:
+
+```text
+https://berlogabob.github.io/OracleGallery/#/session/<session_id>
+```
+
+Firestore distinguishes the route and image:
+
+- `sessionUrl`: receipt page deep link.
+- `qrUrl`: backward-compatible receipt page deep link.
+- `qrImageUrl`: Firebase Storage URL for `qr.png`.
+- `assetUrls.qr`: same QR PNG Storage URL.
 
 ## Quick Start
 
-Install dependencies with `uv`:
+Install dependencies from the repo root:
 
 ```bash
-uv sync
+uv sync --extra dev
+cd public_gallery && flutter pub get
 ```
 
-Run the central operator GUI on the MacBook:
+Start the main operator GUI:
 
 ```bash
 uv run neje-gui
 ```
 
-On the real TouchDesigner Mac mini, launch exactly one file from the real sessions folder:
+Double-click launcher:
+
+```text
+start_oracle_gui.command
+```
+
+Mac mini launcher:
 
 ```text
 assets/sessions/START_ORACLE_UPLOADER.command
 ```
 
-It performs setup if needed and starts only `neje-uploader-agent`. For developer terminal debugging, the equivalent command is:
+The Mac mini launcher should be the only operator action on the TouchDesigner computer. It starts the uploader agent; generation and plotter control stay in the MacBook GUI.
 
-```bash
-uv run neje-uploader-agent
-```
+## Firebase
 
-Recommended operator flow:
-
-1. Start `assets/sessions/START_ORACLE_UPLOADER.command` on the Mac mini.
-2. Start `neje-gui` on the plotter/operator MacBook.
-3. Select one GUI mode: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
-4. Press `START SYSTEM`.
-5. In `Plotter Console`, press `Connect / Probe`, then `Preflight`.
-6. Jog the machine to the upper-left work origin, press `Set Work Zero`, then `Ready Check`.
-7. Use `EXHIBITION DRY` for normal queue/dry-run checks.
-8. Use `EXHIBITION REAL` only after preflight has no critical failures, then press `Arm Real`, then `Start Print`.
-
-GUI modes:
-
-- `TEST`: fake sessions, idle bank generation, preview, and dry-run only. Physical FluidNC output is blocked.
-- `EXHIBITION DRY`: real Mac mini/Firebase/queue flow, but sheets are written to local dry-run/spool only.
-- `EXHIBITION REAL`: real queue and real FluidNC output. This mode requires preflight and explicit arming every time.
-
-FluidNC control:
-
-- Configure the plotter with `NEJE_PLOTTER_FLUIDNC_HTTP_URL=http://10.198.21.74` and `NEJE_PLOTTER_FLUIDNC_TELNET_HOST=10.198.21.74`.
-- The GUI `Connect / Probe` action verifies both WebUI/HTTP and Telnet, then reads `?` status and `$G` modal state.
-- WebUI online is not enough for real sending. Real G-code streaming requires Telnet port `23` and an `Idle` controller state.
-- GUI jog/homing controls use FluidNC commands: `$H`, `$H=X`, `$H=Y`, `$X`, `$J=G91 G21 ...`, realtime `!`, `~`, and `Ctrl-X`.
-- `EMERGENCY STOP` is software feed hold `!`; keep a physical emergency stop/power cut available.
-- Printing is row-based: the daemon groups each sheet into rows, claims user jobs before every row, fills remaining row cells with idle symbols, and writes/sends `spool/<sheet>_row_XX.gcode`. Material reload is still sheet-based in v1.
-- `START SYSTEM` creates a run baseline timestamp. Older pending Firebase jobs are tagged `baseline_skipped`, hidden from the queue, and never printed in the new run.
-- `START PRINT` is blocked until preflight passed, work zero is set, and `Ready Check` passed. In `EXHIBITION REAL`, it also requires explicit `Arm Real`.
-- TinyBee Z-servo support is configurable with `NEJE_PLOTTER_USE_Z_SERVO=true`, `NEJE_PLOTTER_Z_DOWN_MM=0`, `NEJE_PLOTTER_Z_UP_MM=25`, and `NEJE_PLOTTER_WORK_ZERO_COMMAND="G10 L20 P1 X0 Y0 Z0"`.
-- Preflight validates `assets/tinybee.json` by default: board `MKS TinyBee V1.0 XXYYZ`, Telnet 23, X/Y travel, Z servo travel, and X/Y single-axis homing.
-
-Developer-only direct services are still available for debugging:
-
-```bash
-uv run neje-uploader
-uv run neje-plotter
-```
-
-Developer-only CLI for fake sessions remains available, but operators should use the GUI `TEST` mode instead:
-
-```bash
-uv run neje-generate-sessions --mode user --count 1
-```
-
-Developer-only CLI for local idle/filling symbols also remains available; the operator path is GUI `TEST` mode:
-
-```bash
-uv run neje-generate-sessions --mode idle --count 8
-```
-
-Normalize already uploaded Firebase session SVGs in place, without writing first:
-
-```bash
-uv run neje-normalize-firebase-sessions --dry-run --limit 10
-```
-
-The legacy plotter daemon serves an operator dashboard on `http://localhost:8765/` by default. The preferred exhibition control path is `neje-gui`, which starts and supervises the local daemon directly.
-
-## Double-click launchers for macOS
-
-Use these files directly from Finder:
-
-- `assets/sessions/START_ORACLE_UPLOADER.command` is the only file that should be placed in or launched from the real Mac mini TouchDesigner sessions folder. It performs setup if needed and starts only `neje-uploader-agent`.
-- `start_uploader_agent.command` is a developer/root launcher for the same uploader agent, not the exhibition Mac mini operator path.
-- `start_plotter_daemon.command` is a developer/backup launcher on the MacBook that drives the plotter.
-- `start_oracle_gui.command` for the main supervised operator GUI.
-
-Matching `.sh` files are included for Terminal/manual use. The launchers:
-
-- enter the project folder automatically,
-- load `.env` if it exists,
-- check the required Firebase paths and folders before startup,
-- keep the Terminal window open on failure so the operator can read the error.
-
-Before using the double-click launchers, create a real `.env` from `.env.example` on each machine and fill in the machine-specific paths.
-
-If you want machine-specific templates, start from:
-
-- `.env.oracle.example` for the Mac mini uploader machine.
-- `.env.plotter.example` for the MacBook plotter machine.
-
-Detailed operator instructions are in `RUNBOOK.md`.
-
-## Project folders
-
-- `src/neje_oracle/` Python services, Firebase integration, plotting pipeline, launch scripts.
-- `public_gallery/` Flutter Web public gallery for GitHub Pages.
-- `docs/` built Flutter Web output served by GitHub Pages from `main`.
-- `firebase/` Firestore/Storage rules and Firestore indexes.
-- `assets/symbols/` eight local idle/filling SVG symbols used by the plotter daemon.
-- `assets/symbols/symbol_scales.json` manual per-symbol scale multipliers used by the test generator, uploader normalization, and Firebase reprocessing.
-- `assets/generated_idle_symbols/` generated mark-only idle/filling SVGs; print rings are added later by G-code.
-- `archive/` old briefing artifacts and reference files that are not part of the runtime system.
-
-## GitHub Pages
-
-This repository is designed for GitHub Pages configured as:
-
-- branch: `main`
-- folder: `/docs`
-
-Build the gallery locally before pushing:
-
-```bash
-./scripts/build_gallery_docs.sh
-```
-
-The build script writes Flutter output into `docs/` and creates `.nojekyll`.
-The runtime Firebase web config is `docs/firebase-config.json`. Firebase Web config is public client configuration, so it can be committed. Do not commit the Python service account JSON.
-
-## Firebase data model
-
-- `sessions/{session_id}`: public session metadata and asset locations for Flutter Web.
-- `plot_jobs/{session_id}`: print queue documents claimed by the MacBook daemon.
-
-The uploader writes both documents. The plotter daemon only claims and updates `plot_jobs`, while mirroring `plotStatus` onto `sessions/{session_id}`.
-
-## SVG normalization
-
-All new generated and uploaded session SVGs are converted to a canonical fixed canvas:
+Project:
 
 ```text
-viewBox="0 0 1000 1000"
-data-neje-normalized="true"
-data-neje-scale="<0.3..5.0>"
+oraclegallery
 ```
 
-The fixed viewport is intentional. Scale values above `1.0` may overlap neighbouring cells and can produce G-code outside the packing circle; this is allowed for visual/print calibration. Legacy non-normalized SVG files are still bbox-fitted safely by the G-code fallback.
-
-## Important Environment Variables
-
-- `NEJE_FIREBASE_PROJECT_ID`, `NEJE_FIREBASE_STORAGE_BUCKET`, `NEJE_FIREBASE_CREDENTIALS`: Firebase Admin access for Python services.
-- `NEJE_GALLERY_BASE_URL`: public GitHub Pages URL used in QR codes.
-- `NEJE_ORACLE_RUNTIME_DB_PATH`: shared local supervisor/runtime SQLite used by GUI and plotter.
-- `NEJE_ORACLE_LOGS_ROOT`: local folder for GUI/supervisor/preflight logs.
-- `NEJE_MACMINI_AGENT_URL`: URL of the Mac mini uploader agent, for example `http://macmini.local:8790`.
-- `NEJE_UPLOADER_SESSION_ROOT`: folder watched by the uploader and default target for generated user sessions.
-- `NEJE_UPLOADER_AGENT_HOST`, `NEJE_UPLOADER_AGENT_PORT`: bind address for `neje-uploader-agent` on the Mac mini.
-- `NEJE_PLOTTER_PLACEHOLDER_ROOT`: idle/filling symbol folder; `start_plotter_daemon.sh` prefers `assets/generated_idle_symbols` when it exists, then falls back to `assets/symbols`.
-- `NEJE_PLOTTER_CELL_DIAMETER_MM`: physical packing cell diameter and the visible cell size in the operator preview.
-- `NEJE_PLOTTER_CELL_GAP_MM`: physical empty distance between neighbouring cell circles.
-- `NEJE_PLOTTER_USE_Z_SERVO`: when `true`, G-code uses Z moves for pen up/down instead of `NEJE_PLOTTER_PEN_UP/PEN_DOWN`.
-- `NEJE_PLOTTER_Z_DOWN_MM`, `NEJE_PLOTTER_Z_UP_MM`, `NEJE_PLOTTER_Z_FEED_MM_MIN`: TinyBee servo Z positions and feed.
-- `NEJE_PLOTTER_WORK_ZERO_COMMAND`: command used by GUI `Set Work Zero`.
-- `NEJE_PLOTTER_TINYBEE_CONFIG_PATH`: FluidNC/TinyBee JSON export used by preflight hardware validation.
-- `NEJE_PLOTTER_LAYOUT_MODE`: `hex` or `grid`.
-- `NEJE_GUI_HOST`, `NEJE_GUI_PORT`: local NiceGUI bind address, default `127.0.0.1:8787`.
-
-## Verification
+Required environment values for Python services:
 
 ```bash
+NEJE_FIREBASE_PROJECT_ID=oraclegallery
+NEJE_FIREBASE_STORAGE_BUCKET=oraclegallery.firebasestorage.app
+NEJE_FIREBASE_CREDENTIALS=/absolute/path/to/serviceAccountKey.json
+NEJE_GALLERY_BASE_URL=https://berlogabob.github.io/OracleGallery
+```
+
+Flutter uses the web config in `public_gallery/lib/firebase_config.dart`. The public app does not use Firebase Auth, does not use Firebase Storage SDK, and never writes to Firebase.
+
+## Main Commands
+
+Run all Python checks:
+
+```bash
+uv run python -m py_compile src/neje_oracle/*.py
 uv run pytest
-cd public_gallery && flutter analyze
+```
+
+Run Flutter checks:
+
+```bash
+cd public_gallery
+flutter analyze
+flutter build web --base-href /OracleGallery/
+```
+
+Build GitHub Pages output into root `docs/`:
+
+```bash
 ./scripts/build_gallery_docs.sh
 ```
 
-The current GUI/supervisor tests cover mode mapping, preflight behavior, real FluidNC safety gates, runtime store persistence, GUI settings migration, plotter runtime config handoff, uploader agent control, FluidNC probe/ack streaming/control commands, and SVG/G-code helpers.
+Deploy is manual by pushing `main`; GitHub Pages serves from `main` branch `/docs`.
 
+## Operating Modes
 
-## Firebase Integration
-# NejeDraw
+- `TEST`: fake sessions, idle bank generation, dry-run G-code, no real FluidNC output.
+- `EXHIBITION DRY`: real uploader/session queue, dry-run/spool only.
+- `EXHIBITION REAL`: real uploader/session queue and real FluidNC output, gated by preflight, work zero, ready check, and `ARM REAL FLUIDNC`.
 
-## Firebase Integration
-
-To integrate Firebase with this Flutter application, follow these steps:
-
-### 1. Set up Firebase project
-
-- Go to [Firebase Console](https://console.firebase.google.com/)
-- Create a new project or select an existing one
-- Enable Firestore and Storage
-
-### 2. Add Firebase configuration
-
-Create a `.env` file in the project root with the following variables:
-
-```env
-FIREBASE_API_KEY=your_api_key_here
-FIREBASE_APP_ID=your_app_id_here
-FIREBASE_PROJECT_ID=your_project_id_here
-FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id_here
-FIREBASE_MEASUREMENT_ID=your_measurement_id_here
-```
-
-Replace `your_api_key_here`, `your_app_id_here`, etc. with actual values from Firebase Console.
-
-### 3. Install Firebase packages
-
-Run the following command to install Firebase packages:
-
-```bash
-flutter pub add firebase_core
-flutter pub add cloud_firestore
-flutter pub add firebase_auth
-```
-
-### 4. Configure Firebase for iOS and Android
-
-Follow the Firebase documentation to add the necessary configuration files:
-
-- `GoogleService-Info.plist` for iOS
-- `google-services.json` for Android
-
-### 5. Run the application
-
-```bash
-flutter pub get
-flutter run
-```
-
-The application will use Firebase for authentication, data storage, and file uploads.
+`STOP AFTER SHEET` is safe and waits for the current row/sheet boundary. `EMERGENCY STOP` sends FluidNC feed hold `!`, disables print, and disarms real mode, but it is not a replacement for a physical emergency stop.

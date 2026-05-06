@@ -51,7 +51,7 @@ class FirebaseRemoteRepository:
         svg_version = _file_hash(public_dir / "artwork.svg")
         svg_url = self._public_storage_url(f"{remote_root}/artwork.svg", version=svg_version)
         receipt_url = self._public_storage_url(f"{remote_root}/receipt.txt")
-        qr_url = self._public_storage_url(f"{remote_root}/qr.png")
+        qr_image_url = self._public_storage_url(f"{remote_root}/qr.png")
 
         record.public_status = PublicStatus.PUBLISHED
         record.plot_status = PlotStatus.PENDING
@@ -61,7 +61,7 @@ class FirebaseRemoteRepository:
         record.public_manifest_path = f"{remote_root}/manifest.json"
         record.public_svg_url = svg_url
         record.public_receipt_url = receipt_url
-        record.public_qr_url = qr_url
+        record.public_qr_url = qr_image_url
         record.last_error = ""
 
         manifest_blob.upload_from_string(
@@ -80,7 +80,9 @@ class FirebaseRemoteRepository:
                 "status": PublicStatus.PUBLISHED.value,
                 "plotStatus": PlotStatus.PENDING.value,
                 "priority": record.priority,
+                "sessionUrl": record.qr_url,
                 "qrUrl": record.qr_url,
+                "qrImageUrl": qr_image_url,
                 "svgUrl": svg_url,
                 "receiptUrl": receipt_url,
                 "markName": record.mark_name,
@@ -89,7 +91,7 @@ class FirebaseRemoteRepository:
                 "measures": record.measures,
                 "assetUrls": {
                     "svg": svg_url,
-                    "qr": qr_url,
+                    "qr": qr_image_url,
                     "receipt": receipt_url,
                 },
                 "assetPaths": {
@@ -146,7 +148,7 @@ class FirebaseRemoteRepository:
             public_manifest_path=f"{remote_root}/manifest.json",
             public_svg_url=svg_url,
             public_receipt_url=receipt_url,
-            public_qr_url=qr_url,
+            public_qr_url=qr_image_url,
         )
 
     def claim_next_plot_job(self, consumer_id: str, *, run_started_at: datetime | None = None) -> PlotJobLease | None:
