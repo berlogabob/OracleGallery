@@ -413,6 +413,58 @@ class SupervisorService:
             states["plotter"] = self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message=states["plotter"].message or "Local plotter daemon running", heartbeat=True)
         return states
 
+
+    def get_pending_job_count(self) -> int:
+        """Get number of pending jobs from Firebase."""
+        try:
+            return self.firebase_io.get_pending_job_count()
+        except Exception:
+            return 0
+
+    def get_completed_job_count(self) -> int:
+        """Get number of completed jobs from Firebase."""
+        try:
+            return self.firebase_io.get_completed_job_count()
+        except Exception:
+            return 0
+
+
+
+    def _validate_gcode_markers(self) -> bool:
+        """Validate that G-code file contains cell-start and cell-end markers."""
+        if not self.status or not self.status.get("gcode_file"):
+            return False
+        gcode_path = self.status["gcode_file"]
+        if not os.path.exists(gcode_path):
+            return False
+        try:
+            with open(gcode_path, "r") as f:
+                lines = f.readlines()
+            has_cell_start = any("; cell-start " in line for line in lines)
+            has_cell_end = any("; cell-end " in line for line in lines)
+            return has_cell_start and has_cell_end
+        except Exception:
+            return False
+
+    def _validate_plotter_parameters(self) -> bool:
+        """Validate plotter parameters."""
+        try:
+            # Проверяем основные параметры
+            settings = self.load_gui_settings()
+            if not settings.cell_diameter_mm or not settings.sheet_width_mm or not settings.sheet_height_mm:
+                return False
+            if settings.cell_diameter_mm <= 0 or settings.sheet_width_mm <= 0 or settings.sheet_height_mm <= 0:
+                return False
+            # Проверяем, что подключение к FluidNC установлено
+            if not self._check_fluidnc_connection():
+                return False
+            # Проверяем, что плоттер готов
+            if not self._check_plotter_ready():
+                return False
+            return True
+        except Exception:
+            return False
+
     def _manual_control_allowed(self, action: str) -> bool:
         state = PlotterStore(self.plotter_settings.db_path).load_runtime_state()
         if state.status == RuntimeStatus.PRINTING:

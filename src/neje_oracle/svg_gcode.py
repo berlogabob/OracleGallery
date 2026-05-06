@@ -42,8 +42,11 @@ def generate_sheet_gcode(
         pen_up,
     ]
 
+    current_cell_index = 0
+    total_cells = len(items)
     for item, placement in zip(items, placements, strict=True):
         lines.append(f"; item {item.session_id} ({item.source_kind})")
+        lines.append(f"; cell-start {current_cell_index}/{total_cells}")
         if include_rings:
             for ring in _ring_polylines(placement, item.source_kind):
                 _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up)
@@ -52,6 +55,8 @@ def generate_sheet_gcode(
             lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")
         for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm, cell_diameter_mm):
             _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up)
+        lines.append(f"; cell-end {current_cell_index}/{total_cells}")
+        current_cell_index += 1
 
     lines.append(pen_up)
     if return_home:

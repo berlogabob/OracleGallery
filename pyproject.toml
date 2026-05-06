@@ -1,5 +1,5 @@
 [project]
-name = "neje-oracle"
+name = "neje_oracle"
 version = "0.1.0"
 description = "Uploader and plotter orchestration stack for the Neje Oracle exhibition system."
 readme = "README.md"
