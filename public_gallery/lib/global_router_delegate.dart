@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import '../services/session_repository.dart';
+import '../services/mock_session_repository.dart';
 
 class GlobalRouterDelegate extends GoRouterDelegate {
   final BuildContext context;
@@ -9,6 +10,9 @@ class GlobalRouterDelegate extends GoRouterDelegate {
   final FirebaseFirestore? firebaseFirestore;
 
   GlobalRouterDelegate(this.context, {required this.firebaseReady, this.firebaseFirestore})
+      : _sessionRepository = firebaseFirestore != null
+            ? SessionRepository(firestore: firebaseFirestore)
+            : MockSessionRepository();
       : _sessionRepository = firebaseFirestore != null
             ? SessionRepository(firestore: firebaseFirestore)
             : SessionRepository();;

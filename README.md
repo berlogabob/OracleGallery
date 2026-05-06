@@ -208,3 +208,57 @@ cd public_gallery && flutter analyze
 ```
 
 The current GUI/supervisor tests cover mode mapping, preflight behavior, real FluidNC safety gates, runtime store persistence, GUI settings migration, plotter runtime config handoff, uploader agent control, FluidNC probe/ack streaming/control commands, and SVG/G-code helpers.
+
+
+## Firebase Integration
+# NejeDraw
+
+## Firebase Integration
+
+To integrate Firebase with this Flutter application, follow these steps:
+
+### 1. Set up Firebase project
+
+- Go to [Firebase Console](https://console.firebase.google.com/)
+- Create a new project or select an existing one
+- Enable Firestore and Storage
+
+### 2. Add Firebase configuration
+
+Create a `.env` file in the project root with the following variables:
+
+```env
+FIREBASE_API_KEY=your_api_key_here
+FIREBASE_APP_ID=your_app_id_here
+FIREBASE_PROJECT_ID=your_project_id_here
+FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id_here
+FIREBASE_MEASUREMENT_ID=your_measurement_id_here
+```
+
+Replace `your_api_key_here`, `your_app_id_here`, etc. with actual values from Firebase Console.
+
+### 3. Install Firebase packages
+
+Run the following command to install Firebase packages:
+
+```bash
+flutter pub add firebase_core
+flutter pub add cloud_firestore
+flutter pub add firebase_auth
+```
+
+### 4. Configure Firebase for iOS and Android
+
+Follow the Firebase documentation to add the necessary configuration files:
+
+- `GoogleService-Info.plist` for iOS
+- `google-services.json` for Android
+
+### 5. Run the application
+
+```bash
+flutter pub get
+flutter run
+```
+
+The application will use Firebase for authentication, data storage, and file uploads.
