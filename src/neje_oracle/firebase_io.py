@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -67,6 +68,7 @@ class FirebaseRemoteRepository:
             record_to_json(record),
             content_type="application/json",
         )
+        origin, tags, visible_in_library = _session_visibility(record)
 
         session_ref = self._db.collection("sessions").document(record.session_id)
         session_ref.set(
@@ -99,6 +101,9 @@ class FirebaseRemoteRepository:
                 },
                 "svgVersion": svg_version,
                 "metadata": record.extra_metadata,
+                "origin": origin,
+                "tags": tags,
+                "visibleInLibrary": visible_in_library,
             },
             merge=True,
         )
@@ -125,6 +130,9 @@ class FirebaseRemoteRepository:
                 "error": "",
                 "svgStoragePath": f"{remote_root}/artwork.svg",
                 "svgUrl": svg_url,
+                "origin": origin,
+                "tags": tags,
+                "visibleInQueue": True,
             },
             merge=True,
         )
@@ -141,18 +149,30 @@ class FirebaseRemoteRepository:
             public_qr_url=qr_url,
         )
 
-    def claim_next_plot_job(self, consumer_id: str) -> PlotJobLease | None:
+    def claim_next_plot_job(self, consumer_id: str, *, run_started_at: datetime | None = None) -> PlotJobLease | None:
         query = (
             self._db.collection("plot_jobs")
             .where("status", "==", PlotStatus.PENDING.value)
             .order_by("createdAt")
-            .limit(1)
+            .limit(25)
         )
         docs = list(query.stream())
         if not docs:
             return None
-        doc = docs[0]
-        payload = doc.to_dict()
+        doc = None
+        payload = None
+        for candidate in docs:
+            candidate_payload = candidate.to_dict()
+            if candidate_payload.get("visibleInQueue") is False:
+                continue
+            if run_started_at is not None and recorded_datetime(candidate_payload.get("createdAt")) < run_started_at:
+                self._mark_plot_job_skipped(candidate, candidate_payload, reason="before_run_started_at")
+                continue
+            doc = candidate
+            payload = candidate_payload
+            break
+        if doc is None or payload is None:
+            return None
         doc.reference.update(
             {
                 "status": PlotStatus.LEASED.value,
@@ -176,6 +196,46 @@ class FirebaseRemoteRepository:
             queue=payload.get("queue", "user"),
             svg_storage_path=payload.get("svgStoragePath", ""),
             svg_url=payload.get("svgUrl", ""),
+        )
+
+    def skip_pending_before(self, cutoff: datetime, *, reason: str = "before_run_started_at") -> int:
+        query = (
+            self._db.collection("plot_jobs")
+            .where("status", "==", PlotStatus.PENDING.value)
+            .order_by("createdAt")
+            .limit(500)
+        )
+        skipped = 0
+        for doc in query.stream():
+            payload = doc.to_dict()
+            if recorded_datetime(payload.get("createdAt")) >= cutoff:
+                continue
+            self._mark_plot_job_skipped(doc, payload, reason=reason)
+            skipped += 1
+        return skipped
+
+    def _mark_plot_job_skipped(self, doc, payload: dict, *, reason: str) -> None:
+        tags = list(payload.get("tags") or [])
+        if "baseline_skipped" not in tags:
+            tags.append("baseline_skipped")
+        doc.reference.set(
+            {
+                "status": PlotStatus.SKIPPED.value,
+                "tags": tags,
+                "skipReason": reason,
+                "visibleInQueue": False,
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+            },
+            merge=True,
+        )
+        self._db.collection("sessions").document(doc.id).set(
+            {
+                "plotStatus": PlotStatus.SKIPPED.value,
+                "tags": tags,
+                "skipReason": reason,
+                "visibleInQueue": False,
+            },
+            merge=True,
         )
 
     def update_plot_job(
@@ -277,12 +337,27 @@ class FirebaseRemoteRepository:
         return url
 
 
-def recorded_datetime(value: str | None):
+def recorded_datetime(value):
     from datetime import UTC, datetime
 
     if not value:
         return datetime.now(tz=UTC)
-    return datetime.fromisoformat(value)
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if hasattr(value, "isoformat"):
+        raw = value.isoformat()
+    else:
+        raw = str(value)
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def _session_visibility(record: SessionRecord) -> tuple[str, list[str], bool]:
+    kind = str(record.extra_metadata.get("kind") or record.extra_metadata.get("origin") or "").lower()
+    generated_by = str(record.extra_metadata.get("generatedBy") or "").lower()
+    if kind.startswith("test") or "generate" in generated_by:
+        return "test", ["test", "generated"], False
+    return "oracle", ["real"], True
 
 
 def record_to_json(record: SessionRecord) -> str:

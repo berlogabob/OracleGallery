@@ -66,7 +66,7 @@ def normalize_firebase_sessions(
             mark_name = str(document.get("markName") or "")
             scale = scale_for_mark_name(mark_name, symbol_root, scale_config)
             normalized_path.write_text(
-                normalize_svg_file(source_path, marker_kind="user", scale=scale, include_rings=True),
+                normalize_svg_file(source_path, marker_kind="user", scale=scale, include_rings=False),
                 encoding="utf-8",
             )
             svg_version = _file_hash(normalized_path)

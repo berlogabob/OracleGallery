@@ -16,6 +16,7 @@ from .models import (
     PlotterRuntimeConfig,
     PlotterRuntimeState,
     PlotStatus,
+    PlotterReadinessState,
     PublicStatus,
     SessionRecord,
     SystemMode,
@@ -326,6 +327,21 @@ class OracleRuntimeStore(_SQLiteStore):
         if not row:
             return default or PlotterControlState()
         return PlotterControlState.from_dict(json.loads(row["value"]))
+
+    def save_run_started_at(self, value: datetime) -> None:
+        self.save_json("run_started_at", {"run_started_at": value.isoformat()})
+
+    def load_run_started_at(self) -> datetime | None:
+        payload = self.load_json("run_started_at")
+        if not payload.get("run_started_at"):
+            return None
+        return datetime.fromisoformat(str(payload["run_started_at"]))
+
+    def save_plotter_readiness(self, state: PlotterReadinessState) -> None:
+        self.save_json("plotter_readiness", state.to_dict())
+
+    def load_plotter_readiness(self) -> PlotterReadinessState:
+        return PlotterReadinessState.from_dict(self.load_json("plotter_readiness"))
 
     def save_json(self, key: str, payload: dict[str, Any]) -> None:
         self._execute(

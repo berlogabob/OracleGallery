@@ -32,6 +32,9 @@ class PlotterDaemon:
         self.stop_event = threading.Event()
         self.state_lock = threading.Lock()
         self.runtime_state = self.store.load_runtime_state()
+        self._current_row_sheet_indexes: list[int] = []
+        self._current_row_cell_count = 0
+        self._cells_completed_before_row = 0
         ensure_dir(self.settings.placeholder_root)
         ensure_dir(self.settings.spool_root)
 
@@ -127,11 +130,16 @@ class PlotterDaemon:
             "symbol_fit_ratio": SYMBOL_FIT_RATIO,
             "dry_run": control.dry_run,
             "run_mode": control.run_mode,
+            "include_rings": config.include_rings,
+            "use_z_servo": config.use_z_servo,
+            "z_up_mm": config.z_up_mm,
+            "z_down_mm": config.z_down_mm,
             "row_count": len(layout_rows),
         }
         self._write_manifest(manifest_path, manifest)
 
         rows_printed = 0
+        cells_completed = 0
         last_gcode_path: Path | None = None
         for row_index, row_placements in enumerate(layout_rows, start=1):
             if self.stop_event.is_set():
@@ -169,9 +177,17 @@ class PlotterDaemon:
                 pen_down_command=self.settings.pen_down_command,
                 title=f"{sheet_id} row {row_index}/{len(layout_rows)}",
                 return_home=row_index == len(layout_rows),
+                include_rings=config.include_rings,
+                use_z_servo=config.use_z_servo,
+                z_down_mm=config.z_down_mm,
+                z_up_mm=config.z_up_mm,
+                z_feed_mm_min=config.z_feed_mm_min,
             )
             total_gcode_lines = len(row_gcode.splitlines())
             row_id = f"{sheet_id}_row_{row_index:02d}"
+            self._current_row_sheet_indexes = [placement.index for placement in active_placements]
+            self._current_row_cell_count = len(active_placements)
+            self._cells_completed_before_row = cells_completed
             self._set_state(
                 RuntimeStatus.PRINTING,
                 f"Streaming row {row_index}/{len(layout_rows)} of {sheet_id}",
@@ -181,6 +197,10 @@ class PlotterDaemon:
                 gcode_progress_percent=0.0,
                 current_row_index=row_index,
                 row_count=len(layout_rows),
+                current_cell_index=active_placements[0].index if active_placements else 0,
+                current_cell_in_row=1 if active_placements else 0,
+                row_cell_count=len(active_placements),
+                cells_completed=cells_completed,
                 rows_completed=rows_printed,
                 sheet_progress_percent=(rows_printed / len(layout_rows)) * 100.0,
             )
@@ -218,6 +238,7 @@ class PlotterDaemon:
 
             last_gcode_path = gcode_path
             rows_printed += 1
+            cells_completed += len(items)
             row_payload["status"] = "printed"
             row_payload["gcode_path"] = str(gcode_path)
             self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
@@ -245,6 +266,10 @@ class PlotterDaemon:
             self.runtime_state.gcode_progress_percent = 100.0
             self.runtime_state.current_row_index = rows_printed
             self.runtime_state.row_count = len(layout_rows)
+            self.runtime_state.current_cell_index = 0
+            self.runtime_state.current_cell_in_row = 0
+            self.runtime_state.row_cell_count = 0
+            self.runtime_state.cells_completed = cells_completed
             self.runtime_state.rows_completed = rows_printed
             self.runtime_state.sheet_progress_percent = 100.0
             self.runtime_state.updated_at = datetime.now(tz=UTC)
@@ -254,8 +279,12 @@ class PlotterDaemon:
 
     def _claim_user_jobs(self, limit: int) -> list[PlotJobLease]:
         jobs: list[PlotJobLease] = []
+        run_started_at = self.oracle_store.load_run_started_at() if self.oracle_store is not None else None
         for _ in range(limit):
-            job = self.remote.claim_next_plot_job("macbook-plotter")
+            try:
+                job = self.remote.claim_next_plot_job("macbook-plotter", run_started_at=run_started_at)
+            except TypeError:
+                job = self.remote.claim_next_plot_job("macbook-plotter")
             if job is None:
                 break
             jobs.append(job)
@@ -369,6 +398,12 @@ class PlotterDaemon:
             gap_mm=self.settings.cell_gap_mm,
             run_mode="exhibition",
             dry_run=self.settings.dry_run,
+            include_rings=True,
+            use_z_servo=self.settings.use_z_servo,
+            z_down_mm=self.settings.z_down_mm,
+            z_up_mm=self.settings.z_up_mm,
+            z_feed_mm_min=self.settings.z_feed_mm_min,
+            work_zero_command=self.settings.work_zero_command,
         )
         if self.oracle_store is None:
             return default
@@ -394,6 +429,10 @@ class PlotterDaemon:
         current_row_index: int | None = None,
         row_count: int | None = None,
         rows_completed: int | None = None,
+        current_cell_index: int | None = None,
+        current_cell_in_row: int | None = None,
+        row_cell_count: int | None = None,
+        cells_completed: int | None = None,
         sheet_progress_percent: float | None = None,
     ) -> None:
         with self.state_lock:
@@ -413,6 +452,14 @@ class PlotterDaemon:
                 self.runtime_state.row_count = row_count
             if rows_completed is not None:
                 self.runtime_state.rows_completed = rows_completed
+            if current_cell_index is not None:
+                self.runtime_state.current_cell_index = current_cell_index
+            if current_cell_in_row is not None:
+                self.runtime_state.current_cell_in_row = current_cell_in_row
+            if row_cell_count is not None:
+                self.runtime_state.row_cell_count = row_cell_count
+            if cells_completed is not None:
+                self.runtime_state.cells_completed = cells_completed
             if sheet_progress_percent is not None:
                 self.runtime_state.sheet_progress_percent = sheet_progress_percent
             self.runtime_state.updated_at = datetime.now(tz=UTC)
@@ -439,10 +486,24 @@ class PlotterDaemon:
             if self.runtime_state.row_count:
                 row_label = f"row {self.runtime_state.current_row_index}/{self.runtime_state.row_count}: "
                 completed_fraction = min(max(sent / total, 0.0), 1.0) if total > 0 else 1.0
+                if self._current_row_cell_count > 0:
+                    import math
+
+                    current_cell_in_row = min(
+                        max(math.ceil(completed_fraction * self._current_row_cell_count), 1),
+                        self._current_row_cell_count,
+                    )
+                    self.runtime_state.current_cell_in_row = current_cell_in_row
+                    self.runtime_state.row_cell_count = self._current_row_cell_count
+                    self.runtime_state.current_cell_index = self._current_row_sheet_indexes[current_cell_in_row - 1]
+                    self.runtime_state.cells_completed = self._cells_completed_before_row + max(0, current_cell_in_row - 1)
                 self.runtime_state.sheet_progress_percent = min(
                     max(((self.runtime_state.rows_completed + completed_fraction) / self.runtime_state.row_count) * 100.0, 0.0),
                     100.0,
                 )
-            self.runtime_state.message = f"Streaming {row_label}{sent}/{total} lines ({percent:.1f}%)"
+            cell_label = ""
+            if self.runtime_state.row_cell_count:
+                cell_label = f" cell {self.runtime_state.current_cell_in_row}/{self.runtime_state.row_cell_count},"
+            self.runtime_state.message = f"Streaming {row_label}{cell_label} {sent}/{total} lines ({percent:.1f}%)"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)

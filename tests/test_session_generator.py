@@ -82,10 +82,10 @@ def test_user_generator_writes_touchdesigner_like_session_folder(tmp_path: Path)
     assert (session.session_dir / "READY").exists()
     assert (session.session_dir / "metadata.json").exists()
     assert (output_root / "session_log.csv").exists()
-    assert session.svg_file.read_text(encoding="utf-8").count("<circle") == 1
+    assert session.svg_file.read_text(encoding="utf-8").count("<circle") == 0
 
 
-def test_idle_generator_adds_double_circle(tmp_path: Path) -> None:
+def test_idle_generator_writes_mark_only_svg(tmp_path: Path) -> None:
     source_root = _write_symbol_bank(tmp_path)
     generated = generate_idle_symbols(
         source_root=source_root,
@@ -97,7 +97,7 @@ def test_idle_generator_adds_double_circle(tmp_path: Path) -> None:
     )
 
     svg_text = generated[0].read_text(encoding="utf-8")
-    assert svg_text.count("<circle") == 2
+    assert svg_text.count("<circle") == 0
 
 
 def test_symbol_scale_changes_inner_mark_transform(tmp_path: Path) -> None:

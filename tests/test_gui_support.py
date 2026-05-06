@@ -174,7 +174,7 @@ def test_gui_user_and_idle_generation_helpers(tmp_path: Path) -> None:
     assert (user_dirs[0] / f"{user_dirs[0].name}_plotter.svg").exists()
     assert (user_dirs[0] / "READY").exists()
     assert len(idle_svgs) == 2
-    assert idle_svgs[0].read_text(encoding="utf-8").count("<circle") == 2
+    assert idle_svgs[0].read_text(encoding="utf-8").count("<circle") == 0
 
 
 def test_gui_cycle_start_index_advances_selected_base_symbol(tmp_path: Path) -> None:

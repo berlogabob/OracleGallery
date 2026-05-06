@@ -118,7 +118,7 @@ class SessionUploader:
             _repo_root() / "assets" / "symbols" / "symbol_scales.json",
         )
         svg_target.write_text(
-            normalize_svg_file(svg_source, marker_kind="user", scale=svg_scale, include_rings=True),
+            normalize_svg_file(svg_source, marker_kind="user", scale=svg_scale, include_rings=False),
             encoding="utf-8",
         )
         shutil.copy2(receipt_source, receipt_target)

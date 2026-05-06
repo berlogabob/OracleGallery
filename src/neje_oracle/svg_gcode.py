@@ -25,33 +25,81 @@ def generate_sheet_gcode(
     pen_down_command: str,
     title: str = "sheet",
     return_home: bool = True,
+    include_rings: bool = True,
+    use_z_servo: bool = False,
+    z_down_mm: float = 0.0,
+    z_up_mm: float = 25.0,
+    z_feed_mm_min: float = 1000.0,
 ) -> str:
+    pen_up = _pen_up_command(pen_up_command, use_z_servo=use_z_servo, z_up_mm=z_up_mm)
+    pen_down = _pen_down_command(pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min)
     lines = [
         f"; Neje Oracle {title}",
         "G21",
         "G90",
         f"G0 F{travel_rate:.2f}",
         f"G1 F{draw_rate:.2f}",
-        pen_up_command,
+        pen_up,
     ]
 
     for item, placement in zip(items, placements, strict=True):
         lines.append(f"; item {item.session_id} ({item.source_kind})")
+        if include_rings:
+            for ring in _ring_polylines(placement, item.source_kind):
+                _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up)
         metadata = read_normalized_svg_metadata(item.svg_path)
         if metadata.normalized and metadata.scale > 1.0:
             lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")
         for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm, cell_diameter_mm):
-            start_x, start_y = polyline[0]
-            lines.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
-            lines.append(pen_down_command)
-            for x, y in polyline[1:]:
-                lines.append(f"G1 X{x:.3f} Y{y:.3f}")
-            lines.append(pen_up_command)
+            _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up)
 
-    lines.append(pen_up_command)
+    lines.append(pen_up)
     if return_home:
         lines.append("G0 X0 Y0")
     return "\n".join(lines) + "\n"
+
+
+def _pen_up_command(command: str, *, use_z_servo: bool, z_up_mm: float) -> str:
+    return f"G0 Z{z_up_mm:.3f}" if use_z_servo else command
+
+
+def _pen_down_command(command: str, *, use_z_servo: bool, z_down_mm: float, z_feed_mm_min: float) -> str:
+    return f"G1 Z{z_down_mm:.3f} F{z_feed_mm_min:.2f}" if use_z_servo else command
+
+
+def _append_polyline_gcode(
+    lines: list[str],
+    polyline: list[tuple[float, float]],
+    *,
+    pen_down: str,
+    pen_up: str,
+) -> None:
+    start_x, start_y = polyline[0]
+    lines.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
+    lines.append(pen_down)
+    for x, y in polyline[1:]:
+        lines.append(f"G1 X{x:.3f} Y{y:.3f}")
+    lines.append(pen_up)
+
+
+def _ring_polylines(placement: SheetPlacement, source_kind: str) -> list[list[tuple[float, float]]]:
+    outer = _circle_polyline(placement.center_x_mm, placement.center_y_mm, placement.diameter_mm / 2.0)
+    if source_kind == "user":
+        return [outer]
+    inner = _circle_polyline(placement.center_x_mm, placement.center_y_mm, placement.diameter_mm * 0.43)
+    return [outer, inner]
+
+
+def _circle_polyline(center_x: float, center_y: float, radius: float, segments: int = 72) -> list[tuple[float, float]]:
+    import math
+
+    return [
+        (
+            center_x + (math.cos((math.tau * index) / segments) * radius),
+            center_y + (math.sin((math.tau * index) / segments) * radius),
+        )
+        for index in range(segments + 1)
+    ]
 
 
 def _svg_to_polylines(

@@ -178,7 +178,7 @@ Status:
 - [x] TEST mode still supports fake sessions and idle bank.
 - [x] Plotter UI sequence is now explicit: `Connect`, `Manual control`, `Print`.
 - [~] A separate armed “real tiny test-send” action was not added; physical output remains intentionally gated.
-- [x] Runtime/GUI now show current row and sheet progress. Preview highlight for current row is still pending.
+- [x] Runtime/GUI now show current row and sheet progress. Preview now highlights the current row.
 
 ## Phase 3: Reorganize GUI layout `[~]`
 
@@ -268,11 +268,12 @@ Status:
 - [x] Layout grouping by row implemented.
 - [x] User jobs are claimed before each row, so a late user job can enter the next row.
 - [x] Row G-code progress and sheet progress are stored in runtime state and shown in GUI.
+- [x] Preview highlights the current row.
+- [x] Runtime now stores current cell index / cell-in-row / row cell count, and GUI highlights the current cell.
 - [x] Related safety improvement completed: manual jog/home pauses print before movement and is blocked while G-code is actively streaming.
 - [x] Transport failures do not mark user jobs `printed`.
 - [ ] Explicit `PrintRow`/`PrintCell` dataclasses are not added yet; current implementation uses existing `SheetItem`/`SheetPlacement`.
-- [ ] Current-symbol progress is not implemented yet; progress is row + acknowledged G-code lines.
-- [ ] Preview does not yet highlight current row.
+- [~] Current-cell progress is approximate by acknowledged G-code-line fraction inside the active row; exact per-symbol transport events would require a deeper sender protocol.
 
 ## Phase 5: Add Firebase normalization handoff on MacBook `[ ]`
 

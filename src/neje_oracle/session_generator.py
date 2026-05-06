@@ -108,7 +108,7 @@ def generate_user_sessions(
     jitter_px: float = 4.0,
     symbol_name: str | None = None,
     global_scale: float = 1.0,
-    include_rings: bool = True,
+    include_rings: bool = False,
     start_index: int = 0,
 ) -> list[GeneratedSession]:
     ensure_dir(output_root)
@@ -182,7 +182,7 @@ def generate_idle_symbols(
     seed: int | None = None,
     jitter_px: float = 2.0,
     global_scale: float = 1.0,
-    include_rings: bool = True,
+    include_rings: bool = False,
     start_index: int = 0,
 ) -> list[Path]:
     ensure_dir(output_root)
@@ -216,7 +216,7 @@ def build_variant_svg(
     scale: float,
     rng: random.Random,
     jitter_px: float,
-    include_rings: bool = True,
+    include_rings: bool = False,
 ) -> str:
     return normalize_svg_file(
         source_svg,

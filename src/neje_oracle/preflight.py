@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 from pathlib import Path
 from typing import Callable
@@ -34,6 +35,7 @@ class PreflightService:
             self._check_idle_bank(),
             self._check_uploader_folder(),
             self._check_firebase(mode),
+            self._check_tinybee_hardware(mode, gui_settings),
             self._check_fluidnc(mode),
             self._check_spool_write(),
             self._check_dry_run_generation(gui_settings),
@@ -77,6 +79,67 @@ class PreflightService:
         level = PreflightLevel.WARNING if mode == SystemMode.TEST else PreflightLevel.CRITICAL
         return PreflightCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
 
+    def _check_tinybee_hardware(self, mode: SystemMode, gui_settings: GuiSettings) -> PreflightCheck:
+        config_path = self.plotter_settings.tinybee_config_path
+        if not config_path.exists():
+            level = PreflightLevel.CRITICAL if mode_policy(mode).real_fluidnc_required else PreflightLevel.WARNING
+            return PreflightCheck("tinybee hardware", level, f"TinyBee config JSON not found: {config_path}")
+        try:
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            return PreflightCheck("tinybee hardware", PreflightLevel.CRITICAL, f"TinyBee config JSON is unreadable: {exc}")
+
+        values = _flatten_tinybee_settings(payload)
+        problems: list[str] = []
+        warnings: list[str] = []
+
+        board = str(values.get("/board", ""))
+        if "TinyBee" not in board or "XXYYZ" not in board:
+            problems.append(f"unexpected board {board or '<missing>'}; expected MKS TinyBee XXYYZ")
+        if values.get("Telnet/Enable") != "1":
+            problems.append("Telnet/Enable must be 1")
+        telnet_port = _float_value(values.get("Telnet/Port"), 0)
+        if int(telnet_port) != self.plotter_settings.fluidnc_telnet_port:
+            problems.append(f"Telnet port {int(telnet_port)} does not match sender port {self.plotter_settings.fluidnc_telnet_port}")
+
+        x_travel = _float_value(values.get("/axes/X/max_travel_mm"), 0)
+        y_travel = _float_value(values.get("/axes/Y/max_travel_mm"), 0)
+        z_travel = _float_value(values.get("/axes/Z/max_travel_mm"), 0)
+        if x_travel < gui_settings.sheet_width_mm:
+            problems.append(f"sheet width {gui_settings.sheet_width_mm:.1f}mm exceeds X travel {x_travel:.1f}mm")
+        if y_travel < gui_settings.sheet_height_mm:
+            problems.append(f"sheet height {gui_settings.sheet_height_mm:.1f}mm exceeds Y travel {y_travel:.1f}mm")
+        if z_travel < self.plotter_settings.z_up_mm:
+            problems.append(f"z_up {self.plotter_settings.z_up_mm:.1f}mm exceeds Z travel {z_travel:.1f}mm")
+        if abs(z_travel - 25.0) > 0.5:
+            warnings.append(f"Z travel is {z_travel:.1f}mm; expected 25mm servo travel")
+        for axis in ("X", "Y"):
+            if values.get(f"/axes/{axis}/homing/allow_single_axis") != "1":
+                problems.append(f"{axis} single-axis homing is disabled")
+        if values.get("/axes/Z/motor0/rc_servo/pwm_hz") in {None, ""}:
+            problems.append("Z rc_servo config is missing")
+
+        detail = {
+            "config_path": str(config_path),
+            "board": board,
+            "telnet_port": int(telnet_port),
+            "x_travel_mm": x_travel,
+            "y_travel_mm": y_travel,
+            "z_travel_mm": z_travel,
+            "problems": problems,
+            "warnings": warnings,
+        }
+        if problems:
+            return PreflightCheck("tinybee hardware", PreflightLevel.CRITICAL, "; ".join(problems), detail=detail)
+        if warnings:
+            return PreflightCheck("tinybee hardware", PreflightLevel.WARNING, "; ".join(warnings), detail=detail)
+        return PreflightCheck(
+            "tinybee hardware",
+            PreflightLevel.OK,
+            f"{board}; travel X{x_travel:.0f} Y{y_travel:.0f} Z{z_travel:.0f}; single-axis homing enabled",
+            detail=detail,
+        )
+
     def _check_fluidnc(self, mode: SystemMode) -> PreflightCheck:
         if self.fluidnc_checker is not None:
             online, message = self.fluidnc_checker(1.5)
@@ -112,6 +175,33 @@ class PreflightService:
 def _assert_writable(path: Path) -> None:
     with tempfile.NamedTemporaryFile(prefix=".neje_check_", dir=path, delete=True) as handle:
         handle.write(b"ok")
+
+
+def _flatten_tinybee_settings(payload: dict[str, object]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    for section_value in payload.values():
+        if not isinstance(section_value, dict):
+            continue
+        for items in section_value.values():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                key = item.get("id")
+                if key is None:
+                    continue
+                values[str(key)] = str(item.get("value", ""))
+    return values
+
+
+def _float_value(value: str | None, default: float) -> float:
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 
 def _aggregate_status(checks: list[PreflightCheck]) -> PreflightLevel:

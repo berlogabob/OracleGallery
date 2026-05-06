@@ -28,6 +28,7 @@ GUI_DEFAULTS = {
     "global_scale": 1.0,
     "randomness": 35.0,
     "randomness_fine": 0.0,
+    "include_rings": True,
 }
 
 
@@ -45,7 +46,7 @@ class GuiSettings:
     global_scale: float = GUI_DEFAULTS["global_scale"]
     randomness: float = GUI_DEFAULTS["randomness"]
     randomness_fine: float = GUI_DEFAULTS["randomness_fine"]
-    include_rings: bool = True
+    include_rings: bool = GUI_DEFAULTS["include_rings"]
     user_count: int = 1
     live_interval_seconds: float = 12.0
     idle_count: int = 8
@@ -122,6 +123,7 @@ def save_gui_settings(settings: GuiSettings, path: Path | None = None) -> None:
 
 def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfig:
     settings.apply_system_mode()
+    plotter_settings = PlotterSettings()
     return apply_mode_to_config(PlotterRuntimeConfig(
         layout_mode=settings.layout_mode,
         sheet_width_mm=settings.sheet_width_mm,
@@ -131,6 +133,12 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
         gap_mm=settings.gap_mm,
         run_mode=settings.run_mode,
         dry_run=settings.dry_run,
+        include_rings=settings.include_rings,
+        use_z_servo=plotter_settings.use_z_servo,
+        z_down_mm=plotter_settings.z_down_mm,
+        z_up_mm=plotter_settings.z_up_mm,
+        z_feed_mm_min=plotter_settings.z_feed_mm_min,
+        work_zero_command=plotter_settings.work_zero_command,
     ), settings.mode)
 
 
@@ -179,6 +187,8 @@ def build_preview_svg(
     *,
     user_count: int = 2,
     idle_count: int | None = None,
+    highlighted_row_index: int | None = None,
+    highlighted_cell_index: int | None = None,
     symbol_root: Path | None = None,
     scale_path: Path | None = None,
 ) -> str:
@@ -203,15 +213,24 @@ def build_preview_svg(
     circles: list[str] = []
     symbol_images = _preview_symbol_images(settings, symbol_root=symbol_root, scale_path=scale_path)
     overscale = any(symbol_scale > 1.0 for _, symbol_scale in symbol_images)
+    row_lookup = _placement_row_lookup(placements)
     for index, placement in enumerate(placements):
         kind = "user" if index < user_count else "idle"
+        row_index = row_lookup.get(placement.index, 0)
+        highlighted_row = highlighted_row_index is not None and row_index == highlighted_row_index
+        highlighted_cell = highlighted_cell_index is not None and placement.index == highlighted_cell_index
         stroke = "#9a5b24" if kind == "user" else "#1f1a17"
-        fill = "#f9f4ea" if kind == "user" else "#f3eadb"
+        fill = "#fff0d4" if highlighted_cell else ("#f9f4ea" if kind == "user" else "#f3eadb")
         cx = placement.center_x_mm * scale
         cy = placement.center_y_mm * scale
         cell_radius = placement.diameter_mm * scale / 2.0
         mark_size = symbol_diameter_for_cell(placement.diameter_mm) * scale
-        circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{cell_radius:.2f}" fill="{fill}" stroke="#d8c7aa" stroke-width="1.0"/>')
+        cell_stroke = "#c7472f" if highlighted_cell else ("#c78d2d" if highlighted_row else "#d8c7aa")
+        cell_stroke_width = "4.0" if highlighted_cell else ("2.4" if highlighted_row else "1.0")
+        circles.append(
+            f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{cell_radius:.2f}" fill="{fill}" '
+            f'stroke="{cell_stroke}" stroke-width="{cell_stroke_width}"/>'
+        )
         if settings.include_rings:
             circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" stroke="{stroke}" stroke-width="1.4" data-ring="outer"/>')
             if kind == "idle":
@@ -293,6 +312,18 @@ def _preview_symbol_images(
     return images
 
 
+def _placement_row_lookup(placements) -> dict[int, int]:
+    rows: dict[float, int] = {}
+    lookup: dict[int, int] = {}
+    for placement in sorted(placements, key=lambda item: (item.center_y_mm, item.center_x_mm)):
+        row_key = next((key for key in rows if abs(key - placement.center_y_mm) < 0.001), None)
+        if row_key is None:
+            row_key = placement.center_y_mm
+            rows[row_key] = len(rows) + 1
+        lookup[placement.index] = rows[row_key]
+    return lookup
+
+
 def create_user_sessions_from_gui(
     settings: GuiSettings,
     *,
@@ -310,7 +341,7 @@ def create_user_sessions_from_gui(
         jitter_px=effective_randomness(settings) / 100.0 * 8.0,
         symbol_name=settings.selected_symbol,
         global_scale=settings.global_scale,
-        include_rings=settings.include_rings,
+        include_rings=False,
         start_index=start_index,
     )
     return [session.session_dir for session in generated]
@@ -336,7 +367,7 @@ def create_idle_bank_from_gui(
         count=count,
         jitter_px=effective_randomness(settings) / 100.0 * 6.0,
         global_scale=settings.global_scale,
-        include_rings=settings.include_rings,
+        include_rings=False,
     )
 
 
@@ -363,6 +394,10 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
             "gcode_progress_percent": 0.0,
             "current_row_index": 0,
             "row_count": 0,
+            "current_cell_index": 0,
+            "current_cell_in_row": 0,
+            "row_cell_count": 0,
+            "cells_completed": 0,
             "rows_completed": 0,
             "sheet_progress_percent": 0.0,
             "updated_at": "",
@@ -389,6 +424,10 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
         "gcode_progress_percent": state.gcode_progress_percent,
         "current_row_index": state.current_row_index,
         "row_count": state.row_count,
+        "current_cell_index": state.current_cell_index,
+        "current_cell_in_row": state.current_cell_in_row,
+        "row_cell_count": state.row_cell_count,
+        "cells_completed": state.cells_completed,
         "rows_completed": state.rows_completed,
         "sheet_progress_percent": state.sheet_progress_percent,
         "updated_at": state.updated_at.isoformat(),
@@ -486,6 +525,11 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
         draw_rate=PlotterSettings().draw_rate,
         pen_up_command=PlotterSettings().pen_up_command,
         pen_down_command=PlotterSettings().pen_down_command,
+        include_rings=settings.include_rings,
+        use_z_servo=PlotterSettings().use_z_servo,
+        z_down_mm=PlotterSettings().z_down_mm,
+        z_up_mm=PlotterSettings().z_up_mm,
+        z_feed_mm_min=PlotterSettings().z_feed_mm_min,
     )
     gcode_path = output_root / f"{sheet_id}.gcode"
     manifest_path = output_root / f"{sheet_id}.json"

@@ -44,6 +44,13 @@
   - текущий ряд не прерывается;
   - после завершения листа всё ещё требуется reload confirmation.
 - [x] GUI progress теперь показывает row progress: `current row / total rows`, G-code lines текущего ряда и общий sheet percent.
+- [x] Добавлен run baseline: jobs до `run_started_at` помечаются `skipped`, получают tag `baseline_skipped` и скрываются из print queue.
+- [x] Добавлен Ready workflow: `Set Work Zero`, `Ready Check`, блокировка `START PRINT` без preflight/work-zero/ready.
+- [x] Добавлена поддержка TinyBee Z-servo G-code: `Z0=down`, `Z25=up`, `G10 L20 P1 X0 Y0 Z0`, `$H=X`, `$H=Y`.
+- [x] Preflight валидирует `assets/tinybee.json`: board XXYYZ, Telnet 23, X/Y/Z travel, X/Y single-axis homing, Z rc_servo.
+- [x] Rings перенесены в print-time overlay: SVG генерируются mark-only, а G-code рисует ring(s) по GUI toggle.
+- [x] Preview подсвечивает текущий ряд по runtime state.
+- [x] Preview подсвечивает текущую ячейку по runtime state.
 - [x] GUI plotter block упрощён в один `Plotter Console` с порядком:
   - `1. Connect`;
   - `2. Manual control`;
@@ -61,7 +68,7 @@
 ## Не выполнено / на паузе
 
 - [ ] Firebase normalization handoff на MacBook: raw SVG -> normalize with GUI scales -> upload normalized -> release print job.
-- [ ] Перенос всех symbol/generator блоков в правую колонку.
+- [ ] Полноценный UX-tab layout вместо текущего компактного ribbon + panels.
 - [ ] Flutter app по `assets/WebsiteWireframe`.
 - [ ] Видео `https://youtu.be/kMwNTh0pS1k` на сайте.
 

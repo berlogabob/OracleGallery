@@ -1,0 +1,720 @@
+{
+ "Flash": {
+  "Settings": [
+   {
+    "id": "Notification/Type",
+    "label": "Notification/Type",
+    "value": "0"
+   },
+   {
+    "id": "Notification/T1",
+    "label": "Notification/T1",
+    "value": ""
+   },
+   {
+    "id": "Notification/T2",
+    "label": "Notification/T2",
+    "value": ""
+   },
+   {
+    "id": "Notification/TS",
+    "label": "Notification/TS",
+    "value": ""
+   },
+   {
+    "id": "Telnet/Enable",
+    "label": "Telnet/Enable",
+    "value": "1"
+   },
+   {
+    "id": "Telnet/Port",
+    "label": "Telnet/Port",
+    "value": "23"
+   },
+   {
+    "id": "HTTP/BlockDuringMotion",
+    "label": "HTTP/BlockDuringMotion",
+    "value": "1"
+   },
+   {
+    "id": "HTTP/Enable",
+    "label": "HTTP/Enable",
+    "value": "1"
+   },
+   {
+    "id": "HTTP/Port",
+    "label": "HTTP/Port",
+    "value": "80"
+   },
+   {
+    "id": "MDNS/Enable",
+    "label": "MDNS/Enable",
+    "value": "1"
+   },
+   {
+    "id": "WiFi/PsMode",
+    "label": "WiFi/PsMode",
+    "value": "0"
+   },
+   {
+    "id": "WiFi/Mode",
+    "label": "WiFi/Mode",
+    "value": "3"
+   },
+   {
+    "id": "Sta/Password",
+    "label": "Sta/Password",
+    "value": "********"
+   },
+   {
+    "id": "Sta/MinSecurity",
+    "label": "Sta/MinSecurity",
+    "value": "3"
+   },
+   {
+    "id": "WiFi/FastScan",
+    "label": "WiFi/FastScan",
+    "value": "0"
+   },
+   {
+    "id": "Sta/IPMode",
+    "label": "Sta/IPMode",
+    "value": "0"
+   },
+   {
+    "id": "Sta/IP",
+    "label": "Sta/IP",
+    "value": "0.0.0.0"
+   },
+   {
+    "id": "Sta/Gateway",
+    "label": "Sta/Gateway",
+    "value": "0.0.0.0"
+   },
+   {
+    "id": "Sta/Netmask",
+    "label": "Sta/Netmask",
+    "value": "0.0.0.0"
+   },
+   {
+    "id": "AP/Country",
+    "label": "AP/Country",
+    "value": "0"
+   },
+   {
+    "id": "AP/SSID",
+    "label": "AP/SSID",
+    "value": "FluidNC"
+   },
+   {
+    "id": "AP/Password",
+    "label": "AP/Password",
+    "value": "********"
+   },
+   {
+    "id": "AP/IP",
+    "label": "AP/IP",
+    "value": "192.168.0.1"
+   },
+   {
+    "id": "AP/Channel",
+    "label": "AP/Channel",
+    "value": "1"
+   },
+   {
+    "id": "Hostname",
+    "label": "Hostname",
+    "value": "fluidnc"
+   },
+   {
+    "id": "Sta/SSID",
+    "label": "Sta/SSID",
+    "value": "Nothing32"
+   },
+   {
+    "id": "GCode/Echo",
+    "label": "GCode/Echo",
+    "value": "0"
+   },
+   {
+    "id": "Start/Message",
+    "label": "Start/Message",
+    "value": "Grbl \\V [FluidNC \\B (\\X) \\H]"
+   },
+   {
+    "id": "Firmware/Build",
+    "label": "Firmware/Build",
+    "value": ""
+   },
+   {
+    "id": "SD/FallbackCS",
+    "label": "SD/FallbackCS",
+    "value": "-1"
+   },
+   {
+    "id": "Report/Status",
+    "label": "Report/Status",
+    "value": "1"
+   },
+   {
+    "id": "Config/Filename",
+    "label": "Config/Filename",
+    "value": "TinyBee-06.yaml"
+   },
+   {
+    "id": "Message/Level",
+    "label": "Message/Level",
+    "value": "3"
+   }
+  ]
+ },
+ "Running": {
+  "Config": [
+   {
+    "id": "/board",
+    "label": "/board",
+    "value": "MKS TinyBee V1.0 XXYYZ"
+   },
+   {
+    "id": "/name",
+    "label": "/name",
+    "value": "None"
+   },
+   {
+    "id": "/meta",
+    "label": "/meta",
+    "value": ""
+   },
+   {
+    "id": "/stepping/engine",
+    "label": "/stepping/engine",
+    "value": "2"
+   },
+   {
+    "id": "/stepping/idle_ms",
+    "label": "/stepping/idle_ms",
+    "value": "255"
+   },
+   {
+    "id": "/stepping/pulse_us",
+    "label": "/stepping/pulse_us",
+    "value": "4"
+   },
+   {
+    "id": "/stepping/dir_delay_us",
+    "label": "/stepping/dir_delay_us",
+    "value": "1"
+   },
+   {
+    "id": "/stepping/disable_delay_us",
+    "label": "/stepping/disable_delay_us",
+    "value": "2"
+   },
+   {
+    "id": "/stepping/segments",
+    "label": "/stepping/segments",
+    "value": "12"
+   },
+   {
+    "id": "/i2so/min_pulse_us",
+    "label": "/i2so/min_pulse_us",
+    "value": "2"
+   },
+   {
+    "id": "/sdcard/frequency_hz",
+    "label": "/sdcard/frequency_hz",
+    "value": "8000000"
+   },
+   {
+    "id": "/axes/homing_runs",
+    "label": "/axes/homing_runs",
+    "value": "2"
+   },
+   {
+    "id": "/axes/X/steps_per_mm",
+    "label": "/axes/X/steps_per_mm",
+    "value": "40.000"
+   },
+   {
+    "id": "/axes/X/max_rate_mm_per_min",
+    "label": "/axes/X/max_rate_mm_per_min",
+    "value": "8000.000"
+   },
+   {
+    "id": "/axes/X/acceleration_mm_per_sec2",
+    "label": "/axes/X/acceleration_mm_per_sec2",
+    "value": "100.000"
+   },
+   {
+    "id": "/axes/X/max_travel_mm",
+    "label": "/axes/X/max_travel_mm",
+    "value": "255.000"
+   },
+   {
+    "id": "/axes/X/soft_limits",
+    "label": "/axes/X/soft_limits",
+    "value": "1"
+   },
+   {
+    "id": "/axes/X/idle_disable",
+    "label": "/axes/X/idle_disable",
+    "value": "1"
+   },
+   {
+    "id": "/axes/X/homing/cycle",
+    "label": "/axes/X/homing/cycle",
+    "value": "3"
+   },
+   {
+    "id": "/axes/X/homing/allow_single_axis",
+    "label": "/axes/X/homing/allow_single_axis",
+    "value": "1"
+   },
+   {
+    "id": "/axes/X/homing/positive_direction",
+    "label": "/axes/X/homing/positive_direction",
+    "value": "0"
+   },
+   {
+    "id": "/axes/X/homing/mpos_mm",
+    "label": "/axes/X/homing/mpos_mm",
+    "value": "0.000"
+   },
+   {
+    "id": "/axes/X/homing/feed_mm_per_min",
+    "label": "/axes/X/homing/feed_mm_per_min",
+    "value": "300.000"
+   },
+   {
+    "id": "/axes/X/homing/seek_mm_per_min",
+    "label": "/axes/X/homing/seek_mm_per_min",
+    "value": "1500.000"
+   },
+   {
+    "id": "/axes/X/homing/settle_ms",
+    "label": "/axes/X/homing/settle_ms",
+    "value": "500"
+   },
+   {
+    "id": "/axes/X/homing/seek_scaler",
+    "label": "/axes/X/homing/seek_scaler",
+    "value": "1.100"
+   },
+   {
+    "id": "/axes/X/homing/feed_scaler",
+    "label": "/axes/X/homing/feed_scaler",
+    "value": "1.100"
+   },
+   {
+    "id": "/axes/X/motor0/hard_limits",
+    "label": "/axes/X/motor0/hard_limits",
+    "value": "1"
+   },
+   {
+    "id": "/axes/X/motor0/pulloff_mm",
+    "label": "/axes/X/motor0/pulloff_mm",
+    "value": "4.000"
+   },
+   {
+    "id": "/axes/Y/steps_per_mm",
+    "label": "/axes/Y/steps_per_mm",
+    "value": "40.000"
+   },
+   {
+    "id": "/axes/Y/max_rate_mm_per_min",
+    "label": "/axes/Y/max_rate_mm_per_min",
+    "value": "8000.000"
+   },
+   {
+    "id": "/axes/Y/acceleration_mm_per_sec2",
+    "label": "/axes/Y/acceleration_mm_per_sec2",
+    "value": "100.000"
+   },
+   {
+    "id": "/axes/Y/max_travel_mm",
+    "label": "/axes/Y/max_travel_mm",
+    "value": "440.000"
+   },
+   {
+    "id": "/axes/Y/soft_limits",
+    "label": "/axes/Y/soft_limits",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Y/idle_disable",
+    "label": "/axes/Y/idle_disable",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Y/homing/cycle",
+    "label": "/axes/Y/homing/cycle",
+    "value": "3"
+   },
+   {
+    "id": "/axes/Y/homing/allow_single_axis",
+    "label": "/axes/Y/homing/allow_single_axis",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Y/homing/positive_direction",
+    "label": "/axes/Y/homing/positive_direction",
+    "value": "0"
+   },
+   {
+    "id": "/axes/Y/homing/mpos_mm",
+    "label": "/axes/Y/homing/mpos_mm",
+    "value": "0.000"
+   },
+   {
+    "id": "/axes/Y/homing/feed_mm_per_min",
+    "label": "/axes/Y/homing/feed_mm_per_min",
+    "value": "300.000"
+   },
+   {
+    "id": "/axes/Y/homing/seek_mm_per_min",
+    "label": "/axes/Y/homing/seek_mm_per_min",
+    "value": "2000.000"
+   },
+   {
+    "id": "/axes/Y/homing/settle_ms",
+    "label": "/axes/Y/homing/settle_ms",
+    "value": "500"
+   },
+   {
+    "id": "/axes/Y/homing/seek_scaler",
+    "label": "/axes/Y/homing/seek_scaler",
+    "value": "1.100"
+   },
+   {
+    "id": "/axes/Y/homing/feed_scaler",
+    "label": "/axes/Y/homing/feed_scaler",
+    "value": "1.100"
+   },
+   {
+    "id": "/axes/Y/motor0/hard_limits",
+    "label": "/axes/Y/motor0/hard_limits",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Y/motor0/pulloff_mm",
+    "label": "/axes/Y/motor0/pulloff_mm",
+    "value": "4.000"
+   },
+   {
+    "id": "/axes/Z/steps_per_mm",
+    "label": "/axes/Z/steps_per_mm",
+    "value": "100.000"
+   },
+   {
+    "id": "/axes/Z/max_rate_mm_per_min",
+    "label": "/axes/Z/max_rate_mm_per_min",
+    "value": "10000.000"
+   },
+   {
+    "id": "/axes/Z/acceleration_mm_per_sec2",
+    "label": "/axes/Z/acceleration_mm_per_sec2",
+    "value": "1000.000"
+   },
+   {
+    "id": "/axes/Z/max_travel_mm",
+    "label": "/axes/Z/max_travel_mm",
+    "value": "25.000"
+   },
+   {
+    "id": "/axes/Z/soft_limits",
+    "label": "/axes/Z/soft_limits",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Z/idle_disable",
+    "label": "/axes/Z/idle_disable",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Z/homing/cycle",
+    "label": "/axes/Z/homing/cycle",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Z/homing/allow_single_axis",
+    "label": "/axes/Z/homing/allow_single_axis",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Z/homing/positive_direction",
+    "label": "/axes/Z/homing/positive_direction",
+    "value": "1"
+   },
+   {
+    "id": "/axes/Z/homing/mpos_mm",
+    "label": "/axes/Z/homing/mpos_mm",
+    "value": "0.000"
+   },
+   {
+    "id": "/axes/Z/homing/feed_mm_per_min",
+    "label": "/axes/Z/homing/feed_mm_per_min",
+    "value": "300.000"
+   },
+   {
+    "id": "/axes/Z/homing/seek_mm_per_min",
+    "label": "/axes/Z/homing/seek_mm_per_min",
+    "value": "500.000"
+   },
+   {
+    "id": "/axes/Z/homing/settle_ms",
+    "label": "/axes/Z/homing/settle_ms",
+    "value": "500"
+   },
+   {
+    "id": "/axes/Z/homing/seek_scaler",
+    "label": "/axes/Z/homing/seek_scaler",
+    "value": "1.100"
+   },
+   {
+    "id": "/axes/Z/homing/feed_scaler",
+    "label": "/axes/Z/homing/feed_scaler",
+    "value": "1.100"
+   },
+   {
+    "id": "/axes/Z/motor0/hard_limits",
+    "label": "/axes/Z/motor0/hard_limits",
+    "value": "0"
+   },
+   {
+    "id": "/axes/Z/motor0/pulloff_mm",
+    "label": "/axes/Z/motor0/pulloff_mm",
+    "value": "1.000"
+   },
+   {
+    "id": "/axes/Z/motor0/rc_servo/pwm_hz",
+    "label": "/axes/Z/motor0/rc_servo/pwm_hz",
+    "value": "50"
+   },
+   {
+    "id": "/axes/Z/motor0/rc_servo/min_pulse_us",
+    "label": "/axes/Z/motor0/rc_servo/min_pulse_us",
+    "value": "900"
+   },
+   {
+    "id": "/axes/Z/motor0/rc_servo/max_pulse_us",
+    "label": "/axes/Z/motor0/rc_servo/max_pulse_us",
+    "value": "2100"
+   },
+   {
+    "id": "/axes/Z/motor0/rc_servo/timer_ms",
+    "label": "/axes/Z/motor0/rc_servo/timer_ms",
+    "value": "20"
+   },
+   {
+    "id": "/coolant/delay_ms",
+    "label": "/coolant/delay_ms",
+    "value": "0"
+   },
+   {
+    "id": "/probe/check_mode_start",
+    "label": "/probe/check_mode_start",
+    "value": "0"
+   },
+   {
+    "id": "/probe/hard_stop",
+    "label": "/probe/hard_stop",
+    "value": "0"
+   },
+   {
+    "id": "/probe/probe_hard_limit",
+    "label": "/probe/probe_hard_limit",
+    "value": "0"
+   },
+   {
+    "id": "/macros/startup_line0",
+    "label": "/macros/startup_line0",
+    "value": ""
+   },
+   {
+    "id": "/macros/startup_line1",
+    "label": "/macros/startup_line1",
+    "value": ""
+   },
+   {
+    "id": "/macros/Macro0",
+    "label": "/macros/Macro0",
+    "value": ""
+   },
+   {
+    "id": "/macros/Macro1",
+    "label": "/macros/Macro1",
+    "value": ""
+   },
+   {
+    "id": "/macros/Macro2",
+    "label": "/macros/Macro2",
+    "value": ""
+   },
+   {
+    "id": "/macros/Macro3",
+    "label": "/macros/Macro3",
+    "value": ""
+   },
+   {
+    "id": "/macros/after_homing",
+    "label": "/macros/after_homing",
+    "value": ""
+   },
+   {
+    "id": "/macros/after_reset",
+    "label": "/macros/after_reset",
+    "value": ""
+   },
+   {
+    "id": "/macros/after_unlock",
+    "label": "/macros/after_unlock",
+    "value": ""
+   },
+   {
+    "id": "/start/must_home",
+    "label": "/start/must_home",
+    "value": "1"
+   },
+   {
+    "id": "/start/deactivate_parking",
+    "label": "/start/deactivate_parking",
+    "value": "0"
+   },
+   {
+    "id": "/start/check_limits",
+    "label": "/start/check_limits",
+    "value": "1"
+   },
+   {
+    "id": "/parking/enable",
+    "label": "/parking/enable",
+    "value": "0"
+   },
+   {
+    "id": "/parking/axis",
+    "label": "/parking/axis",
+    "value": "2"
+   },
+   {
+    "id": "/parking/target_mpos_mm",
+    "label": "/parking/target_mpos_mm",
+    "value": "-5.000"
+   },
+   {
+    "id": "/parking/rate_mm_per_min",
+    "label": "/parking/rate_mm_per_min",
+    "value": "800.000"
+   },
+   {
+    "id": "/parking/pullout_distance_mm",
+    "label": "/parking/pullout_distance_mm",
+    "value": "5.000"
+   },
+   {
+    "id": "/parking/pullout_rate_mm_per_min",
+    "label": "/parking/pullout_rate_mm_per_min",
+    "value": "250.000"
+   },
+   {
+    "id": "/user_outputs/analog0_hz",
+    "label": "/user_outputs/analog0_hz",
+    "value": "5000"
+   },
+   {
+    "id": "/user_outputs/analog1_hz",
+    "label": "/user_outputs/analog1_hz",
+    "value": "5000"
+   },
+   {
+    "id": "/user_outputs/analog2_hz",
+    "label": "/user_outputs/analog2_hz",
+    "value": "5000"
+   },
+   {
+    "id": "/user_outputs/analog3_hz",
+    "label": "/user_outputs/analog3_hz",
+    "value": "5000"
+   },
+   {
+    "id": "/PWM/pwm_hz",
+    "label": "/PWM/pwm_hz",
+    "value": "2500"
+   },
+   {
+    "id": "/PWM/spinup_ms",
+    "label": "/PWM/spinup_ms",
+    "value": "4000"
+   },
+   {
+    "id": "/PWM/spindown_ms",
+    "label": "/PWM/spindown_ms",
+    "value": "4000"
+   },
+   {
+    "id": "/PWM/tool_num",
+    "label": "/PWM/tool_num",
+    "value": "0"
+   },
+   {
+    "id": "/PWM/off_on_alarm",
+    "label": "/PWM/off_on_alarm",
+    "value": "0"
+   },
+   {
+    "id": "/PWM/atc",
+    "label": "/PWM/atc",
+    "value": ""
+   },
+   {
+    "id": "/PWM/m6_macro",
+    "label": "/PWM/m6_macro",
+    "value": ""
+   },
+   {
+    "id": "/PWM/s0_with_disable",
+    "label": "/PWM/s0_with_disable",
+    "value": "1"
+   },
+   {
+    "id": "/PWM/disable_with_s0",
+    "label": "/PWM/disable_with_s0",
+    "value": "0"
+   },
+   {
+    "id": "/arc_tolerance_mm",
+    "label": "/arc_tolerance_mm",
+    "value": "0.002"
+   },
+   {
+    "id": "/junction_deviation_mm",
+    "label": "/junction_deviation_mm",
+    "value": "0.010"
+   },
+   {
+    "id": "/verbose_errors",
+    "label": "/verbose_errors",
+    "value": "1"
+   },
+   {
+    "id": "/report_inches",
+    "label": "/report_inches",
+    "value": "0"
+   },
+   {
+    "id": "/enable_parking_override_control",
+    "label": "/enable_parking_override_control",
+    "value": "0"
+   },
+   {
+    "id": "/use_line_numbers",
+    "label": "/use_line_numbers",
+    "value": "0"
+   },
+   {
+    "id": "/planner_blocks",
+    "label": "/planner_blocks",
+    "value": "16"
+   }
+  ]
+ }
+}

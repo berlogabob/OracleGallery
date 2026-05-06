@@ -59,8 +59,9 @@ Recommended operator flow:
 3. Select one GUI mode: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
 4. Press `START SYSTEM`.
 5. In `Plotter Console`, press `Connect / Probe`, then `Preflight`.
-6. Use `EXHIBITION DRY` for normal queue/dry-run checks.
-7. Use `EXHIBITION REAL` only after preflight has no critical failures, then press `Arm Real`, then `Start Print`.
+6. Jog the machine to the upper-left work origin, press `Set Work Zero`, then `Ready Check`.
+7. Use `EXHIBITION DRY` for normal queue/dry-run checks.
+8. Use `EXHIBITION REAL` only after preflight has no critical failures, then press `Arm Real`, then `Start Print`.
 
 GUI modes:
 
@@ -76,6 +77,10 @@ FluidNC control:
 - GUI jog/homing controls use FluidNC commands: `$H`, `$H=X`, `$H=Y`, `$X`, `$J=G91 G21 ...`, realtime `!`, `~`, and `Ctrl-X`.
 - `EMERGENCY STOP` is software feed hold `!`; keep a physical emergency stop/power cut available.
 - Printing is row-based: the daemon groups each sheet into rows, claims user jobs before every row, fills remaining row cells with idle symbols, and writes/sends `spool/<sheet>_row_XX.gcode`. Material reload is still sheet-based in v1.
+- `START SYSTEM` creates a run baseline timestamp. Older pending Firebase jobs are tagged `baseline_skipped`, hidden from the queue, and never printed in the new run.
+- `START PRINT` is blocked until preflight passed, work zero is set, and `Ready Check` passed. In `EXHIBITION REAL`, it also requires explicit `Arm Real`.
+- TinyBee Z-servo support is configurable with `NEJE_PLOTTER_USE_Z_SERVO=true`, `NEJE_PLOTTER_Z_DOWN_MM=0`, `NEJE_PLOTTER_Z_UP_MM=25`, and `NEJE_PLOTTER_WORK_ZERO_COMMAND="G10 L20 P1 X0 Y0 Z0"`.
+- Preflight validates `assets/tinybee.json` by default: board `MKS TinyBee V1.0 XXYYZ`, Telnet 23, X/Y travel, Z servo travel, and X/Y single-axis homing.
 
 Developer-only direct services are still available for debugging:
 
@@ -137,7 +142,7 @@ Detailed operator instructions are in `RUNBOOK.md`.
 - `firebase/` Firestore/Storage rules and Firestore indexes.
 - `assets/symbols/` eight local idle/filling SVG symbols used by the plotter daemon.
 - `assets/symbols/symbol_scales.json` manual per-symbol scale multipliers used by the test generator, uploader normalization, and Firebase reprocessing.
-- `assets/generated_idle_symbols/` generated idle/filling SVGs with double circles; ignored by git.
+- `assets/generated_idle_symbols/` generated mark-only idle/filling SVGs; print rings are added later by G-code.
 - `archive/` old briefing artifacts and reference files that are not part of the runtime system.
 
 ## GitHub Pages
@@ -187,6 +192,10 @@ The fixed viewport is intentional. Scale values above `1.0` may overlap neighbou
 - `NEJE_PLOTTER_PLACEHOLDER_ROOT`: idle/filling symbol folder; `start_plotter_daemon.sh` prefers `assets/generated_idle_symbols` when it exists, then falls back to `assets/symbols`.
 - `NEJE_PLOTTER_CELL_DIAMETER_MM`: physical packing cell diameter and the visible cell size in the operator preview.
 - `NEJE_PLOTTER_CELL_GAP_MM`: physical empty distance between neighbouring cell circles.
+- `NEJE_PLOTTER_USE_Z_SERVO`: when `true`, G-code uses Z moves for pen up/down instead of `NEJE_PLOTTER_PEN_UP/PEN_DOWN`.
+- `NEJE_PLOTTER_Z_DOWN_MM`, `NEJE_PLOTTER_Z_UP_MM`, `NEJE_PLOTTER_Z_FEED_MM_MIN`: TinyBee servo Z positions and feed.
+- `NEJE_PLOTTER_WORK_ZERO_COMMAND`: command used by GUI `Set Work Zero`.
+- `NEJE_PLOTTER_TINYBEE_CONFIG_PATH`: FluidNC/TinyBee JSON export used by preflight hardware validation.
 - `NEJE_PLOTTER_LAYOUT_MODE`: `hex` or `grid`.
 - `NEJE_GUI_HOST`, `NEJE_GUI_PORT`: local NiceGUI bind address, default `127.0.0.1:8787`.
 

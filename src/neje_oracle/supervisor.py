@@ -16,6 +16,7 @@ from .models import (
     FluidNCCommandResult,
     FluidNCProbeResult,
     PlotterControlState,
+    PlotterReadinessState,
     PlotterRuntimeConfig,
     PreflightLevel,
     PreflightResult,
@@ -54,6 +55,7 @@ class SupervisorService:
             PlotterControlState(print_enabled=False, operator_paused=True, run_mode=config.run_mode, dry_run=config.dry_run)
         )
         append_log("system", "Start system requested", settings=self.settings)
+        self.reset_run_baseline()
         self.runtime_store.set_component("system", ComponentStatus.STARTING, message="Starting supervised system", started=True)
         firebase_state = self.check_firebase()
         macmini_state = self.check_macmini_agent()
@@ -82,11 +84,30 @@ class SupervisorService:
         self.stop_plotter()
         self.stop_macmini_uploader()
         self.runtime_store.save_print_control(PlotterControlState(print_enabled=False, operator_paused=True))
+        self.runtime_store.save_plotter_readiness(PlotterReadinessState(message="System stopped"))
         self.runtime_store.set_component("live_generator", ComponentStatus.STOPPED, message="Live generation stopped")
         self.runtime_store.set_component("queue", ComponentStatus.STOPPED, message="Queue stopped with system")
         self.runtime_store.set_component("print", ComponentStatus.STOPPED, message="Print stopped by operator")
         self.runtime_store.set_component("system", ComponentStatus.STOPPED, message="System stopped by operator")
         return self.refresh_all_status()
+
+    def reset_run_baseline(self) -> ComponentState:
+        started_at = datetime.now(tz=UTC)
+        self.runtime_store.save_run_started_at(started_at)
+        self.runtime_store.save_plotter_readiness(PlotterReadinessState(message="New run baseline created"))
+        skipped = 0
+        try:
+            skipped = self.remote_factory().skip_pending_before(started_at)
+        except Exception as exc:  # noqa: BLE001
+            append_log("queue", f"Baseline skip unavailable: {exc}", level="warning", settings=self.settings)
+            return self.runtime_store.set_component(
+                "queue",
+                ComponentStatus.WARNING,
+                message=f"Run baseline set; old Firebase jobs not skipped: {exc}",
+                last_error=str(exc),
+            )
+        append_log("queue", f"Run baseline set at {started_at.isoformat()}; skipped {skipped} old pending job(s)", settings=self.settings)
+        return self.runtime_store.set_component("queue", ComponentStatus.RUNNING, message=f"Run baseline set; skipped {skipped} old job(s)", heartbeat=True)
 
     def set_system_mode(self, mode: SystemMode) -> ComponentState:
         self.runtime_store.save_system_mode(mode)
@@ -144,6 +165,14 @@ class SupervisorService:
 
     def start_print(self, mode: SystemMode) -> ComponentState:
         control = mode_to_control(mode, print_enabled=True)
+        preflight = self.runtime_store.load_preflight_result()
+        if preflight is None or preflight.has_critical:
+            append_log("plotter", "Start print blocked: preflight missing or critical", level="warning", settings=self.settings)
+            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="Run successful preflight before START PRINT")
+        readiness = self.runtime_store.load_plotter_readiness()
+        if not readiness.work_zero_set or not readiness.plotter_ready:
+            append_log("plotter", "Start print blocked: plotter is not ready", level="warning", settings=self.settings)
+            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="Set work zero and run Ready Check before START PRINT")
         if mode == SystemMode.EXHIBITION_REAL and not self.runtime_store.load_real_fluidnc_armed():
             append_log("plotter", "Start print blocked: REAL FluidNC not armed", level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="REAL FluidNC is not armed")
@@ -229,6 +258,52 @@ class SupervisorService:
         self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
         return probe
 
+    def set_work_zero(self) -> ComponentState:
+        if not self._manual_control_allowed("set work zero"):
+            return self.runtime_store.load_component_state("ready")
+        config = self.runtime_store.load_plotter_config()
+        command = config.work_zero_command or self.plotter_settings.work_zero_command
+        result = self.transport_factory(self.plotter_settings).send_command(command, wait_for_ok=True)
+        if not result.ok:
+            self.runtime_store.save_plotter_readiness(PlotterReadinessState(message=f"Set work zero failed: {result.message}"))
+            return self._record_fluidnc_command(result, "Set work zero")
+        readiness = PlotterReadinessState(work_zero_set=True, plotter_ready=False, message="Work zero set; run Ready Check")
+        self.runtime_store.save_plotter_readiness(readiness)
+        self.runtime_store.set_component("ready", ComponentStatus.WARNING, message=readiness.message, heartbeat=True)
+        return self._record_fluidnc_command(result, "Set work zero")
+
+    def ready_check(self) -> ComponentState:
+        readiness = self.runtime_store.load_plotter_readiness()
+        if not readiness.work_zero_set:
+            return self.runtime_store.set_component("ready", ComponentStatus.WARNING, message="Set work zero before Ready Check")
+        if not self._manual_control_allowed("ready check"):
+            return self.runtime_store.load_component_state("ready")
+        config = self.runtime_store.load_plotter_config()
+        transport = self.transport_factory(self.plotter_settings)
+        sequence = [
+            f"G0 Z{config.z_up_mm:.3f}",
+            "$H=X",
+            "$H=Y",
+            "G0 X0 Y0",
+        ]
+        for command in sequence:
+            timeout = max(self.plotter_settings.fluidnc_ack_timeout_seconds, 60.0) if command.startswith("$H") else self.plotter_settings.fluidnc_ack_timeout_seconds
+            result = transport.send_command(command, wait_for_ok=True, timeout_seconds=timeout)
+            if not result.ok:
+                failed = PlotterReadinessState(work_zero_set=True, plotter_ready=False, message=f"Ready Check failed at {command}: {result.message}")
+                self.runtime_store.save_plotter_readiness(failed)
+                self.runtime_store.set_component("ready", ComponentStatus.ERROR, message=failed.message, last_error=result.message)
+                return self._record_fluidnc_command(result, f"Ready Check {command}")
+        probe = transport.probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
+        if not probe.online or not probe.controller.is_idle:
+            failed = PlotterReadinessState(work_zero_set=True, plotter_ready=False, message=f"Ready Check failed: {probe.message}")
+            self.runtime_store.save_plotter_readiness(failed)
+            return self.runtime_store.set_component("ready", ComponentStatus.ERROR, message=failed.message, last_error=probe.last_error)
+        ready = PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="Plotter ready at work zero")
+        self.runtime_store.save_plotter_readiness(ready)
+        append_log("plotter", "Ready Check passed", settings=self.settings)
+        return self.runtime_store.set_component("ready", ComponentStatus.RUNNING, message=ready.message, heartbeat=True)
+
     def home_fluidnc(self, axis: str | None = None) -> ComponentState:
         if not self._manual_control_allowed("home"):
             return self.runtime_store.load_component_state("fluidnc")
@@ -251,6 +326,7 @@ class SupervisorService:
     def emergency_stop_fluidnc(self) -> ComponentState:
         result = self.transport_factory(self.plotter_settings).feed_hold()
         self.runtime_store.save_real_fluidnc_armed(False)
+        self.runtime_store.save_plotter_readiness(PlotterReadinessState(message="Emergency stop sent; readiness cleared"))
         control = self.runtime_store.load_print_control()
         control.print_enabled = False
         control.operator_paused = True
@@ -277,6 +353,7 @@ class SupervisorService:
     def soft_reset_fluidnc(self) -> ComponentState:
         result = self.transport_factory(self.plotter_settings).soft_reset()
         self.runtime_store.save_real_fluidnc_armed(False)
+        self.runtime_store.save_plotter_readiness(PlotterReadinessState(message="Soft reset sent; readiness cleared"))
         control = self.runtime_store.load_print_control()
         control.print_enabled = False
         control.operator_paused = True
@@ -330,7 +407,7 @@ class SupervisorService:
 
     def refresh_all_status(self) -> dict[str, ComponentState]:
         states = self.runtime_store.load_all_component_states()
-        for name in ("system", "macmini_uploader", "firebase", "plotter", "fluidnc", "queue", "print", "live_generator"):
+        for name in ("system", "macmini_uploader", "firebase", "plotter", "fluidnc", "queue", "print", "ready", "live_generator"):
             states.setdefault(name, self.runtime_store.load_component_state(name))
         if self._plotter_thread and self._plotter_thread.is_alive():
             states["plotter"] = self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message=states["plotter"].message or "Local plotter daemon running", heartbeat=True)

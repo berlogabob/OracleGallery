@@ -21,6 +21,7 @@ class PlotStatus(str, Enum):
     PLOTTING = "plotting"
     PRINTED = "printed"
     FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class RuntimeStatus(str, Enum):
@@ -162,6 +163,10 @@ class PlotterRuntimeState:
     gcode_progress_percent: float = 0.0
     current_row_index: int = 0
     row_count: int = 0
+    current_cell_index: int = 0
+    current_cell_in_row: int = 0
+    row_cell_count: int = 0
+    cells_completed: int = 0
     rows_completed: int = 0
     sheet_progress_percent: float = 0.0
     updated_at: datetime = field(default_factory=utcnow)
@@ -179,6 +184,10 @@ class PlotterRuntimeState:
             "gcode_progress_percent": self.gcode_progress_percent,
             "current_row_index": self.current_row_index,
             "row_count": self.row_count,
+            "current_cell_index": self.current_cell_index,
+            "current_cell_in_row": self.current_cell_in_row,
+            "row_cell_count": self.row_cell_count,
+            "cells_completed": self.cells_completed,
             "rows_completed": self.rows_completed,
             "sheet_progress_percent": self.sheet_progress_percent,
             "updated_at": self.updated_at.isoformat(),
@@ -198,6 +207,10 @@ class PlotterRuntimeState:
             gcode_progress_percent=float(payload.get("gcode_progress_percent", 0.0)),
             current_row_index=int(payload.get("current_row_index", 0)),
             row_count=int(payload.get("row_count", 0)),
+            current_cell_index=int(payload.get("current_cell_index", 0)),
+            current_cell_in_row=int(payload.get("current_cell_in_row", 0)),
+            row_cell_count=int(payload.get("row_cell_count", 0)),
+            cells_completed=int(payload.get("cells_completed", 0)),
             rows_completed=int(payload.get("rows_completed", 0)),
             sheet_progress_percent=float(payload.get("sheet_progress_percent", 0.0)),
             updated_at=datetime.fromisoformat(payload["updated_at"])
@@ -357,6 +370,12 @@ class PlotterRuntimeConfig:
     gap_mm: float = 0.0
     run_mode: str = "exhibition"
     dry_run: bool = True
+    include_rings: bool = True
+    use_z_servo: bool = False
+    z_down_mm: float = 0.0
+    z_up_mm: float = 25.0
+    z_feed_mm_min: float = 1000.0
+    work_zero_command: str = "G10 L20 P1 X0 Y0 Z0"
     updated_at: datetime = field(default_factory=utcnow)
 
     def to_dict(self) -> dict[str, Any]:
@@ -369,6 +388,12 @@ class PlotterRuntimeConfig:
             "gap_mm": self.gap_mm,
             "run_mode": self.run_mode,
             "dry_run": self.dry_run,
+            "include_rings": self.include_rings,
+            "use_z_servo": self.use_z_servo,
+            "z_down_mm": self.z_down_mm,
+            "z_up_mm": self.z_up_mm,
+            "z_feed_mm_min": self.z_feed_mm_min,
+            "work_zero_command": self.work_zero_command,
             "updated_at": self.updated_at.isoformat(),
         }
 
@@ -383,6 +408,39 @@ class PlotterRuntimeConfig:
             gap_mm=float(payload.get("gap_mm", 0.0)),
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
+            include_rings=bool(payload.get("include_rings", True)),
+            use_z_servo=bool(payload.get("use_z_servo", False)),
+            z_down_mm=float(payload.get("z_down_mm", 0.0)),
+            z_up_mm=float(payload.get("z_up_mm", 25.0)),
+            z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),
+            work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0 Z0")),
+            updated_at=datetime.fromisoformat(payload["updated_at"])
+            if payload.get("updated_at")
+            else utcnow(),
+        )
+
+
+@dataclass
+class PlotterReadinessState:
+    work_zero_set: bool = False
+    plotter_ready: bool = False
+    message: str = "Not ready"
+    updated_at: datetime = field(default_factory=utcnow)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "work_zero_set": self.work_zero_set,
+            "plotter_ready": self.plotter_ready,
+            "message": self.message,
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PlotterReadinessState":
+        return cls(
+            work_zero_set=bool(payload.get("work_zero_set", False)),
+            plotter_ready=bool(payload.get("plotter_ready", False)),
+            message=str(payload.get("message", "Not ready")),
             updated_at=datetime.fromisoformat(payload["updated_at"])
             if payload.get("updated_at")
             else utcnow(),

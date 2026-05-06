@@ -118,13 +118,14 @@ GUI sections:
 - Top mode selector: choose one mode only: `TEST`, `EXHIBITION DRY`, or `EXHIBITION REAL`.
 - `TEST`: fake sessions, idle bank, preview, and dry-run only.
 - `EXHIBITION DRY`: real sessions/uploader/queue, but physical FluidNC output is blocked and sheets go to dry-run/spool.
-- `EXHIBITION REAL`: real sessions and real FluidNC output; `START PRINT` stays disabled until preflight has no critical failures and the operator presses `ARM REAL FLUIDNC`.
+- `EXHIBITION REAL`: real sessions and real FluidNC output; `START PRINT` stays blocked until preflight has no critical failures, work zero is set, Ready Check passed, and the operator presses `ARM REAL FLUIDNC`.
 - Layout: choose `hex` or `grid`, working field size, margin, cell diameter, and gap between neighbouring cell circles. Capacity is calculated automatically.
 - Test mode: generate fake user session folders in `NEJE_UPLOADER_SESSION_ROOT`.
-- Test mode: generate local double-circle idle SVG files in `assets/generated_idle_symbols`.
+- Test mode: generate local mark-only idle SVG files in `assets/generated_idle_symbols`; rings are added later by print-time G-code.
 - `Sheet Preview`: static schematic preview of current placement, not a plotter animation.
 - `Plotter Status`: read local plotter runtime state, latest spool manifest, and confirm reload.
 - `FluidNC Control`: check WebUI/Telnet/status, home, jog, unlock alarm, feed hold, resume, and soft reset.
+- `Ready`: `Set Work Zero` saves current position as G54 X0 Y0 Z0; `Ready Check` raises Z, homes X/Y, returns to X0 Y0, and requires FluidNC `Idle`.
 - `Logs`: shows the last local supervisor/preflight/uploader/plotter log lines from `logs/oracle_supervisor.log`.
 - `Symbol Scale Correction`: edit `assets/symbols/symbol_scales.json` with global and per-symbol scale controls.
 - Scale values can go up to `5.0`. Values above `1.0` intentionally may overlap neighbouring cells; use dry-run before enabling real FluidNC.
@@ -132,10 +133,12 @@ GUI sections:
 Important behavior:
 
 - On launch, nothing starts automatically. Press `START SYSTEM` to start supervised components in safe mode.
+- `START SYSTEM` creates a run baseline timestamp. Pending Firebase jobs older than that timestamp are marked `skipped`, tagged `baseline_skipped`, and hidden from the print queue.
 - `START SYSTEM` starts the local plotter daemon, checks Firebase/FluidNC, and contacts `NEJE_MACMINI_AGENT_URL`.
-- `PREFLIGHT` checks folders, symbols, idle bank, Firebase config, Mac mini/uploader path assumptions, FluidNC, spool write access, and dry-run G-code generation.
+- `PREFLIGHT` checks folders, symbols, idle bank, Firebase config, Mac mini/uploader path assumptions, TinyBee hardware assumptions, FluidNC, spool write access, and dry-run G-code generation.
 - `Connect / Probe` must show WebUI online, Telnet online, and controller state `Idle` before real print is armed.
 - `ARM REAL FLUIDNC` is reset whenever the mode changes. It is never restored automatically after GUI restart.
+- `START PRINT` is blocked until preflight has passed, work zero is set, and Ready Check has passed.
 - The GUI writes layout settings to `runtime/oracle_runtime.sqlite3`; the plotter daemon reads this before every new sheet.
 - If the Mac mini uploader agent is running and started, GUI-generated or TouchDesigner session folders are published to Firebase and become `plot_jobs`.
 - `Generate dry-run sheet` writes local G-code and manifest to `spool/`; it does not send anything to the physical plotter.
@@ -144,6 +147,7 @@ Important behavior:
 - `Confirm reload` updates the local plotter runtime state in SQLite, equivalent to confirming reload in the operator dashboard.
 - The GUI keeps settings in `runtime/gui_settings.json`.
 - Real daemon streaming is row-based. It claims user jobs before every row, fills remaining row cells with idle symbols, and sends one row G-code file at a time. The physical reload workflow remains sheet-based.
+- Rings are now a print-time overlay. Generated/uploaded SVGs are mark-only; the plotter G-code draws user rings as one circle and idle rings as two circles when the GUI `Rings` toggle is enabled.
 
 FluidNC manual controls:
 
@@ -163,7 +167,7 @@ The plotter uses idle symbols to fill empty sheet cells. Original base symbols l
 assets/symbols/
 ```
 
-Generate double-circle idle symbols:
+Generate mark-only idle symbols:
 
 ```bash
 uv run neje-generate-sessions --mode idle --count 8
@@ -271,6 +275,12 @@ NEJE_PLOTTER_SHEET_HEIGHT_MM=440
 NEJE_PLOTTER_SHEET_MARGIN_MM=0
 NEJE_PLOTTER_CELL_DIAMETER_MM=80
 NEJE_PLOTTER_CELL_GAP_MM=0
+NEJE_PLOTTER_USE_Z_SERVO=false
+NEJE_PLOTTER_Z_DOWN_MM=0
+NEJE_PLOTTER_Z_UP_MM=25
+NEJE_PLOTTER_Z_FEED_MM_MIN=1000
+NEJE_PLOTTER_WORK_ZERO_COMMAND="G10 L20 P1 X0 Y0 Z0"
+NEJE_PLOTTER_TINYBEE_CONFIG_PATH=assets/tinybee.json
 NEJE_PLOTTER_DRY_RUN=true
 ```
 
@@ -352,7 +362,7 @@ Plotter dry-run path:
 uv run neje-gui
 ```
 
-In the GUI select `EXHIBITION DRY`, press `START SYSTEM`, press `PREFLIGHT`, then `START PRINT`.
+In the GUI select `EXHIBITION DRY`, press `START SYSTEM`, press `PREFLIGHT`, press `Set Work Zero`, press `Ready Check`, then `START PRINT`.
 
 Check:
 
@@ -397,6 +407,8 @@ Then in the GUI:
 - press `START SYSTEM`;
 - confirm `Mac mini uploader`, `Firebase`, `Plotter`, and `Queue` statuses are not `error`;
 - press `PREFLIGHT`;
+- press `Set Work Zero`;
+- press `Ready Check`;
 - press `START PRINT`;
 - confirm generated sheets are written to `spool/` and physical FluidNC output remains blocked.
 
@@ -406,6 +418,8 @@ Real FluidNC smoke path:
 - press `Connect / Probe` and confirm `WebUI online`, `Telnet online`, and `State: Idle`;
 - press `PREFLIGHT`;
 - confirm no critical failures and `FluidNC` is online;
+- jog to the upper-left work origin, then press `Set Work Zero`;
+- press `Ready Check`;
 - press `ARM REAL FLUIDNC`;
 - only then press `START PRINT`;
 - use `STOP AFTER SHEET` for safe stop before the next sheet.
@@ -430,7 +444,7 @@ If the GUI does not open, check `NEJE_GUI_HOST` and `NEJE_GUI_PORT`, then open `
 
 If GUI-generated sessions do not become Firebase jobs, start `assets/sessions/START_ORACLE_UPLOADER.command` on the Mac mini, press `START SYSTEM` in the MacBook GUI, and confirm Mac mini agent plus GUI use the same `NEJE_UPLOADER_SESSION_ROOT`.
 
-If `START PRINT` is disabled in `EXHIBITION REAL`, run `PREFLIGHT`, fix critical failures, confirm `FluidNC` is online, then press `ARM REAL FLUIDNC`.
+If `START PRINT` is blocked, run `PREFLIGHT`, fix critical failures, confirm `FluidNC` is online, press `Set Work Zero`, press `Ready Check`, and in `EXHIBITION REAL` press `ARM REAL FLUIDNC`.
 
 If FluidNC WebUI opens but GUI says FluidNC is not ready, check the Telnet side separately. The sender requires Telnet `10.198.21.74:23`, a valid `?` status response, and state `Idle`; HTTP dashboard access alone is not enough.
 

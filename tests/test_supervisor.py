@@ -10,6 +10,7 @@ from neje_oracle.models import (
     FluidNCProbeResult,
     FluidNCState,
     PlotterRuntimeConfig,
+    PlotterReadinessState,
     PlotterRuntimeState,
     PreflightCheck,
     PreflightLevel,
@@ -22,8 +23,15 @@ from neje_oracle.supervisor import SupervisorService
 
 
 class EmptyRemote:
-    def claim_next_plot_job(self, consumer_id: str):
+    def __init__(self) -> None:
+        self.skipped_before = None
+
+    def claim_next_plot_job(self, consumer_id: str, *, run_started_at=None):
         return None
+
+    def skip_pending_before(self, cutoff, *, reason: str = "before_run_started_at") -> int:
+        self.skipped_before = cutoff
+        return 0
 
 
 class DryTransport:
@@ -47,6 +55,9 @@ class DryTransport:
 
     def jog(self, axis: str, distance_mm: float, feed_mm_min: float):
         return FluidNCCommandResult(ok=True, command=f"$J={axis}{distance_mm}")
+
+    def send_command(self, command: str, *, wait_for_ok: bool = True, timeout_seconds=None):
+        return FluidNCCommandResult(ok=True, command=command, response_lines=["ok"])
 
     def send(self, *, gcode: str, sheet_id: str, dry_run=None, progress_callback=None):
         path = self.settings.spool_root / f"{sheet_id}.gcode"
@@ -145,6 +156,9 @@ def test_real_print_requires_arm_and_successful_preflight(tmp_path: Path) -> Non
             checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")],
         )
     )
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
     armed = supervisor.arm_real_fluidnc(SystemMode.EXHIBITION_REAL)
     started = supervisor.start_print(SystemMode.EXHIBITION_REAL)
 
@@ -164,6 +178,12 @@ def test_emergency_stop_disables_print_and_disarms_real_mode(tmp_path: Path) -> 
         transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
     )
     supervisor.runtime_store.save_real_fluidnc_armed(True)
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")])
+    )
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
     supervisor.start_print(SystemMode.TEST)
 
     state = supervisor.emergency_stop_fluidnc()
@@ -171,6 +191,7 @@ def test_emergency_stop_disables_print_and_disarms_real_mode(tmp_path: Path) -> 
     assert state.status == ComponentStatus.WARNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
     assert supervisor.runtime_store.load_real_fluidnc_armed() is False
+    assert supervisor.runtime_store.load_plotter_readiness().plotter_ready is False
 
 
 def test_jog_blocked_while_printing(tmp_path: Path) -> None:
@@ -198,6 +219,12 @@ def test_manual_control_pauses_enabled_print_before_jog(tmp_path: Path) -> None:
         remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
         transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
     )
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")])
+    )
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
     supervisor.start_print(SystemMode.TEST)
     assert supervisor.runtime_store.load_print_control().print_enabled is True
 
@@ -206,3 +233,41 @@ def test_manual_control_pauses_enabled_print_before_jog(tmp_path: Path) -> None:
     assert state.status == ComponentStatus.RUNNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
     assert supervisor.runtime_store.load_real_fluidnc_armed() is False
+
+
+def test_ready_workflow_sets_work_zero_and_ready_state(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(work_zero_command="G10 L20 P1 X0 Y0 Z0"))
+
+    supervisor.set_work_zero()
+    ready = supervisor.ready_check()
+
+    assert ready.status == ComponentStatus.RUNNING
+    readiness = supervisor.runtime_store.load_plotter_readiness()
+    assert readiness.work_zero_set is True
+    assert readiness.plotter_ready is True
+
+
+def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=_plotter_settings(tmp_path),
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")])
+    )
+
+    blocked = supervisor.start_print(SystemMode.TEST)
+
+    assert blocked.status == ComponentStatus.WARNING
+    assert supervisor.runtime_store.load_print_control().print_enabled is False

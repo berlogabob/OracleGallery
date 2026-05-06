@@ -73,6 +73,12 @@ class PlotterSettings:
     draw_rate: float = _env_float("NEJE_PLOTTER_DRAW_RATE", 1800.0)
     pen_up_command: str = os.getenv("NEJE_PLOTTER_PEN_UP", "M5")
     pen_down_command: str = os.getenv("NEJE_PLOTTER_PEN_DOWN", "M3 S15")
+    use_z_servo: bool = _env_bool("NEJE_PLOTTER_USE_Z_SERVO", False)
+    z_down_mm: float = _env_float("NEJE_PLOTTER_Z_DOWN_MM", 0.0)
+    z_up_mm: float = _env_float("NEJE_PLOTTER_Z_UP_MM", 25.0)
+    z_feed_mm_min: float = _env_float("NEJE_PLOTTER_Z_FEED_MM_MIN", 1000.0)
+    work_zero_command: str = os.getenv("NEJE_PLOTTER_WORK_ZERO_COMMAND", "G10 L20 P1 X0 Y0 Z0")
+    tinybee_config_path: Path = Path(os.getenv("NEJE_PLOTTER_TINYBEE_CONFIG_PATH", str(_repo_root() / "assets" / "tinybee.json")))
     dry_run: bool = _env_bool("NEJE_PLOTTER_DRY_RUN", True)
     fluidnc_http_url: str = os.getenv("NEJE_PLOTTER_FLUIDNC_HTTP_URL", "http://10.198.21.74")
     fluidnc_telnet_host: str = os.getenv(

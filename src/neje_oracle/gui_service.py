@@ -57,6 +57,7 @@ def build_page() -> None:
     control_labels: dict[str, Any] = {}
     plotter_labels: dict[str, Any] = {}
     fluidnc_labels: dict[str, Any] = {}
+    ready_labels: dict[str, Any] = {}
     cycle_state = {"index": 0}
     supervisor = SupervisorService()
 
@@ -219,6 +220,16 @@ def build_page() -> None:
             label.set_text(str(status.get(key, "-") or "-"))
         total = int(status.get("processed_symbols", 0) or 0)
         progress_percent = float(status.get("sheet_progress_percent", status.get("gcode_progress_percent", 0.0)) or 0.0)
+        current_row = int(status.get("current_row_index", 0) or 0)
+        current_cell = int(status.get("current_cell_index", 0) or 0)
+        current_cell_in_row = int(status.get("current_cell_in_row", 0) or 0)
+        row_cell_count = int(status.get("row_cell_count", 0) or 0)
+        preview.content = build_preview_svg(
+            settings,
+            highlighted_row_index=current_row if current_row > 0 else None,
+            highlighted_cell_index=current_cell if current_cell > 0 else None,
+        )
+        preview.update()
         progress.value = min(max(progress_percent / 100.0, 0.0), 1.0)
         print_enabled = bool(status.get("print_enabled"))
         pending_reload = bool(status.get("pending_reload"))
@@ -237,13 +248,19 @@ def build_page() -> None:
             f"user {status.get('user_count', 0)} · idle {status.get('idle_count', 0)}"
         )
         plotter_labels["progress"].set_text(
-            f"{progress_percent:.0f}% · row {status.get('current_row_index', 0)}/{status.get('row_count', 0)} · "
+            f"{progress_percent:.0f}% · row {current_row}/{status.get('row_count', 0)} · "
+            f"cell {current_cell_in_row}/{row_cell_count} · "
             f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} lines"
         )
         plotter_labels["message"].set_text(str(status.get("message", "-") or "-"))
+        readiness = supervisor.runtime_store.load_plotter_readiness()
+        if ready_labels:
+            ready_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
+            ready_labels["state"].set_text("READY" if readiness.plotter_ready else "NOT READY")
+            ready_labels["message"].set_text(readiness.message)
         preview_progress_label.set_text(
             f"{status.get('status', '-')} | {progress_percent:.1f}% | "
-            f"row {status.get('current_row_index', 0)}/{status.get('row_count', 0)} | "
+            f"row {current_row}/{status.get('row_count', 0)} | cell {current_cell_in_row}/{row_cell_count} | "
             f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
             f"{total}/{layout_capacity(settings)} cells in last sheet"
         )
@@ -267,6 +284,11 @@ def build_page() -> None:
     def stop_system() -> None:
         supervisor.stop_system()
         ui.notify("System stopped safely", color="warning")
+        refresh_status()
+
+    def reset_baseline() -> None:
+        state = supervisor.reset_run_baseline()
+        ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
         refresh_status()
 
     def check_system() -> None:
@@ -332,6 +354,20 @@ def build_page() -> None:
         state = supervisor.stop_print()
         ui.notify(state.message, color="warning")
         refresh_status()
+
+    def set_work_zero() -> None:
+        confirm_action(
+            "SET WORK ZERO",
+            "Current position becomes G54 X0 Y0 Z0. Use only after placing the tool at the upper-left work origin.",
+            lambda: fluidnc_action("set work zero", supervisor.set_work_zero),
+        )
+
+    def ready_check() -> None:
+        confirm_action(
+            "READY CHECK",
+            "Raises Z, homes X/Y, returns to X0 Y0, then checks FluidNC Idle. Confirm only when the machine is clear.",
+            lambda: fluidnc_action("ready check", supervisor.ready_check),
+        )
 
     def open_spool() -> None:
         subprocess.run(["open", str(PlotterSettings().spool_root)], check=False)
@@ -447,11 +483,17 @@ def build_page() -> None:
                 mode_label = mode_badge()
                 transport_label = ui.label("-").classes("text-xs font-bold")
                 primary_action_button("START SYSTEM", start_system)
+                safe_action_button("NEW RUN", reset_baseline)
                 danger_action_button("STOP SYSTEM", stop_system)
                 ui.label("capacity").classes("text-xs text-[#8f4f2b]")
                 capacity_label = ui.label("-").classes("text-sm font-bold")
 
         with ui.card().classes("oracle-card compact-card w-full"):
+            with ui.tabs().classes("text-xs"):
+                ui.tab("1 Connection")
+                ui.tab("2 Calibration")
+                ui.tab("3 Ready")
+                ui.tab("4 Exhibition")
             with ui.row().classes("w-full items-end gap-2"):
                 fields["system_mode"] = ui.select(
                     {mode.value: MODE_LABELS[mode] for mode in SystemMode},
@@ -559,13 +601,28 @@ def build_page() -> None:
                             ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
                             ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
                         with ui.row().classes("gap-1"):
+                            ui.button("Z+", on_click=lambda: jog("Z", 1)).props("dense flat")
+                            ui.button("Z-", on_click=lambda: jog("Z", -1)).props("dense flat")
                             ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
                             ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
                             ui.button("Unlock", on_click=unlock_alarm).props("dense color=warning")
                             ui.button("Resume", on_click=resume_after_hold).props("dense flat")
                             ui.button("Reset", on_click=soft_reset).props("dense color=negative")
                         ui.separator()
-                        ui.label("3. Print").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                        ui.label("3. Ready").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                        with ui.row().classes("gap-1"):
+                            ui.button("Set Work Zero", on_click=set_work_zero).props("dense color=warning")
+                            ui.button("Ready Check", on_click=ready_check).props("dense color=positive")
+                        with ui.grid(columns=2).classes("w-full gap-1"):
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("Zero").classes("label")
+                                ready_labels["zero"] = ui.label("-").classes("value")
+                            with ui.element("div").classes("mini-metric"):
+                                ui.label("Ready").classes("label")
+                                ready_labels["state"] = ui.label("-").classes("value")
+                        ready_labels["message"] = ui.label("-").classes("path-label text-xs")
+                        ui.separator()
+                        ui.label("4. Print").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
                         with ui.row().classes("gap-1"):
                             safe_action_button("Preflight", run_preflight)
                             arm_button = danger_action_button("Arm Real", arm_real_fluidnc)
