@@ -34,6 +34,7 @@ class PlotterDaemon:
         self.runtime_state = self.store.load_runtime_state()
         self._current_row_sheet_indexes: list[int] = []
         self._current_row_cell_count = 0
+        self._current_row_cell_markers: list[tuple[int, int, int]] = []
         self._cells_completed_before_row = 0
         ensure_dir(self.settings.placeholder_root)
         ensure_dir(self.settings.spool_root)
@@ -187,6 +188,7 @@ class PlotterDaemon:
             row_id = f"{sheet_id}_row_{row_index:02d}"
             self._current_row_sheet_indexes = [placement.index for placement in active_placements]
             self._current_row_cell_count = len(active_placements)
+            self._current_row_cell_markers = self._build_cell_progress_markers(row_gcode, active_placements)
             self._cells_completed_before_row = cells_completed
             self._set_state(
                 RuntimeStatus.PRINTING,
@@ -256,6 +258,27 @@ class PlotterDaemon:
             self._set_state(RuntimeStatus.IDLE, "No user jobs or placeholders available", sheet_id=sheet_id)
             return
 
+        try:
+            safety_gcode = self._post_sheet_safety_gcode(config, sheet_id)
+            last_gcode_path = self.transport.send(
+                gcode=safety_gcode,
+                sheet_id=f"{sheet_id}_sheet_end",
+                dry_run=control.dry_run,
+                progress_callback=None,
+            )
+            manifest["post_sheet_safety_gcode_path"] = str(last_gcode_path)
+            self._write_manifest(manifest_path, manifest)
+        except Exception as exc:  # noqa: BLE001
+            if self.oracle_store is not None:
+                control = self.oracle_store.load_print_control()
+                control.print_enabled = False
+                control.operator_paused = True
+                self.oracle_store.save_print_control(control)
+                self.oracle_store.save_real_fluidnc_armed(False)
+                self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after post-sheet safety failure: {exc}")
+            self._set_state(RuntimeStatus.ERROR, f"Post-sheet safety failed: {exc}", sheet_id=sheet_id)
+            return
+
         with self.state_lock:
             self.runtime_state.status = RuntimeStatus.PAUSED
             self.runtime_state.message = "Sheet finished. Replace material and confirm reload."
@@ -276,6 +299,23 @@ class PlotterDaemon:
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
             self.oracle_store.set_component("plotter", ComponentStatus.WARNING, message="Sheet finished; waiting reload", heartbeat=True)
+
+    def _post_sheet_safety_gcode(self, config: PlotterRuntimeConfig, sheet_id: str) -> str:
+        if config.use_z_servo:
+            pen_up = f"G0 Z{config.z_up_mm:.3f}"
+        else:
+            pen_up = self.settings.pen_up_command
+        return "\n".join(
+            [
+                f"; Neje Oracle {sheet_id} post-sheet safety",
+                "G21",
+                "G90",
+                f"G0 F{self.settings.travel_rate:.2f}",
+                pen_up,
+                "G0 X0 Y0",
+                "",
+            ]
+        )
 
     def _claim_user_jobs(self, limit: int) -> list[PlotJobLease]:
         jobs: list[PlotJobLease] = []
@@ -388,6 +428,29 @@ class PlotterDaemon:
     def _write_manifest(self, path: Path, manifest: dict[str, object]) -> None:
         path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def _build_cell_progress_markers(
+        self,
+        gcode: str,
+        placements: list[SheetPlacement],
+    ) -> list[tuple[int, int, int]]:
+        markers: list[tuple[int, int, int]] = []
+        command_count = 0
+        for line in gcode.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("; cell-start "):
+                raw = stripped.removeprefix("; cell-start ").strip()
+                try:
+                    current, _total = raw.split("/", 1)
+                    cell_offset = int(current)
+                except ValueError:
+                    cell_offset = -1
+                if 0 <= cell_offset < len(placements):
+                    # FluidNCTransport does not send comments. The marker maps to the next real command.
+                    markers.append((max(command_count + 1, 1), cell_offset + 1, placements[cell_offset].index))
+            if stripped and not stripped.startswith(";"):
+                command_count += 1
+        return markers
+
     def _load_plotter_config(self) -> PlotterRuntimeConfig:
         default = PlotterRuntimeConfig(
             layout_mode=self.settings.layout_mode,
@@ -487,15 +550,10 @@ class PlotterDaemon:
                 row_label = f"row {self.runtime_state.current_row_index}/{self.runtime_state.row_count}: "
                 completed_fraction = min(max(sent / total, 0.0), 1.0) if total > 0 else 1.0
                 if self._current_row_cell_count > 0:
-                    import math
-
-                    current_cell_in_row = min(
-                        max(math.ceil(completed_fraction * self._current_row_cell_count), 1),
-                        self._current_row_cell_count,
-                    )
+                    current_cell_in_row, current_sheet_index = self._cell_progress_for_sent_count(sent)
                     self.runtime_state.current_cell_in_row = current_cell_in_row
                     self.runtime_state.row_cell_count = self._current_row_cell_count
-                    self.runtime_state.current_cell_index = self._current_row_sheet_indexes[current_cell_in_row - 1]
+                    self.runtime_state.current_cell_index = current_sheet_index
                     self.runtime_state.cells_completed = self._cells_completed_before_row + max(0, current_cell_in_row - 1)
                 self.runtime_state.sheet_progress_percent = min(
                     max(((self.runtime_state.rows_completed + completed_fraction) / self.runtime_state.row_count) * 100.0, 0.0),
@@ -507,3 +565,15 @@ class PlotterDaemon:
             self.runtime_state.message = f"Streaming {row_label}{cell_label} {sent}/{total} lines ({percent:.1f}%)"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
+
+    def _cell_progress_for_sent_count(self, sent: int) -> tuple[int, int]:
+        if not self._current_row_cell_markers:
+            return 1, self._current_row_sheet_indexes[0]
+        current_cell_in_row = self._current_row_cell_markers[0][1]
+        current_sheet_index = self._current_row_cell_markers[0][2]
+        for command_threshold, cell_in_row, sheet_index in self._current_row_cell_markers:
+            if sent < command_threshold:
+                break
+            current_cell_in_row = cell_in_row
+            current_sheet_index = sheet_index
+        return current_cell_in_row, current_sheet_index

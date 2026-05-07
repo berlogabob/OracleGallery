@@ -38,6 +38,7 @@ from .gui_support import (
     load_gui_settings,
     load_symbol_scales,
     read_plotter_status,
+    read_queue_status,
     save_gui_settings,
     save_oracle_plotter_config,
     save_symbol_scales,
@@ -56,6 +57,7 @@ def build_page() -> None:
     symbol_previews: dict[str, Any] = {}
     control_labels: dict[str, Any] = {}
     plotter_labels: dict[str, Any] = {}
+    queue_labels: dict[str, Any] = {}
     fluidnc_labels: dict[str, Any] = {}
     ready_labels: dict[str, Any] = {}
     cycle_state = {"index": 0}
@@ -214,6 +216,7 @@ def build_page() -> None:
 
     def refresh_status() -> None:
         status = read_plotter_status()
+        queue = read_queue_status()
         for key, label in status_labels.items():
             label.set_text(str(status.get(key, "-") or "-"))
         for key, label in control_labels.items():
@@ -253,6 +256,13 @@ def build_page() -> None:
             f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} lines"
         )
         plotter_labels["message"].set_text(str(status.get("message", "-") or "-"))
+        if queue_labels:
+            active = int(queue.get("leased", 0) or 0) + int(queue.get("plotting", 0) or 0)
+            queue_labels["state"].set_text("ONLINE" if queue.get("online") else "OFFLINE")
+            queue_labels["pending"].set_text(str(queue.get("pendingAfterBaseline", 0)))
+            queue_labels["active"].set_text(str(active))
+            queue_labels["failed"].set_text(f"{queue.get('failed', 0)} / {queue.get('skipped', 0)}")
+            queue_labels["message"].set_text(str(queue.get("message", "-") or "-"))
         readiness = supervisor.runtime_store.load_plotter_readiness()
         if ready_labels:
             ready_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
@@ -489,11 +499,6 @@ def build_page() -> None:
                 capacity_label = ui.label("-").classes("text-sm font-bold")
 
         with ui.card().classes("oracle-card compact-card w-full"):
-            with ui.tabs().classes("text-xs"):
-                ui.tab("1 Connection")
-                ui.tab("2 Calibration")
-                ui.tab("3 Ready")
-                ui.tab("4 Exhibition")
             with ui.row().classes("w-full items-end gap-2"):
                 fields["system_mode"] = ui.select(
                     {mode.value: MODE_LABELS[mode] for mode in SystemMode},
@@ -511,7 +516,7 @@ def build_page() -> None:
             preflight_label = ui.label("Preflight: not run").classes("text-xs text-[#8f4f2b]")
             with ui.row().classes("w-full items-center gap-2"):
                 ui.icon("precision_manufacturing").classes("text-[#8f4f2b]")
-                fluidnc_labels["top_status"] = ui.label("Plotter: not connected. Use Plotter Console -> Connect.").classes("text-xs font-bold")
+                fluidnc_labels["top_status"] = ui.label("Plotter: not connected. Use 1 Connection -> Connect / Probe.").classes("text-xs font-bold")
 
         with ui.grid(columns="300px 1fr 360px").classes("w-full gap-2 min-h-0"):
             with ui.column().classes("gap-2 min-h-0"):
@@ -562,93 +567,125 @@ def build_page() -> None:
 
                 with ui.card().classes("oracle-card compact-card w-full"):
                     with ui.expansion("Plotter Console", icon="precision_manufacturing", group="left-column", value=True).classes("w-full plotter-console"):
-                        ui.label("1. Connect").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
-                        with ui.row().classes("gap-1"):
-                            ui.button("Connect / Probe", on_click=check_fluidnc).props("dense color=positive")
-                            ui.button("Emergency Stop", on_click=emergency_stop).props("dense color=negative")
-                        with ui.grid(columns=2).classes("w-full gap-1"):
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("WebUI").classes("label")
-                                fluidnc_labels["webui"] = ui.label("-").classes("value")
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("Telnet").classes("label")
-                                fluidnc_labels["telnet"] = ui.label("-").classes("value")
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("State").classes("label")
-                                fluidnc_labels["state"] = ui.label("-").classes("value")
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("MPos").classes("label")
-                                fluidnc_labels["mpos"] = ui.label("-").classes("value")
-                        fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
-                        fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
-                        fluidnc_labels["modal"] = ui.label("-").classes("hidden")
-                        ui.separator()
-                        ui.label("2. Manual control").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
-                        ui.label("Manual commands pause print before moving. They are blocked while G-code is streaming.").classes("text-[10px] text-[#8f4f2b]")
-                        with ui.row().classes("gap-1 items-end"):
-                            fields["jog_step"] = ui.select(
-                                {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},
-                                value=1.0,
-                                label="Step mm",
-                            ).props("dense outlined").classes("w-20")
-                            fields["jog_feed"] = ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-20")
-                            ui.button("Home", on_click=home_all).props("dense color=warning")
-                        with ui.grid(columns=3).classes("w-full gap-1 jog-pad"):
-                            ui.label("")
-                            ui.button("Y+", on_click=lambda: jog("Y", 1)).props("dense")
-                            ui.label("")
-                            ui.button("X-", on_click=lambda: jog("X", -1)).props("dense")
-                            ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
-                            ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
-                        with ui.row().classes("gap-1"):
-                            ui.button("Z+", on_click=lambda: jog("Z", 1)).props("dense flat")
-                            ui.button("Z-", on_click=lambda: jog("Z", -1)).props("dense flat")
-                            ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
-                            ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
-                            ui.button("Unlock", on_click=unlock_alarm).props("dense color=warning")
-                            ui.button("Resume", on_click=resume_after_hold).props("dense flat")
-                            ui.button("Reset", on_click=soft_reset).props("dense color=negative")
-                        ui.separator()
-                        ui.label("3. Ready").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
-                        with ui.row().classes("gap-1"):
-                            ui.button("Set Work Zero", on_click=set_work_zero).props("dense color=warning")
-                            ui.button("Ready Check", on_click=ready_check).props("dense color=positive")
-                        with ui.grid(columns=2).classes("w-full gap-1"):
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("Zero").classes("label")
-                                ready_labels["zero"] = ui.label("-").classes("value")
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("Ready").classes("label")
-                                ready_labels["state"] = ui.label("-").classes("value")
-                        ready_labels["message"] = ui.label("-").classes("path-label text-xs")
-                        ui.separator()
-                        ui.label("4. Print").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
-                        with ui.row().classes("gap-1"):
-                            safe_action_button("Preflight", run_preflight)
-                            arm_button = danger_action_button("Arm Real", arm_real_fluidnc)
-                        with ui.row().classes("gap-1"):
-                            start_print_button = ui.button("Start Print", on_click=start_print).props("dense color=positive")
-                            ui.button("Stop After Sheet", on_click=stop_print).props("dense color=warning")
-                            reload_button = ui.button("Reload OK", on_click=confirm_reload).props("dense")
-                        with ui.row().classes("gap-1"):
-                            ui.button("Dry-run Sheet", on_click=generate_dry_run).props("dense")
-                            ui.button("Spool", on_click=open_spool).props("dense flat")
-                            ui.button("Refresh", on_click=refresh_status).props("dense flat")
-                        with ui.grid(columns=2).classes("w-full gap-1"):
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("Print").classes("label")
-                                plotter_labels["state"] = ui.label("-").classes("value")
-                            with ui.element("div").classes("mini-metric"):
-                                ui.label("Mode").classes("label")
-                                plotter_labels["mode"] = ui.label("-").classes("value")
-                        plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
-                        plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
-                        progress = ui.linear_progress(value=0).classes("w-full")
-                        plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
-                        plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
-                        status_labels["pending_reload"] = ui.label("-").classes("hidden")
-                        status_labels["latest_manifest"] = ui.label("-").classes("hidden")
-                        status_labels["last_sheet_path"] = ui.label("-").classes("hidden")
+                        with ui.tabs().classes("w-full text-xs") as workflow_tabs:
+                            connection_tab = ui.tab("1 Connection")
+                            calibration_tab = ui.tab("2 Calibration")
+                            ready_tab = ui.tab("3 Ready")
+                            exhibition_tab = ui.tab("4 Exhibition")
+                        with ui.tab_panels(workflow_tabs, value=connection_tab).classes("w-full"):
+                            with ui.tab_panel(connection_tab).classes("p-0 pt-2"):
+                                ui.label("Network and controller state. No motion except emergency/hold/reset actions.").classes("text-[10px] text-[#8f4f2b]")
+                                with ui.row().classes("gap-1"):
+                                    ui.button("Connect / Probe", on_click=check_fluidnc).props("dense color=positive")
+                                    ui.button("Emergency Stop", on_click=emergency_stop).props("dense color=negative")
+                                with ui.grid(columns=2).classes("w-full gap-1"):
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("WebUI").classes("label")
+                                        fluidnc_labels["webui"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Telnet").classes("label")
+                                        fluidnc_labels["telnet"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("State").classes("label")
+                                        fluidnc_labels["state"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("MPos").classes("label")
+                                        fluidnc_labels["mpos"] = ui.label("-").classes("value")
+                                fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
+                                fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
+                                fluidnc_labels["modal"] = ui.label("-").classes("hidden")
+                                with ui.row().classes("gap-1"):
+                                    ui.button("Unlock", on_click=unlock_alarm).props("dense color=warning")
+                                    ui.button("Resume", on_click=resume_after_hold).props("dense flat")
+                                    ui.button("Reset", on_click=soft_reset).props("dense color=negative")
+
+                            with ui.tab_panel(calibration_tab).classes("p-0 pt-2"):
+                                ui.label("Jog and layout setup. Manual commands pause print before moving and are blocked while G-code streams.").classes("text-[10px] text-[#8f4f2b]")
+                                with ui.row().classes("gap-1 items-end"):
+                                    fields["jog_step"] = ui.select(
+                                        {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},
+                                        value=1.0,
+                                        label="Step mm",
+                                    ).props("dense outlined").classes("w-20")
+                                    fields["jog_feed"] = ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-20")
+                                    ui.button("Home", on_click=home_all).props("dense color=warning")
+                                with ui.grid(columns=3).classes("w-full gap-1 jog-pad"):
+                                    ui.label("")
+                                    ui.button("Y+", on_click=lambda: jog("Y", 1)).props("dense")
+                                    ui.label("")
+                                    ui.button("X-", on_click=lambda: jog("X", -1)).props("dense")
+                                    ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
+                                    ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
+                                with ui.row().classes("gap-1"):
+                                    ui.button("Z+", on_click=lambda: jog("Z", 1)).props("dense flat")
+                                    ui.button("Z-", on_click=lambda: jog("Z", -1)).props("dense flat")
+                                    ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
+                                    ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
+                                ui.separator()
+                                ui.label("Layout and preview").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                                with ui.row().classes("gap-1"):
+                                    ui.button("Dry-run Sheet", on_click=generate_dry_run).props("dense")
+                                    ui.button("Refresh", on_click=refresh_status).props("dense flat")
+
+                            with ui.tab_panel(ready_tab).classes("p-0 pt-2"):
+                                ui.label("Physical readiness checklist").classes("text-[10px] tracking-[0.2em] text-[#8f4f2b]")
+                                ui.label("Before Set Work Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure.").classes("text-[10px] text-[#8f4f2b]")
+                                with ui.row().classes("gap-1"):
+                                    ui.button("Set Work Zero", on_click=set_work_zero).props("dense color=warning")
+                                    ui.button("Ready Check", on_click=ready_check).props("dense color=positive")
+                                with ui.grid(columns=2).classes("w-full gap-1"):
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Zero").classes("label")
+                                        ready_labels["zero"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Ready").classes("label")
+                                        ready_labels["state"] = ui.label("-").classes("value")
+                                ready_labels["message"] = ui.label("-").classes("path-label text-xs")
+                                ui.separator()
+                                with ui.row().classes("gap-1"):
+                                    safe_action_button("Preflight", run_preflight)
+                                    arm_button = danger_action_button("Arm Real", arm_real_fluidnc)
+                                preflight_label.classes("block")
+
+                            with ui.tab_panel(exhibition_tab).classes("p-0 pt-2"):
+                                ui.label("Minimal live-print controls. No calibration changes here.").classes("text-[10px] text-[#8f4f2b]")
+                                with ui.row().classes("gap-1"):
+                                    start_print_button = ui.button("Start Print", on_click=start_print).props("dense color=positive")
+                                    ui.button("Stop After Sheet", on_click=stop_print).props("dense color=warning")
+                                    reload_button = ui.button("Reload OK", on_click=confirm_reload).props("dense")
+                                    ui.button("Emergency Stop", on_click=emergency_stop).props("dense color=negative")
+                                with ui.row().classes("gap-1"):
+                                    ui.button("Spool", on_click=open_spool).props("dense flat")
+                                    ui.button("Refresh", on_click=refresh_status).props("dense flat")
+                                with ui.grid(columns=2).classes("w-full gap-1"):
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Print").classes("label")
+                                        plotter_labels["state"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Mode").classes("label")
+                                        plotter_labels["mode"] = ui.label("-").classes("value")
+                                with ui.grid(columns=4).classes("w-full gap-1"):
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Queue").classes("label")
+                                        queue_labels["state"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Pending").classes("label")
+                                        queue_labels["pending"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Active").classes("label")
+                                        queue_labels["active"] = ui.label("-").classes("value")
+                                    with ui.element("div").classes("mini-metric"):
+                                        ui.label("Fail/Skip").classes("label")
+                                        queue_labels["failed"] = ui.label("-").classes("value")
+                                queue_labels["message"] = ui.label("-").classes("path-label text-[10px]")
+                                plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
+                                plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                                progress = ui.linear_progress(value=0).classes("w-full")
+                                plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                                plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
+                                status_labels["pending_reload"] = ui.label("-").classes("hidden")
+                                status_labels["latest_manifest"] = ui.label("-").classes("hidden")
+                                status_labels["last_sheet_path"] = ui.label("-").classes("hidden")
 
                 with ui.card().classes("oracle-card compact-card w-full"):
                     with ui.expansion("Logs", icon="receipt_long", group="left-column", value=False).classes("w-full"):

@@ -373,7 +373,7 @@ class PlotterRuntimeConfig:
     run_mode: str = "exhibition"
     dry_run: bool = True
     include_rings: bool = True
-    use_z_servo: bool = False
+    use_z_servo: bool = True
     z_down_mm: float = 0.0
     z_up_mm: float = 25.0
     z_feed_mm_min: float = 1000.0
@@ -411,7 +411,7 @@ class PlotterRuntimeConfig:
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
             include_rings=bool(payload.get("include_rings", True)),
-            use_z_servo=bool(payload.get("use_z_servo", False)),
+            use_z_servo=bool(payload.get("use_z_servo", True)),
             z_down_mm=float(payload.get("z_down_mm", 0.0)),
             z_up_mm=float(payload.get("z_up_mm", 25.0)),
             z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),

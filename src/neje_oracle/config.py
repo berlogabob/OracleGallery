@@ -73,7 +73,7 @@ class PlotterSettings:
     draw_rate: float = _env_float("NEJE_PLOTTER_DRAW_RATE", 1800.0)
     pen_up_command: str = os.getenv("NEJE_PLOTTER_PEN_UP", "M5")
     pen_down_command: str = os.getenv("NEJE_PLOTTER_PEN_DOWN", "M3 S15")
-    use_z_servo: bool = _env_bool("NEJE_PLOTTER_USE_Z_SERVO", False)
+    use_z_servo: bool = _env_bool("NEJE_PLOTTER_USE_Z_SERVO", True)
     z_down_mm: float = _env_float("NEJE_PLOTTER_Z_DOWN_MM", 0.0)
     z_up_mm: float = _env_float("NEJE_PLOTTER_Z_UP_MM", 25.0)
     z_feed_mm_min: float = _env_float("NEJE_PLOTTER_Z_FEED_MM_MIN", 1000.0)

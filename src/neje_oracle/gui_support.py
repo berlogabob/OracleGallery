@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .config import SYMBOL_FIT_RATIO, OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root, ensure_dir, ensure_parent
+from .config import SYMBOL_FIT_RATIO, FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root, ensure_dir, ensure_parent
+from .firebase_io import FirebaseRemoteRepository
 from .gui_modes import apply_mode_to_config, mode_policy
 from .layout import build_sheet_layout, calculate_layout_capacity
 from .models import PlotterControlState, PlotterRuntimeConfig, RuntimeStatus, SheetItem, SystemMode
@@ -16,6 +17,9 @@ from .session_generator import build_variant_svg, generate_idle_symbols, generat
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode, symbol_diameter_for_cell
 from .transport import FluidNCTransport
+
+
+_QUEUE_STATUS_CACHE: tuple[datetime, dict[str, Any]] | None = None
 
 
 GUI_DEFAULTS = {
@@ -435,6 +439,53 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
         "user_count": item_counts["user"],
         "idle_count": item_counts["idle"],
         "processed_symbols": item_counts["total"],
+    }
+
+
+def read_queue_status(*, force: bool = False, ttl_seconds: float = 10.0) -> dict[str, Any]:
+    global _QUEUE_STATUS_CACHE
+    now = datetime.now(tz=UTC)
+    if not force and _QUEUE_STATUS_CACHE is not None:
+        cached_at, cached_payload = _QUEUE_STATUS_CACHE
+        if (now - cached_at).total_seconds() < ttl_seconds:
+            return cached_payload
+
+    firebase_settings = FirebaseSettings()
+    if not firebase_settings.enabled:
+        payload = _queue_status_offline("Firebase is not configured")
+        _QUEUE_STATUS_CACHE = (now, payload)
+        return payload
+
+    try:
+        oracle_store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
+        baseline = oracle_store.load_run_started_at()
+        payload = FirebaseRemoteRepository(firebase_settings).get_plot_job_counts(run_started_at=baseline)
+        payload["runStartedAt"] = baseline.isoformat() if baseline else ""
+        _QUEUE_STATUS_CACHE = (now, payload)
+        return payload
+    except Exception as exc:  # noqa: BLE001
+        payload = _queue_status_offline(str(exc))
+        _QUEUE_STATUS_CACHE = (now, payload)
+        return payload
+
+
+def _queue_status_offline(message: str) -> dict[str, Any]:
+    return {
+        "online": False,
+        "total": 0,
+        "limitedTo": 0,
+        "pending": 0,
+        "pendingAfterBaseline": 0,
+        "pendingBeforeBaseline": 0,
+        "leased": 0,
+        "plotting": 0,
+        "printed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "hidden": 0,
+        "unknown": 0,
+        "runStartedAt": "",
+        "message": message,
     }
 
 

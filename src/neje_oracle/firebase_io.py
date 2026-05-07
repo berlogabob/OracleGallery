@@ -216,6 +216,14 @@ class FirebaseRemoteRepository:
             skipped += 1
         return skipped
 
+    def get_plot_job_counts(self, *, run_started_at: datetime | None = None, limit: int = 500) -> dict[str, int | str | bool]:
+        docs = list(self._db.collection("plot_jobs").limit(limit).stream())
+        return summarize_plot_job_counts(
+            [doc.to_dict() or {} for doc in docs],
+            run_started_at=run_started_at,
+            limited_to=limit,
+        )
+
     def _mark_plot_job_skipped(self, doc, payload: dict, *, reason: str) -> None:
         tags = list(payload.get("tags") or [])
         if "baseline_skipped" not in tags:
@@ -352,6 +360,46 @@ def recorded_datetime(value):
         raw = str(value)
     parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+
+
+def summarize_plot_job_counts(
+    payloads: list[dict],
+    *,
+    run_started_at: datetime | None = None,
+    limited_to: int | None = None,
+) -> dict[str, int | str | bool]:
+    counts: dict[str, int | str | bool] = {
+        "online": True,
+        "total": len(payloads),
+        "limitedTo": limited_to or 0,
+        "pending": 0,
+        "pendingAfterBaseline": 0,
+        "pendingBeforeBaseline": 0,
+        "leased": 0,
+        "plotting": 0,
+        "printed": 0,
+        "failed": 0,
+        "skipped": 0,
+        "hidden": 0,
+        "unknown": 0,
+        "message": "Queue counts loaded",
+    }
+    known_statuses = {status.value for status in PlotStatus}
+    for payload in payloads:
+        status = str(payload.get("status") or "unknown")
+        if status not in known_statuses:
+            status = "unknown"
+        counts[status] = int(counts.get(status, 0)) + 1
+        visible = payload.get("visibleInQueue") is not False
+        if not visible:
+            counts["hidden"] = int(counts["hidden"]) + 1
+        if status == PlotStatus.PENDING.value:
+            created_at = recorded_datetime(payload.get("createdAt"))
+            if run_started_at is not None and created_at < run_started_at:
+                counts["pendingBeforeBaseline"] = int(counts["pendingBeforeBaseline"]) + 1
+            elif visible:
+                counts["pendingAfterBaseline"] = int(counts["pendingAfterBaseline"]) + 1
+    return counts
 
 
 def _session_visibility(record: SessionRecord) -> tuple[str, list[str], bool]:

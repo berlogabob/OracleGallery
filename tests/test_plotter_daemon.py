@@ -228,6 +228,90 @@ def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> No
     assert '"gap_mm": 20' in manifest
 
 
+def test_plotter_writes_explicit_post_sheet_safety_gcode(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_plotter_config(
+        PlotterRuntimeConfig(
+            layout_mode="grid",
+            sheet_width_mm=180,
+            sheet_height_mm=100,
+            cell_diameter_mm=80,
+            run_mode="test",
+            dry_run=True,
+            use_z_servo=True,
+            z_up_mm=25.0,
+        )
+    )
+    remote = FakeRemoteRepository()
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
+
+    daemon.run_cycle()
+
+    safety_files = list((tmp_path / "spool").glob("*_sheet_end.gcode"))
+    assert len(safety_files) == 1
+    safety_gcode = safety_files[0].read_text(encoding="utf-8")
+    assert "post-sheet safety" in safety_gcode
+    assert "G0 Z25.000" in safety_gcode
+    assert "G0 X0 Y0" in safety_gcode
+    manifest = next((tmp_path / "spool").glob("*.json")).read_text(encoding="utf-8")
+    assert "post_sheet_safety_gcode_path" in manifest
+
+
+def test_plotter_progress_uses_cell_markers_instead_of_row_fraction(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_plotter_config(
+        PlotterRuntimeConfig(
+            layout_mode="grid",
+            sheet_width_mm=240,
+            sheet_height_mm=80,
+            cell_diameter_mm=80,
+            run_mode="test",
+            dry_run=True,
+        )
+    )
+    remote = FakeRemoteRepository()
+
+    class MarkerTransport:
+        def __init__(self) -> None:
+            self.observed_cell_index = -1
+            self.observed_cell_in_row = -1
+
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback):
+            path = settings.spool_root / f"{sheet_id}.gcode"
+            path.write_text(gcode, encoding="utf-8")
+            if progress_callback and "row_01" in sheet_id:
+                threshold = _command_threshold_for_cell_start(gcode, cell_offset=1)
+                total = _sendable_command_count(gcode)
+                progress_callback(threshold, total)
+                observed = store.load_runtime_state()
+                self.observed_cell_index = observed.current_cell_index
+                self.observed_cell_in_row = observed.current_cell_in_row
+            return path
+
+    transport = MarkerTransport()
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)  # type: ignore[arg-type]
+
+    daemon.run_cycle()
+
+    assert transport.observed_cell_in_row == 2
+    assert transport.observed_cell_index == 1
+
+
 def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
     placeholder_root = tmp_path / "placeholders"
     placeholder_root.mkdir(parents=True)
@@ -276,3 +360,19 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
     daemon.run_cycle()
 
     assert any(update[0] == "late_user" and update[1] == PlotStatus.PRINTED.value for update in remote.updates)
+
+
+def _command_threshold_for_cell_start(gcode: str, *, cell_offset: int) -> int:
+    command_count = 0
+    target = f"; cell-start {cell_offset}/"
+    for line in gcode.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(target):
+            return command_count + 1
+        if stripped and not stripped.startswith(";"):
+            command_count += 1
+    raise AssertionError(f"missing {target}")
+
+
+def _sendable_command_count(gcode: str) -> int:
+    return sum(1 for line in gcode.splitlines() if line.strip() and not line.strip().startswith(";"))
