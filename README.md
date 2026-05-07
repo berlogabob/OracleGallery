@@ -131,7 +131,7 @@ Deploy is manual by pushing `main`; GitHub Pages serves from `main` branch `/doc
 - `src/neje_oracle/`: Python uploader, GUI supervisor, plotter daemon, FluidNC transport, SVG/G-code logic.
 - `public_gallery/`: Flutter source for the read-only public gallery.
 - `docs/`: built Flutter Web output served by GitHub Pages.
-- `docs/plans/`: working plans, fix notes, and design/update checklists.
+- `planning/`: working plans, fix notes, and design/update checklists.
 - `assets/symbols/`: canonical 8 base SVG symbols and scale config.
 - `assets/sessions/`: Mac mini uploader launcher only; raw copied sessions are ignored.
 - `firebase/`: Firestore/Storage rules and indexes.
