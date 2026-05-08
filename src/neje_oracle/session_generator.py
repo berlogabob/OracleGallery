@@ -247,6 +247,8 @@ def _load_source_symbols(source_root: Path) -> list[Path]:
 def _select_symbol(symbols: list[Path], symbol_name: str | None, index: int) -> Path:
     if not symbol_name or symbol_name == "__cycle__":
         return symbols[index % len(symbols)]
+    if symbol_name == "__random__":
+        return random.choice(symbols)
     for symbol in symbols:
         if symbol.name == symbol_name or symbol.stem == symbol_name:
             return symbol

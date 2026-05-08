@@ -51,6 +51,11 @@ class GuiSettings:
     randomness: float = GUI_DEFAULTS["randomness"]
     randomness_fine: float = GUI_DEFAULTS["randomness_fine"]
     include_rings: bool = GUI_DEFAULTS["include_rings"]
+    travel_rate: float = 5000.0
+    draw_rate: float = 1800.0
+    z_down_mm: float = 0.0
+    z_up_mm: float = 25.0
+    z_feed_mm_min: float = 1000.0
     user_count: int = 1
     live_interval_seconds: float = 12.0
     idle_count: int = 8
@@ -76,6 +81,11 @@ class GuiSettings:
             cell_diameter_mm=settings.cell_diameter_mm,
             gap_mm=settings.cell_gap_mm,
             dry_run=settings.dry_run,
+            travel_rate=settings.travel_rate,
+            draw_rate=settings.draw_rate,
+            z_down_mm=settings.z_down_mm,
+            z_up_mm=settings.z_up_mm,
+            z_feed_mm_min=settings.z_feed_mm_min,
         )
 
 
@@ -138,10 +148,12 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
         run_mode=settings.run_mode,
         dry_run=settings.dry_run,
         include_rings=settings.include_rings,
+        travel_rate=settings.travel_rate,
+        draw_rate=settings.draw_rate,
         use_z_servo=plotter_settings.use_z_servo,
-        z_down_mm=plotter_settings.z_down_mm,
-        z_up_mm=plotter_settings.z_up_mm,
-        z_feed_mm_min=plotter_settings.z_feed_mm_min,
+        z_down_mm=settings.z_down_mm,
+        z_up_mm=settings.z_up_mm,
+        z_feed_mm_min=settings.z_feed_mm_min,
         work_zero_command=plotter_settings.work_zero_command,
     ), settings.mode)
 
@@ -623,7 +635,7 @@ def latest_spool_manifest(spool_root: Path) -> Path | None:
 
 
 def effective_randomness(settings: GuiSettings) -> float:
-    return max(0.0, min(settings.randomness + settings.randomness_fine, 100.0))
+    return max(0.0, min(settings.randomness * 0.5 + settings.randomness_fine, 100.0))
 
 
 def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:

@@ -94,6 +94,7 @@ def normalize_svg_root(
     source_mid_y = (min_y + max_y) / 2.0
     target_diameter = CANONICAL_BASE_DIAMETER * bounded_scale
     transform_scale = target_diameter / max(width, height)
+    _force_stroke_only(root)
     children = "\n".join(ET.tostring(child, encoding="unicode") for child in list(root))
 
     rings: list[str] = []
@@ -300,6 +301,24 @@ def _bounded_scale(scale: float) -> float:
 
 def _circle(radius: float) -> str:
     return f'<circle cx="{CANONICAL_CENTER:.1f}" cy="{CANONICAL_CENTER:.1f}" r="{radius:.1f}" />'
+
+
+def _force_stroke_only(root: ET.Element) -> None:
+    for element in root.iter():
+        for attribute in ("stroke", "stroke-width", "fill"):
+            element.attrib.pop(attribute, None)
+        style = element.get("style")
+        if style:
+            kept_styles = [
+                part.strip()
+                for part in style.split(";")
+                if part.strip()
+                and not part.strip().lower().startswith(("stroke:", "stroke-width:", "fill:"))
+            ]
+            if kept_styles:
+                element.set("style", ";".join(kept_styles))
+            else:
+                element.attrib.pop("style", None)
 
 
 def _local_name(tag: str) -> str:

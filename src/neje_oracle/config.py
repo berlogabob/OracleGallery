@@ -28,13 +28,45 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _load_dotenv_file() -> None:
+    env_path = _repo_root() / ".env"
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv_file()
+
+
+def _firebase_project_id() -> str:
+    return os.getenv("NEJE_FIREBASE_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID", "")
+
+
+def _firebase_storage_bucket() -> str:
+    explicit = os.getenv("NEJE_FIREBASE_STORAGE_BUCKET") or os.getenv("FIREBASE_STORAGE_BUCKET", "")
+    if explicit:
+        return explicit
+    project_id = _firebase_project_id()
+    return f"{project_id}.firebasestorage.app" if project_id else ""
+
+
+def _firebase_credentials_path() -> Path:
+    explicit = os.getenv("NEJE_FIREBASE_CREDENTIALS") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+    if explicit:
+        return Path(explicit).expanduser()
+    return _repo_root() / "firebase" / "serviceAccountKey.json"
+
+
 @dataclass(frozen=True)
 class FirebaseSettings:
-    project_id: str = os.getenv("NEJE_FIREBASE_PROJECT_ID", "")
-    storage_bucket: str = os.getenv("NEJE_FIREBASE_STORAGE_BUCKET", "")
-    credentials_path: Path = Path(
-        os.getenv("NEJE_FIREBASE_CREDENTIALS", str(_repo_root() / "serviceAccountKey.json"))
-    )
+    project_id: str = _firebase_project_id()
+    storage_bucket: str = _firebase_storage_bucket()
+    credentials_path: Path = _firebase_credentials_path()
     gallery_base_url: str = os.getenv(
         "NEJE_GALLERY_BASE_URL",
         "https://example.github.io/neje-oracle-gallery",
@@ -80,10 +112,10 @@ class PlotterSettings:
     work_zero_command: str = os.getenv("NEJE_PLOTTER_WORK_ZERO_COMMAND", "G10 L20 P1 X0 Y0 Z0")
     tinybee_config_path: Path = Path(os.getenv("NEJE_PLOTTER_TINYBEE_CONFIG_PATH", str(_repo_root() / "assets" / "tinybee.json")))
     dry_run: bool = _env_bool("NEJE_PLOTTER_DRY_RUN", True)
-    fluidnc_http_url: str = os.getenv("NEJE_PLOTTER_FLUIDNC_HTTP_URL", "http://10.198.21.74")
+    fluidnc_http_url: str = os.getenv("NEJE_PLOTTER_FLUIDNC_HTTP_URL", "")
     fluidnc_telnet_host: str = os.getenv(
         "NEJE_PLOTTER_FLUIDNC_TELNET_HOST",
-        os.getenv("NEJE_PLOTTER_FLUIDNC_HOST", "10.198.21.74"),
+        os.getenv("NEJE_PLOTTER_FLUIDNC_HOST", ""),
     )
     fluidnc_telnet_port: int = _env_int(
         "NEJE_PLOTTER_FLUIDNC_TELNET_PORT",

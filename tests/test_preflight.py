@@ -57,7 +57,7 @@ def test_preflight_marks_real_mode_critical_when_fluidnc_offline(tmp_path: Path)
     assert any(check.name == "fluidnc" and check.level == PreflightLevel.CRITICAL for check in result.checks)
 
 
-def test_preflight_allows_test_mode_with_offline_fluidnc_as_warning(tmp_path: Path) -> None:
+def test_preflight_blocks_test_print_with_offline_fluidnc(tmp_path: Path) -> None:
     service = PreflightService(
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=_plotter_settings(tmp_path),
@@ -68,7 +68,42 @@ def test_preflight_allows_test_mode_with_offline_fluidnc_as_warning(tmp_path: Pa
 
     result = service.run(mode=SystemMode.TEST, gui_settings=GuiSettings(system_mode=SystemMode.TEST.value))
 
-    assert any(check.name == "fluidnc" and check.level == PreflightLevel.WARNING for check in result.checks)
+    assert any(check.name == "fluidnc" and check.level == PreflightLevel.CRITICAL for check in result.checks)
+
+
+def test_preflight_allows_exhibition_dry_without_firebase_as_warning(tmp_path: Path) -> None:
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    service = PreflightService(
+        supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
+        plotter_settings=settings,
+        uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
+        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        fluidnc_checker=lambda timeout: (True, "Idle"),
+    )
+
+    result = service.run(mode=SystemMode.EXHIBITION_DRY, gui_settings=GuiSettings(system_mode=SystemMode.EXHIBITION_DRY.value))
+
+    assert result.status == PreflightLevel.WARNING
+    assert any(check.name == "firebase config" and check.level == PreflightLevel.WARNING for check in result.checks)
+    assert not result.has_critical
+
+
+def test_preflight_blocks_exhibition_real_without_firebase(tmp_path: Path) -> None:
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    service = PreflightService(
+        supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
+        plotter_settings=settings,
+        uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
+        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        fluidnc_checker=lambda timeout: (True, "Idle"),
+    )
+
+    result = service.run(mode=SystemMode.EXHIBITION_REAL, gui_settings=GuiSettings(system_mode=SystemMode.EXHIBITION_REAL.value))
+
+    assert result.status == PreflightLevel.CRITICAL
+    assert any(check.name == "firebase config" and check.level == PreflightLevel.CRITICAL for check in result.checks)
 
 
 def test_preflight_validates_tinybee_hardware_config(tmp_path: Path) -> None:

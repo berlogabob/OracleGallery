@@ -1,5 +1,9 @@
 .DS_Store
 .env
+secrets/
+serviceAccountKey.json
+firebase/*serviceAccount*.json
+firebase/serviceAccountKey.json
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies

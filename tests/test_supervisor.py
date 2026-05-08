@@ -121,7 +121,7 @@ def test_supervisor_starts_and_stops_local_plotter_once(tmp_path: Path) -> None:
     assert stopped.status == ComponentStatus.STOPPED
 
 
-def test_start_system_reports_plotter_start_failure(tmp_path: Path) -> None:
+def test_start_system_uses_local_idle_remote_when_firebase_missing_in_dry_run(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     supervisor = SupervisorService(
         settings=settings,
@@ -131,6 +131,23 @@ def test_start_system_reports_plotter_start_failure(tmp_path: Path) -> None:
     )
 
     states = supervisor.start_system(PlotterRuntimeConfig(dry_run=True))
+
+    assert states["plotter"].status == ComponentStatus.RUNNING
+    assert states["queue"].status == ComponentStatus.WARNING
+    assert "local idle" in states["queue"].message.lower()
+    supervisor.stop_plotter()
+
+
+def test_start_system_reports_plotter_start_failure_in_real_mode(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=_plotter_settings(tmp_path),
+        remote_factory=lambda: (_ for _ in ()).throw(RuntimeError("firebase unavailable")),
+        transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
+    )
+
+    states = supervisor.start_system(PlotterRuntimeConfig(dry_run=False))
 
     assert states["plotter"].status == ComponentStatus.ERROR
     assert states["system"].status == ComponentStatus.ERROR

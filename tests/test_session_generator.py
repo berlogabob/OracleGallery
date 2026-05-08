@@ -109,6 +109,28 @@ def test_symbol_scale_changes_inner_mark_transform(tmp_path: Path) -> None:
     assert _transform_scale(small_svg) < _transform_scale(large_svg)
 
 
+def test_variant_svg_forces_uniform_stroke_width_and_no_fill(tmp_path: Path) -> None:
+    source_root = tmp_path / "symbols"
+    source_root.mkdir()
+    source_svg = source_root / "base.svg"
+    source_svg.write_text(
+        "<svg width='800' height='800' xmlns='http://www.w3.org/2000/svg'>"
+        "<g fill='red' stroke='blue' stroke-width='9' style='stroke-width:12;fill:green'>"
+        "<polyline points='100,100 700,100 700,700 100,700' stroke-width='4' fill='yellow'/>"
+        "</g>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    svg_text = build_variant_svg(source_svg, marker_kind="user", scale=1.0, rng=Random(1), jitter_px=0)
+
+    assert 'stroke-width="2.0"' in svg_text
+    assert 'stroke-width="4"' not in svg_text
+    assert "stroke-width:12" not in svg_text
+    assert "fill='yellow'" not in svg_text
+    assert "fill:green" not in svg_text
+
+
 def test_large_symbol_scale_keeps_fixed_canonical_viewbox(tmp_path: Path) -> None:
     source_root = _write_symbol_bank(tmp_path)
     source_svg = source_root / "base.svg"

@@ -136,7 +136,7 @@ Important behavior:
 - `START SYSTEM` creates a run baseline timestamp. Pending Firebase jobs older than that timestamp are marked `skipped`, tagged `baseline_skipped`, and hidden from the print queue.
 - `START SYSTEM` starts the local plotter daemon, checks Firebase/FluidNC, and contacts `NEJE_MACMINI_AGENT_URL`.
 - `PREFLIGHT` checks folders, symbols, idle bank, Firebase config, Mac mini/uploader path assumptions, TinyBee hardware assumptions, FluidNC, spool write access, and dry-run G-code generation.
-- `Connect / Probe` must show WebUI online, Telnet online, and controller state `Idle` before real print is armed.
+- `CONNECT` auto-discovers FluidNC on the current hotspot subnet, then must show WebUI online, Telnet online, and controller state `Idle` before real print is armed.
 - `ARM REAL FLUIDNC` is reset whenever the mode changes. It is never restored automatically after GUI restart.
 - `START PRINT` is blocked until preflight has passed, work zero is set, and Ready Check has passed.
 - The GUI writes layout settings to `runtime/oracle_runtime.sqlite3`; the plotter daemon reads this before every new sheet.
@@ -425,7 +425,7 @@ Then in the GUI:
 Real FluidNC smoke path:
 
 - select `EXHIBITION REAL`;
-- press `Connect / Probe` and confirm `WebUI online`, `Telnet online`, and `State: Idle`;
+- press `CONNECT` and confirm `WebUI online`, `Telnet online`, and `State: Idle`;
 - press `PREFLIGHT`;
 - confirm no critical failures and `FluidNC` is online;
 - jog to the upper-left work origin, then press `Set Work Zero`;
@@ -456,12 +456,12 @@ If GUI-generated sessions do not become Firebase jobs, start `assets/sessions/ST
 
 If `START PRINT` is blocked, run `PREFLIGHT`, fix critical failures, confirm `FluidNC` is online, press `Set Work Zero`, press `Ready Check`, and in `EXHIBITION REAL` press `ARM REAL FLUIDNC`.
 
-If FluidNC WebUI opens but GUI says FluidNC is not ready, check the Telnet side separately. The sender requires Telnet `10.198.21.74:23`, a valid `?` status response, and state `Idle`; HTTP dashboard access alone is not enough.
+If FluidNC WebUI opens but GUI says FluidNC is not ready, check the Telnet side separately. The sender requires Telnet port `23`, a valid `?` status response, and state `Idle`; HTTP dashboard access alone is not enough. Android hotspot IPs can change, so use `CONNECT` in the GUI instead of relying on a remembered address.
 
 If FluidNC state is `Alarm`, inspect the machine physically, then use `UNLOCK ALARM` only when safe.
 
 If FluidNC state is `Hold`, use `RESUME` only when the tool path is safe to continue.
 
-If a G-code stream fails with `error`, `ALARM`, disconnect, or timeout waiting for `ok`, the GUI disables print and disarms real FluidNC. Run `Connect / Probe`, inspect logs, and restart with dry-run before arming real output again.
+If a G-code stream fails with `error`, `ALARM`, disconnect, or timeout waiting for `ok`, the GUI disables print and disarms real FluidNC. Run `CONNECT`, inspect logs, and restart with dry-run before arming real output again.
 
 If the Logs panel is empty, perform an action such as `PREFLIGHT` or `CHECK`, then refresh logs. Logs are written to `NEJE_ORACLE_LOGS_ROOT/oracle_supervisor.log`.

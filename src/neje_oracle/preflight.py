@@ -38,7 +38,7 @@ class PreflightService:
             self._check_tinybee_hardware(mode, gui_settings),
             self._check_fluidnc(mode),
             self._check_spool_write(),
-            self._check_dry_run_generation(gui_settings),
+            self._check_gcode_generation(gui_settings),
         ]
         status = _aggregate_status(checks)
         return PreflightResult(status=status, checks=checks)
@@ -76,7 +76,7 @@ class PreflightService:
     def _check_firebase(self, mode: SystemMode) -> PreflightCheck:
         if self.firebase_settings.enabled:
             return PreflightCheck("firebase config", PreflightLevel.OK, f"Firebase configured: {self.firebase_settings.project_id}")
-        level = PreflightLevel.WARNING if mode == SystemMode.TEST else PreflightLevel.CRITICAL
+        level = PreflightLevel.CRITICAL if mode_policy(mode).real_fluidnc_required else PreflightLevel.WARNING
         return PreflightCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
 
     def _check_tinybee_hardware(self, mode: SystemMode, gui_settings: GuiSettings) -> PreflightCheck:
@@ -153,7 +153,7 @@ class PreflightService:
                 message = f"{probe.message}; controller must be Idle for real print"
         if online:
             return PreflightCheck("fluidnc", PreflightLevel.OK, message, detail=detail)
-        level = PreflightLevel.CRITICAL if mode_policy(mode).real_fluidnc_required else PreflightLevel.WARNING
+        level = PreflightLevel.CRITICAL if mode in {SystemMode.TEST, SystemMode.EXHIBITION_REAL} else PreflightLevel.WARNING
         return PreflightCheck("fluidnc", level, message, detail=detail)
 
     def _check_spool_write(self) -> PreflightCheck:
@@ -164,12 +164,12 @@ class PreflightService:
             return PreflightCheck("spool folder", PreflightLevel.CRITICAL, f"Spool folder is not writable: {exc}")
         return PreflightCheck("spool folder", PreflightLevel.OK, f"Spool folder writable: {self.plotter_settings.spool_root}")
 
-    def _check_dry_run_generation(self, gui_settings: GuiSettings) -> PreflightCheck:
+    def _check_gcode_generation(self, gui_settings: GuiSettings) -> PreflightCheck:
         try:
             output = generate_dry_run_sheet(gui_settings)
         except Exception as exc:  # noqa: BLE001
-            return PreflightCheck("dry-run sheet", PreflightLevel.CRITICAL, f"Dry-run sheet failed: {exc}")
-        return PreflightCheck("dry-run sheet", PreflightLevel.OK, f"Generated {Path(output['gcode']).name}")
+            return PreflightCheck("g-code generation", PreflightLevel.CRITICAL, f"G-code generation failed: {exc}")
+        return PreflightCheck("g-code generation", PreflightLevel.OK, f"Generated {Path(output['gcode']).name}")
 
 
 def _assert_writable(path: Path) -> None:

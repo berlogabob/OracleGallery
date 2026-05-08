@@ -10,7 +10,7 @@ def test_system_modes_map_to_safe_internal_control() -> None:
     real = mode_policy(SystemMode.EXHIBITION_REAL)
 
     assert test.run_mode == "test"
-    assert test.dry_run is True
+    assert test.dry_run is False
     assert test.test_tools_enabled is True
     assert dry.run_mode == "exhibition"
     assert dry.dry_run is True

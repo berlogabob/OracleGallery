@@ -9,7 +9,7 @@ import pytest
 
 from neje_oracle.config import PlotterSettings
 from neje_oracle.models import FluidNCState
-from neje_oracle.transport import FluidNCTransport, parse_status_response
+from neje_oracle.transport import FluidNCTransport, discover_fluidnc, parse_status_response, settings_for_fluidnc_host
 
 
 class FakeFluidNCServer:
@@ -122,6 +122,29 @@ def test_probe_parses_status_and_modal_state(tmp_path: Path) -> None:
     assert probe.controller.state == FluidNCState.IDLE
     assert probe.controller.machine_position == (1.0, 2.0, 3.0)
     assert "G90" in probe.controller.modal_state
+
+
+def test_discover_fluidnc_finds_controller_on_candidate_host(tmp_path: Path) -> None:
+    with FakeFluidNCServer() as server:
+        probe = discover_fluidnc(
+            _settings(tmp_path, server),
+            hosts=[server.host],
+            timeout_seconds=0.2,
+            max_workers=1,
+        )
+
+    assert probe.online
+    assert probe.telnet_host == server.host
+    assert probe.telnet_port == server.port
+
+
+def test_settings_for_fluidnc_host_updates_http_and_telnet(tmp_path: Path) -> None:
+    with FakeFluidNCServer() as server:
+        settings = settings_for_fluidnc_host(_settings(tmp_path, server), "10.60.149.74")
+
+    assert settings.fluidnc_http_url == "http://10.60.149.74"
+    assert settings.fluidnc_telnet_host == "10.60.149.74"
+    assert settings.fluidnc_host == "10.60.149.74"
 
 
 def test_send_waits_for_ok_for_each_line(tmp_path: Path) -> None:

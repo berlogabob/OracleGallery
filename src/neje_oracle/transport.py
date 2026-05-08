@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import replace
+from ipaddress import ip_network
 from pathlib import Path
 from typing import Callable
 
@@ -13,6 +16,76 @@ from .models import FluidNCCommandResult, FluidNCControllerState, FluidNCProbeRe
 
 
 STATUS_RE = re.compile(r"<([^|>]+)(?:\|([^>]*))?>")
+
+
+def settings_for_fluidnc_host(settings: PlotterSettings, host: str) -> PlotterSettings:
+    return replace(
+        settings,
+        fluidnc_http_url=f"http://{host}",
+        fluidnc_telnet_host=host,
+        fluidnc_host=host,
+    )
+
+
+def discover_fluidnc(
+    settings: PlotterSettings,
+    *,
+    hosts: list[str] | None = None,
+    timeout_seconds: float = 0.45,
+    max_workers: int = 64,
+) -> FluidNCProbeResult:
+    candidates = hosts or _current_subnet_hosts()
+    if not candidates:
+        return FluidNCProbeResult(
+            telnet_port=settings.fluidnc_telnet_port,
+            message="FluidNC auto-discovery failed: no local IPv4 subnet found",
+            last_error="no local IPv4 subnet found",
+        )
+
+    def try_host(host: str) -> FluidNCProbeResult | None:
+        resolved_settings = settings_for_fluidnc_host(settings, host)
+        try:
+            with socket.create_connection((host, settings.fluidnc_telnet_port), timeout=timeout_seconds):
+                pass
+        except OSError:
+            return None
+        probe = FluidNCTransport(resolved_settings).probe(timeout_seconds=max(timeout_seconds, 0.75))
+        return probe if probe.online else None
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(try_host, host): host for host in candidates}
+        for future in as_completed(futures):
+            try:
+                probe = future.result()
+            except Exception:  # noqa: BLE001
+                continue
+            if probe and probe.online:
+                for pending in futures:
+                    pending.cancel()
+                return probe
+
+    return FluidNCProbeResult(
+        telnet_port=settings.fluidnc_telnet_port,
+        message=f"FluidNC auto-discovery found no controller on port {settings.fluidnc_telnet_port}",
+        last_error="no FluidNC controller found",
+    )
+
+
+def _current_subnet_hosts() -> list[str]:
+    local_ip = _local_ipv4()
+    if not local_ip:
+        return []
+    network = ip_network(f"{local_ip}/24", strict=False)
+    return [str(host) for host in network.hosts() if str(host) != local_ip]
+
+
+def _local_ipv4() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return str(sock.getsockname()[0])
+    except OSError:
+        return ""
 
 
 class FluidNCTransport:
@@ -245,6 +318,7 @@ def parse_status_response(response: str) -> FluidNCControllerState:
     feed_rate: float | None = None
     spindle_speed: float | None = None
     overrides: tuple[int, int, int] | None = None
+    pins = ""
 
     for field in fields:
         if field.startswith("MPos:"):
@@ -257,6 +331,8 @@ def parse_status_response(response: str) -> FluidNCControllerState:
             values = _parse_int_tuple(field.removeprefix("Ov:"), 3)
             if values is not None:
                 overrides = values
+        elif field.startswith("Pn:"):
+            pins = field.removeprefix("Pn:")
 
     return FluidNCControllerState(
         state=state,
@@ -264,6 +340,7 @@ def parse_status_response(response: str) -> FluidNCControllerState:
         feed_rate=feed_rate,
         spindle_speed=spindle_speed,
         overrides=overrides,
+        pins=pins,
         raw_status=match.group(0),
     )
 

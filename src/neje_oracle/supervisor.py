@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Callable
 
 import httpx
@@ -15,6 +17,8 @@ from .models import (
     ComponentStatus,
     FluidNCCommandResult,
     FluidNCProbeResult,
+    PlotJobLease,
+    PlotStatus,
     PlotterControlState,
     PlotterReadinessState,
     PlotterRuntimeConfig,
@@ -27,7 +31,26 @@ from .oracle_logging import append_log
 from .plotter_daemon import PlotterDaemon
 from .preflight import PreflightService
 from .store import OracleRuntimeStore, PlotterStore
-from .transport import FluidNCTransport
+from .transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
+
+
+class _LocalOnlyPlotterRemote:
+    def claim_next_plot_job(self, consumer_id: str, *, run_started_at: datetime | None = None) -> PlotJobLease | None:
+        return None
+
+    def update_plot_job(
+        self,
+        session_id: str,
+        status: PlotStatus,
+        *,
+        sheet_id: str = "",
+        sheet_index: int | None = None,
+        error: str = "",
+    ) -> None:
+        return None
+
+    def download_asset(self, storage_path: str, destination: Path) -> None:
+        raise RuntimeError("Local-only plotter remote cannot download Firebase assets")
 
 
 class SupervisorService:
@@ -41,8 +64,8 @@ class SupervisorService:
         transport_factory: Callable[[PlotterSettings], FluidNCTransport] | None = None,
     ) -> None:
         self.settings = settings or OracleSupervisorSettings()
-        self.plotter_settings = plotter_settings or PlotterSettings()
         self.runtime_store = runtime_store or OracleRuntimeStore(self.settings.runtime_db_path)
+        self.plotter_settings = self._apply_saved_fluidnc_endpoint(plotter_settings or PlotterSettings())
         self.remote_factory = remote_factory or (lambda: FirebaseRemoteRepository(FirebaseSettings()))
         self.transport_factory = transport_factory or (lambda resolved_settings: FluidNCTransport(resolved_settings))
         self._plotter_daemon: PlotterDaemon | None = None
@@ -63,7 +86,9 @@ class SupervisorService:
             macmini_state = self.start_macmini_uploader()
         fluidnc_state = self.check_fluidnc()
         plotter_state = self.start_plotter(config)
-        self.runtime_store.set_component("queue", ComponentStatus.RUNNING, message="Queue transport via Firebase")
+        queue_state = self.runtime_store.load_component_state("queue")
+        if queue_state.status != ComponentStatus.WARNING:
+            self.runtime_store.set_component("queue", ComponentStatus.RUNNING, message="Queue transport via Firebase")
         self.runtime_store.set_component("print", ComponentStatus.STOPPED, message="Print disabled until START PRINT")
         component_states = {
             "firebase": firebase_state,
@@ -138,7 +163,10 @@ class SupervisorService:
             status = ComponentStatus.ERROR
             level = "error"
             self.runtime_store.save_real_fluidnc_armed(False)
-        message = f"Preflight {result.status.value}: {len(result.checks)} checks"
+        critical_count = sum(1 for check in result.checks if check.level == PreflightLevel.CRITICAL)
+        warning_count = sum(1 for check in result.checks if check.level == PreflightLevel.WARNING)
+        ok_count = sum(1 for check in result.checks if check.level == PreflightLevel.OK)
+        message = f"Preflight {result.status.value}: {critical_count} critical, {warning_count} warning, {ok_count} ok"
         append_log("preflight", message, level=level, settings=self.settings)
         for check in result.checks:
             append_log("preflight", f"{check.level.value}: {check.name}: {check.message}", level=check.level.value if check.level != PreflightLevel.OK else "info", settings=self.settings)
@@ -176,12 +204,13 @@ class SupervisorService:
         if mode == SystemMode.EXHIBITION_REAL and not self.runtime_store.load_real_fluidnc_armed():
             append_log("plotter", "Start print blocked: REAL FluidNC not armed", level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="REAL FluidNC is not armed")
-        if mode == SystemMode.EXHIBITION_REAL:
+        if not control.dry_run:
             fluidnc_state = self.check_fluidnc()
             if fluidnc_state.status != ComponentStatus.RUNNING:
-                self.runtime_store.save_real_fluidnc_armed(False)
+                if mode == SystemMode.EXHIBITION_REAL:
+                    self.runtime_store.save_real_fluidnc_armed(False)
                 append_log("plotter", "Start print blocked: FluidNC not Idle/online", level="warning", settings=self.settings)
-                return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="FluidNC must be online and Idle before real print")
+                return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="FluidNC must be online and Idle before plotter motion")
         self.runtime_store.save_print_control(control)
         PlotterStore(self.plotter_settings.db_path).save_control_state(control)
         append_log("plotter", f"Print enabled in {mode.value}", level="warning" if not control.dry_run else "info", settings=self.settings)
@@ -205,7 +234,7 @@ class SupervisorService:
             self.runtime_store.set_component("plotter", ComponentStatus.STARTING, message="Starting local plotter daemon", started=True)
             try:
                 plotter_store = PlotterStore(self.plotter_settings.db_path)
-                remote = self.remote_factory()
+                remote = self._create_plotter_remote(config)
                 transport = self.transport_factory(self.plotter_settings)
                 self._plotter_daemon = PlotterDaemon(
                     self.plotter_settings,
@@ -219,6 +248,28 @@ class SupervisorService:
             except Exception as exc:  # noqa: BLE001
                 return self.runtime_store.set_component("plotter", ComponentStatus.ERROR, message="Plotter failed to start", last_error=str(exc))
         return self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message="Local plotter daemon running", heartbeat=True)
+
+    def _create_plotter_remote(self, config: PlotterRuntimeConfig | None) -> FirebaseRemoteRepository | _LocalOnlyPlotterRemote:
+        try:
+            return self.remote_factory()
+        except Exception as exc:
+            local_only_allowed = config is None or config.dry_run or config.run_mode == "test"
+            if not local_only_allowed:
+                raise
+            append_log(
+                "queue",
+                f"Firebase unavailable; plotter daemon will use local idle symbols only: {exc}",
+                level="warning",
+                settings=self.settings,
+            )
+            self.runtime_store.set_component(
+                "queue",
+                ComponentStatus.WARNING,
+                message="Firebase unavailable; using local idle symbols only",
+                last_error=str(exc),
+                heartbeat=True,
+            )
+            return _LocalOnlyPlotterRemote()
 
     def stop_plotter(self) -> ComponentState:
         with self._lock:
@@ -255,6 +306,17 @@ class SupervisorService:
 
     def probe_fluidnc(self) -> FluidNCProbeResult:
         probe = self.transport_factory(self.plotter_settings).probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
+        if probe.online:
+            self._save_fluidnc_endpoint(probe)
+            self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
+            return probe
+        append_log("plotter", f"FluidNC configured endpoint failed, scanning current subnet: {probe.message}", level="warning", settings=self.settings)
+        discovered = discover_fluidnc(self.plotter_settings)
+        if discovered.online:
+            self._save_fluidnc_endpoint(discovered)
+            append_log("plotter", f"FluidNC discovered at {discovered.telnet_host}:{discovered.telnet_port}", settings=self.settings)
+            self.runtime_store.save_json("fluidnc_probe", discovered.to_dict())
+            return discovered
         self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
         return probe
 
@@ -448,6 +510,34 @@ class SupervisorService:
             last_error="" if result.ok else result.message,
             heartbeat=result.ok,
         )
+
+    def _apply_saved_fluidnc_endpoint(self, settings: PlotterSettings) -> PlotterSettings:
+        endpoint = self.runtime_store.load_json("fluidnc_endpoint")
+        host = str(endpoint.get("host", "") or "")
+        if not host:
+            return settings
+        port = int(endpoint.get("port", settings.fluidnc_telnet_port) or settings.fluidnc_telnet_port)
+        http_url = str(endpoint.get("http_url", f"http://{host}") or f"http://{host}")
+        return replace(
+            settings,
+            fluidnc_http_url=http_url,
+            fluidnc_telnet_host=host,
+            fluidnc_telnet_port=port,
+            fluidnc_host=host,
+            fluidnc_port=port,
+        )
+
+    def _save_fluidnc_endpoint(self, probe: FluidNCProbeResult) -> None:
+        self.runtime_store.save_json(
+            "fluidnc_endpoint",
+            {
+                "host": probe.telnet_host,
+                "port": probe.telnet_port,
+                "http_url": probe.http_url or f"http://{probe.telnet_host}",
+                "updated_at": datetime.now(tz=UTC).isoformat(),
+            },
+        )
+        self.plotter_settings = settings_for_fluidnc_host(self.plotter_settings, probe.telnet_host)
 
     def component_summary(self) -> dict[str, dict[str, Any]]:
         return {name: state.to_dict() for name, state in self.refresh_all_status().items()}

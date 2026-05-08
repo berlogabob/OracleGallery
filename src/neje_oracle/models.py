@@ -294,6 +294,7 @@ class FluidNCControllerState:
     feed_rate: float | None = None
     spindle_speed: float | None = None
     overrides: tuple[int, int, int] | None = None
+    pins: str = ""
     raw_status: str = ""
     modal_state: str = ""
 
@@ -341,6 +342,7 @@ class FluidNCProbeResult:
             "feed_rate": self.controller.feed_rate,
             "spindle_speed": self.controller.spindle_speed,
             "overrides": self.controller.overrides,
+            "pins": self.controller.pins,
             "raw_status": self.controller.raw_status,
             "modal_state": self.controller.modal_state,
             "last_response": self.last_response,
@@ -373,6 +375,8 @@ class PlotterRuntimeConfig:
     run_mode: str = "exhibition"
     dry_run: bool = True
     include_rings: bool = True
+    travel_rate: float = 5000.0
+    draw_rate: float = 1800.0
     use_z_servo: bool = True
     z_down_mm: float = 0.0
     z_up_mm: float = 25.0
@@ -391,6 +395,8 @@ class PlotterRuntimeConfig:
             "run_mode": self.run_mode,
             "dry_run": self.dry_run,
             "include_rings": self.include_rings,
+            "travel_rate": self.travel_rate,
+            "draw_rate": self.draw_rate,
             "use_z_servo": self.use_z_servo,
             "z_down_mm": self.z_down_mm,
             "z_up_mm": self.z_up_mm,
@@ -411,6 +417,8 @@ class PlotterRuntimeConfig:
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
             include_rings=bool(payload.get("include_rings", True)),
+            travel_rate=float(payload.get("travel_rate", 5000.0)),
+            draw_rate=float(payload.get("draw_rate", 1800.0)),
             use_z_servo=bool(payload.get("use_z_servo", True)),
             z_down_mm=float(payload.get("z_down_mm", 0.0)),
             z_up_mm=float(payload.get("z_up_mm", 25.0)),

@@ -45,7 +45,7 @@
 
 - `[x] done` FluidNC больше не проверяется как простой open socket; probe проверяет HTTP/WebUI, Telnet, `?`, `$G`, controller state, `MPos`, `FS`, `Ov`.
 - `[x] done` FluidNC sender отправляет G-code line-by-line и ждёт `ok`; `error`, `ALARM`, disconnect и timeout fail the row.
-- `[x] done` GUI manual control есть: `Connect / Probe`, `Emergency Stop`, `Home`, `Home X`, `Home Y`, Jog `X/Y/Z`, `Unlock`, `Resume`, `Reset`.
+- `[x] done` GUI manual control есть: `CONNECT` with subnet auto-discovery, `Emergency Stop`, `Home`, `Home X`, `Home Y`, Jog `X/Y/Z`, `Unlock`, `Resume`, `Reset`.
 - `[x] done` Manual jog/home ставит print на паузу перед движением и блокируется во время активного G-code streaming.
 - `[x] done` FluidNC transport failure отключает print, disarms real mode и не помечает user jobs как `printed`.
 - `[x] done` Plotter daemon переведён на row-based streaming: user jobs проверяются перед каждым рядом, user-first, idle fills remainder, current row не прерывается.
@@ -74,15 +74,15 @@
 
 | Status | Owner | Work | Next Action |
 | --- | --- | --- | --- |
-| `[x] done` | `GUI` | Real workflow tabs | `Plotter Console` теперь содержит настоящие tab panels: `Connection`, `Calibration`, `Ready`, `Exhibition`, с действиями разнесёнными по шагам. |
+| `[x] done` | `GUI` | Real workflow tabs | Вложенный `Plotter Console` заменён верхним workflow-ribbon: `Подключение`, `Калибровка`, `Тесты`, `Работа`, `Выставка`; действия разнесены по рабочим контекстам. |
 | `[x] done` | `plotter` | Exact cell progress | Runtime current cell теперь считается по `; cell-start` markers, преобразованным в пороги acknowledged FluidNC commands, а не по грубой доле строки. |
 | `[ ] open` | `plotter` | `PrintRow` / `PrintCell` models | Вынести row/cell assembly из `PlotterDaemon.run_cycle()` в pure helper и manifest schema через явные dataclasses. |
 | `[x] done` | `GUI` | Queue dashboard counts | GUI показывает read-only queue counts: pending after baseline, active leased/plotting, failed/skipped, online/offline; idle printing не зависит от Firebase status. |
 | `[~] partial` | `plotter` | Production Z-servo config | Code/env defaults переключены на `NEJE_PLOTTER_USE_Z_SERVO=true`; остаётся ручная проверка реальной механики перед выставкой. |
-| `[~] partial` | `docs` | One-page operator runbook | RUNBOOK покрывает FluidNC/manual control, но нужен короткий окончательный порядок выставки: hotspot -> GUI -> probe -> baseline -> calibration -> ready -> print -> reload. |
+| `[~] partial` | `docs` | One-page operator runbook | RUNBOOK покрывает FluidNC/manual control, но нужен короткий окончательный порядок выставки: hotspot -> GUI -> CONNECT -> baseline -> calibration -> ready -> print -> reload. |
 | `[ ] open` | `Firebase` | Normalization handoff on MacBook | Реализовать pipeline: download raw SVG from Firebase -> normalize with current GUI scales -> upload normalized `artwork.svg` -> release print job. |
 | `[ ] open` | `Flutter` | Final visual polish | Завершить дизайн по Oracle direction: cloth/fabric presentation, marks, about, receipt polish, without reintroducing freezes. |
-| `[ ] open` | `GUI` | MacBook 14-inch fit | Убрать общий вертикальный scroll главного окна; разрешить scroll только внутри panels/logs. |
+| `[~] partial` | `GUI` | MacBook 14-inch fit | Основной экран переведён на фиксированный top-ribbon + локальный scroll внутри side panels; требуется визуальная проверка на реальном 14-inch экране. |
 | `[x] done` | `plotter` | Final post-sheet safety command | После завершения рядов daemon отправляет отдельный `*_sheet_end.gcode`: `Z up` + `G0 X0 Y0`, затем переходит в reload pause. |
 | `[ ] open` | `Firebase` | Deploy queue index | Проверить/задеплоить Firestore index `plot_jobs(status, createdAt)` перед реальной выставочной очередью. |
 | `[x] done` | `plotter` | Supervisor cleanup | Старые неиспользуемые helper methods с несуществующими зависимостями удалены из `SupervisorService`. |
@@ -92,7 +92,7 @@
 
 - `[!] risk` Z-servo включён как production/example default, но реальная механика всё равно требует ручной проверки перед физической печатью.
 - `[!] risk` Firestore queue queries зависят от индекса `plot_jobs(status, createdAt)`; индекс есть в repo, но должен быть deployed в Firebase.
-- `[!] risk` GUI пока может давать оператору слишком много элементов в одном месте; нужен настоящий step-by-step flow.
+- `[!] risk` GUI теперь разделён top-level workflow-вкладками, но плотность отдельных panels нужно проверить на реальном MacBook 14-inch и при необходимости ещё сократить.
 - `[!] risk` Physical emergency stop не заменяется GUI `Emergency Stop`; software feed hold `!` — только дополнительный уровень безопасности.
 - `[!] risk` Ready workflow не может физически проверить давление пера и реальный Z-contact; это остаётся операторским действием перед `Set Work Zero`.
 
@@ -111,8 +111,8 @@
 
 ### B. Next Implementation Priority
 
-- `[ ] open` First: fix production plotter reliability and operator flow, not Flutter polish.
-- `[x] done` Make GUI panels truly step-based: `Connection`, `Calibration`, `Ready`, `Exhibition`.
+- `[~] partial` First: fix production plotter reliability and operator flow, not Flutter polish.
+- `[x] done` Make GUI panels truly step-based: top-level `Подключение`, `Калибровка`, `Тесты`, `Работа`, `Выставка`.
 - `[x] done` Implement exact marker-aware cell progress and queue dashboard.
 - `[~] partial` Decide and validate production Z-servo config on real hardware.
 - `[x] done` Add explicit post-sheet safety command: `Z up`, `G0 X0 Y0`, then `paused_for_reload`.
@@ -136,7 +136,7 @@
 2. MacBook connects to hotspot.
 3. Plotter powers on and joins hotspot.
 4. Operator runs `uv run neje-gui`.
-5. Operator presses `Connect / Probe` and sees HTTP online, Telnet online, controller `Idle`.
+5. Operator presses `CONNECT`; GUI auto-discovers FluidNC on the current hotspot subnet and shows HTTP online, Telnet online, controller `Idle`.
 6. `START SYSTEM` records `run_started_at`; old pending jobs are skipped/baseline-hidden.
 7. In `TEST`, live generator may create fake user sessions with hidden test tags.
 8. Operator fixes paper, jogs to upper-left work zero, adjusts Z/contact physically, presses `Set Work Zero`.

@@ -15,7 +15,10 @@ from .models import PlotJobLease, PlotStatus, PublicationResult, PublicStatus, S
 class FirebaseRemoteRepository:
     def __init__(self, settings: FirebaseSettings) -> None:
         if not settings.enabled:
-            raise RuntimeError("Firebase is not configured. Check NEJE_FIREBASE_* environment variables.")
+            raise RuntimeError(
+                "Firebase Admin is not configured. Set NEJE_FIREBASE_CREDENTIALS to a service account JSON. "
+                "Project/bucket can come from NEJE_FIREBASE_* or FIREBASE_PROJECT_ID."
+            )
         self.settings = settings
         app_name = f"neje-oracle-{settings.project_id}"
         try:

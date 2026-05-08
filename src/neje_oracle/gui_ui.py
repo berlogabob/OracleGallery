@@ -97,7 +97,7 @@ def slider_control(
     on_change: Callable[[], Any],
 ) -> Any:
     ui.label(label).classes("text-xs text-[#8f4f2b]")
-    control = ui.slider(min=min_value, max=max_value, step=step, value=value).props("label label-always dense").classes("w-full tight-slider")
+    control = ui.slider(min=min_value, max=max_value, step=step, value=value).props("dense").classes("w-full tight-slider")
     control.on_value_change(on_change)
     control.on("dblclick", lambda _: _reset_control(control, default, on_change))
     fields[key] = control

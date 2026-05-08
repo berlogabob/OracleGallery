@@ -151,8 +151,8 @@ def test_symbol_preview_randomness_visibly_changes_svg(tmp_path: Path) -> None:
 def test_effective_randomness_combines_coarse_and_fine() -> None:
     from neje_oracle.gui_support import effective_randomness
 
-    assert effective_randomness(GuiSettings(randomness=20, randomness_fine=2.5)) == 22.5
-    assert effective_randomness(GuiSettings(randomness=98, randomness_fine=10)) == 100
+    assert effective_randomness(GuiSettings(randomness=20, randomness_fine=2.5)) == 12.5
+    assert effective_randomness(GuiSettings(randomness=98, randomness_fine=10)) == 59
     assert effective_randomness(GuiSettings(randomness=2, randomness_fine=-10)) == 0
 
 

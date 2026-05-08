@@ -29,7 +29,7 @@ def mode_policy(mode: SystemMode | str) -> ModePolicy:
             mode=resolved,
             label=MODE_LABELS[resolved],
             run_mode="test",
-            dry_run=True,
+            dry_run=False,
             test_tools_enabled=True,
             real_fluidnc_required=False,
         )
