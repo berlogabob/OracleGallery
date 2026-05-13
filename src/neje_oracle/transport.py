@@ -146,6 +146,27 @@ class FluidNCTransport:
         except OSError as exc:
             return FluidNCCommandResult(ok=False, command=command, error=str(exc))
 
+    def send_commands(self, commands: list[str], *, timeout_seconds: float | None = None) -> FluidNCCommandResult:
+        timeout = timeout_seconds or self.settings.fluidnc_ack_timeout_seconds
+        response_lines: list[str] = []
+        command_label = " ; ".join(commands)
+        try:
+            with self._connect(self.settings.fluidnc_connect_timeout_seconds) as conn:
+                self._drain(conn, timeout_seconds=0.2)
+                for command in commands:
+                    result = self._send_regular_command_on_connection(conn, command, timeout_seconds=timeout)
+                    response_lines.extend(result.response_lines)
+                    if not result.ok:
+                        return FluidNCCommandResult(
+                            ok=False,
+                            command=command_label,
+                            response_lines=response_lines,
+                            error=f"{command}: {result.message}",
+                        )
+                return FluidNCCommandResult(ok=True, command=command_label, response_lines=response_lines)
+        except OSError as exc:
+            return FluidNCCommandResult(ok=False, command=command_label, response_lines=response_lines, error=str(exc))
+
     def send_realtime(self, byte_command: str | bytes) -> FluidNCCommandResult:
         payload = byte_command.encode("latin1") if isinstance(byte_command, str) else byte_command
         try:
@@ -168,6 +189,12 @@ class FluidNCTransport:
             return FluidNCCommandResult(ok=False, command="", error=f"Unsupported jog axis: {axis}")
         command = f"$J=G91 G21 {axis_name}{distance_mm:.3f} F{feed_mm_min:.0f}"
         return self.send_command(command, wait_for_ok=True)
+
+    def pen_up(self) -> FluidNCCommandResult:
+        return self.send_command(self.settings.pen_up_command, wait_for_ok=True)
+
+    def pen_down(self) -> FluidNCCommandResult:
+        return self.send_command(self.settings.pen_down_command, wait_for_ok=True)
 
     def feed_hold(self) -> FluidNCCommandResult:
         return self.send_realtime("!")

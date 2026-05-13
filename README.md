@@ -21,6 +21,16 @@ sessions_raw/<session_id>/
   READY
 ```
 
+Current reference package shape:
+
+```text
+assets/sessions/20260505_155503/
+```
+
+Use `20260505_155503` as the latest known-good local example when validating copied Mac mini output. Older local session folders are temporary data: delete them only after the same `session_id` exists in Firestore and `sessions/<session_id>/artwork.svg` exists in Firebase Storage.
+
+Generated fake user sessions use the same public-safe package shape, plus `metadata.json` with `origin=test_macbook`. Local filler material can also be generated as session-like folders with `origin=filler_macbook`; filler packages are local only and intentionally have `uploadToFirebase=false`.
+
 Ignored by the public pipeline:
 
 ```text
@@ -52,6 +62,14 @@ Firestore distinguishes the route and image:
 - `qrUrl`: backward-compatible receipt page deep link.
 - `qrImageUrl`: Firebase Storage URL for `qr.png`.
 - `assetUrls.qr`: same QR PNG Storage URL.
+
+Origin fields used by the operator GUI and debug views:
+
+- `origin=real_macmini`: real TouchDesigner visitor session from the Mac mini.
+- `origin=test_macbook`: generated test session from the MacBook GUI.
+- `origin=test_macmini`: generated test session from a Mac mini test mode, if enabled later.
+- `origin=filler_macbook`: local filler/base symbol used to fill empty cells.
+- `tags`: searchable/filterable labels such as `real`, `test`, `generated`, `macmini`, `macbook`, `filler`.
 
 ## Quick Start
 
@@ -133,10 +151,16 @@ Deploy is manual by pushing `main`; GitHub Pages serves from `main` branch `/doc
 - `docs/`: built Flutter Web output served by GitHub Pages.
 - `planning/`: working plans, fix notes, and design/update checklists.
 - `assets/symbols/`: canonical 8 base SVG symbols and scale config.
-- `assets/sessions/`: Mac mini uploader launcher only; raw copied sessions are ignored.
+- `assets/sessions/`: Mac mini uploader launcher plus optional ignored local session examples. `20260505_155503` is the current reference package shape.
 - `firebase/`: Firestore/Storage rules and indexes.
 - `archive/`: old briefs, screenshots, and conversation exports.
 - `runtime/`, `spool/`, `sessions_public/`, logs, caches, audio, and zip files are local generated data and are ignored.
+- `assets/generated_filler_sessions/`: optional local filler packages with session-folder shape; ignored.
+
+Legacy backup paths:
+
+- `neje-plotter`, `start_plotter_daemon.*`, and `src/neje_oracle/plotter_service.py` remain backup/debug entrypoints. Exhibition operation should start from `neje-gui`.
+- `neje-uploader` and `src/neje_oracle/uploader_service.py` remain backup/debug entrypoints. The Mac mini should use `assets/sessions/START_ORACLE_UPLOADER.command`.
 
 ## Operating Modes
 

@@ -342,8 +342,10 @@ class SupervisorService:
             return self.runtime_store.load_component_state("ready")
         config = self.runtime_store.load_plotter_config()
         transport = self.transport_factory(self.plotter_settings)
+        use_z_axis_servo = config.use_z_servo or self.plotter_settings.use_z_servo
+        pen_up_command = f"G0 Z{config.z_up_mm:.3f}" if use_z_axis_servo else self.plotter_settings.pen_up_command
         sequence = [
-            f"G0 Z{config.z_up_mm:.3f}",
+            pen_up_command,
             "$H=X",
             "$H=Y",
             "G0 X0 Y0",
@@ -377,6 +379,28 @@ class SupervisorService:
             return self.runtime_store.load_component_state("fluidnc")
         result = self.transport_factory(self.plotter_settings).jog(axis, distance, feed)
         return self._record_fluidnc_command(result, f"Jog {axis} {distance:g}mm F{feed:g}")
+
+    def pen_up_fluidnc(self) -> ComponentState:
+        if not self._manual_control_allowed("pen up"):
+            return self.runtime_store.load_component_state("fluidnc")
+        config = self.runtime_store.load_plotter_config()
+        if config.use_z_servo or self.plotter_settings.use_z_servo:
+            command = f"G0 Z{config.z_up_mm:.3f}"
+            result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
+            return self._record_fluidnc_command(result, f"Z up servo {command}")
+        result = self.transport_factory(self.plotter_settings).pen_up()
+        return self._record_fluidnc_command(result, f"Pen up {self.plotter_settings.pen_up_command}")
+
+    def pen_down_fluidnc(self) -> ComponentState:
+        if not self._manual_control_allowed("pen down"):
+            return self.runtime_store.load_component_state("fluidnc")
+        config = self.runtime_store.load_plotter_config()
+        if config.use_z_servo or self.plotter_settings.use_z_servo:
+            command = f"G0 Z{config.z_down_mm:.3f}"
+            result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
+            return self._record_fluidnc_command(result, f"Z down servo {command}")
+        result = self.transport_factory(self.plotter_settings).pen_down()
+        return self._record_fluidnc_command(result, f"Pen down {self.plotter_settings.pen_down_command}")
 
     def unlock_fluidnc_alarm(self) -> ComponentState:
         probe = self.probe_fluidnc()

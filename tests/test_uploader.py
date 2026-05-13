@@ -157,6 +157,12 @@ def test_firebase_publish_separates_qr_deeplink_and_qr_image_url(tmp_path: Path)
     assert session_doc["qrImageUrl"] == expected_qr_image_url
     assert session_doc["assetUrls"]["qr"] == expected_qr_image_url
     assert session_doc["assetPaths"]["qr"] == "sessions/20260426_130000/qr.png"
+    assert session_doc["origin"] == "real_macmini"
+    assert session_doc["tags"] == ["real", "oracle", "macmini"]
+    assert session_doc["visibleInLibrary"] is True
+    plot_job_doc = db.collection("plot_jobs").document(record.session_id).set_calls[-1]
+    assert plot_job_doc["origin"] == "real_macmini"
+    assert plot_job_doc["tags"] == ["real", "oracle", "macmini"]
     assert publication.public_qr_url == expected_qr_image_url
 
 
@@ -276,6 +282,52 @@ def test_published_session_is_not_imported_twice_after_restart(tmp_path: Path) -
     assert '"sessionUrl": "https://example.github.io/gallery/#/session/20260426_130000"' in manifest
     assert '"qrImageUrl": "https://example.test/20260426_130000/qr.png"' in manifest
     assert '"transcript"' not in manifest
+
+
+def test_uploader_baseline_skips_old_session_folders(tmp_path: Path) -> None:
+    session_root = tmp_path / "sessions_raw"
+    public_root = tmp_path / "sessions_public"
+    old_dir = session_root / "20260426_130000"
+    old_dir.mkdir(parents=True)
+    _write_svg(old_dir / "20260426_130000_plotter.svg")
+    _write_receipt(old_dir / "20260426_130000_receipt.txt")
+    (old_dir / "READY").write_text("", encoding="utf-8")
+
+    old_timestamp = 1_700_000_000
+    for path in [old_dir, *old_dir.iterdir()]:
+        os.utime(path, (old_timestamp, old_timestamp))
+
+    settings = UploaderSettings(
+        session_root=session_root,
+        public_root=public_root,
+        db_path=tmp_path / "runtime" / "uploader.sqlite3",
+        poll_seconds=0.0,
+        stability_seconds=0.0,
+        ready_marker_name="READY",
+        require_ready_marker=False,
+    )
+    firebase_settings = FirebaseSettings(
+        project_id="demo",
+        storage_bucket="demo.appspot.com",
+        credentials_path=tmp_path / "missing.json",
+        gallery_base_url="https://example.github.io/gallery",
+    )
+    store = UploaderStore(settings.db_path)
+    store.save_run_started_at(datetime(2026, 4, 26, 13, 0, tzinfo=UTC))
+    remote = FakeRemoteRepository()
+    uploader = SessionUploader(settings, firebase_settings, store, remote)
+
+    assert uploader.scan_once() == []
+    assert remote.publish_calls == []
+
+    new_dir = session_root / "20260426_130001"
+    new_dir.mkdir()
+    _write_svg(new_dir / "20260426_130001_plotter.svg")
+    _write_receipt(new_dir / "20260426_130001_receipt.txt")
+    (new_dir / "READY").write_text("", encoding="utf-8")
+
+    assert uploader.scan_once() == ["20260426_130001"]
+    assert remote.publish_calls == ["20260426_130001"]
 
 
 def test_touchdesigner_plotter_and_receipt_assets_are_imported_without_visitor_png(tmp_path: Path) -> None:

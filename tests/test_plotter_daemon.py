@@ -6,6 +6,7 @@ from pathlib import Path
 
 from neje_oracle.config import PlotterSettings
 from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
+from neje_oracle.origin_markers import origin_allowed
 from neje_oracle.plotter_daemon import PlotterDaemon
 from neje_oracle.store import OracleRuntimeStore, PlotterStore
 from neje_oracle.transport import FluidNCTransport
@@ -24,12 +25,13 @@ class FakeRemoteRepository:
         self.fail_claim = fail_claim
         self.updates: list[tuple[str, str, str]] = []
 
-    def claim_next_plot_job(self, consumer_id: str) -> PlotJobLease | None:
+    def claim_next_plot_job(self, consumer_id: str, *, run_started_at=None, allowed_origins=None) -> PlotJobLease | None:
         if self.fail_claim:
             raise RuntimeError("firestore down")
-        if not self.jobs:
-            return None
-        return self.jobs.pop(0)
+        for index, job in enumerate(self.jobs):
+            if origin_allowed(job.origin, allowed_origins):
+                return self.jobs.pop(index)
+        return None
 
     def update_plot_job(
         self,
@@ -118,6 +120,10 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
     assert state.gcode_lines_total > 0
     assert ("session_a", PlotStatus.PRINTED.value, state.current_sheet_id) in remote.updates
     assert ("session_b", PlotStatus.PRINTED.value, state.current_sheet_id) in remote.updates
+    manifest = next((tmp_path / "spool").glob("sheet_*.json")).read_text(encoding="utf-8")
+    assert '"origin": "unknown"' in manifest
+    assert '"origin": "filler_macbook"' in manifest
+    assert '"marker_position"' in manifest
 
 
 def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Path) -> None:
@@ -360,6 +366,81 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
     daemon.run_cycle()
 
     assert any(update[0] == "late_user" and update[1] == PlotStatus.PRINTED.value for update in remote.updates)
+
+
+def test_plotter_origin_filter_leaves_disallowed_job_pending_and_fills_row(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        sheet_width_mm=100,
+        sheet_height_mm=100,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="grid",
+    )
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_origin_filters(show_origins=["real_macmini", "test_macbook"], print_origins=["real_macmini"])
+    remote = FakeRemoteRepository(
+        [
+            PlotJobLease(
+                session_id="test_user",
+                title="test",
+                summary="",
+                created_at=datetime.now(tz=UTC),
+                priority="user",
+                queue="user",
+                svg_storage_path="sessions/test/artwork.svg",
+                svg_url="",
+                origin="test_macbook",
+                tags=["test", "generated", "macbook"],
+            )
+        ]
+    )
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
+
+    daemon.run_cycle()
+
+    assert remote.jobs and remote.jobs[0].session_id == "test_user"
+    assert all(update[0] != "test_user" for update in remote.updates)
+    manifest = next((tmp_path / "spool").glob("sheet_*.json")).read_text(encoding="utf-8")
+    assert '"origin": "filler_macbook"' in manifest
+
+
+def test_plotter_can_use_filler_session_package_folders(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    filler_dir = placeholder_root / "filler_20260508_000000_001"
+    filler_dir.mkdir(parents=True)
+    (filler_dir / "filler_20260508_000000_001_plotter.svg").write_text(SVG, encoding="utf-8")
+    (filler_dir / "filler_20260508_000000_001_receipt.txt").write_text("Local filler", encoding="utf-8")
+    (filler_dir / "metadata.json").write_text('{"origin":"filler_macbook"}', encoding="utf-8")
+    (filler_dir / "READY").write_text("", encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        placeholder_root=placeholder_root,
+        sheet_width_mm=100,
+        sheet_height_mm=100,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="grid",
+    )
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository()
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport)
+
+    daemon.run_cycle()
+
+    manifest = next((tmp_path / "spool").glob("sheet_*.json")).read_text(encoding="utf-8")
+    assert "filler_20260508_000000_001_plotter.svg" in manifest
+    assert '"origin": "filler_macbook"' in manifest
 
 
 def _command_threshold_for_cell_start(gcode: str, *, cell_offset: int) -> int:

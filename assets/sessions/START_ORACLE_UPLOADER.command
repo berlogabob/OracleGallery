@@ -101,6 +101,13 @@ upsert_env() {
   mv "$tmp" "$file"
 }
 
+ensure_gitignore_line() {
+  local file="$1"
+  local line="$2"
+  touch "$file"
+  grep -qxF "$line" "$file" 2>/dev/null || echo "$line" >> "$file"
+}
+
 source_if_exists "$HOME/.zprofile"
 source_if_exists "$HOME/.zshrc"
 source_if_exists "$HOME/.bash_profile"
@@ -110,13 +117,20 @@ source_if_exists "$LOCAL_ENV"
 REPO_DIR="$(find_repo_dir)" || fail "Cannot find Oracle project. Put this sessions folder inside the repo or set ORACLE_REPO_DIR in $LOCAL_ENV."
 UV_BIN="$(find_uv)" || fail "uv was not found. Install uv first: https://docs.astral.sh/uv/getting-started/installation/"
 ENV_FILE="$REPO_DIR/.env"
+GITIGNORE_FILE="$REPO_DIR/.gitignore"
 
 FIREBASE_PROJECT_ID="${NEJE_FIREBASE_PROJECT_ID:-oraclegallery}"
 FIREBASE_STORAGE_BUCKET="${NEJE_FIREBASE_STORAGE_BUCKET:-oraclegallery.firebasestorage.app}"
-FIREBASE_CREDENTIALS="${NEJE_FIREBASE_CREDENTIALS:-/Users/berloga/Downloads/oraclegallery-firebase-adminsdk-fbsvc-002b89a837.json}"
+FIREBASE_CREDENTIALS="${NEJE_FIREBASE_CREDENTIALS:-$REPO_DIR/secrets/oraclegallery-firebase-adminsdk.json}"
 GALLERY_BASE_URL="${NEJE_GALLERY_BASE_URL:-https://berlogabob.github.io/OracleGallery}"
 
 mkdir -p "$REPO_DIR/runtime" "$REPO_DIR/sessions_public"
+ensure_gitignore_line "$GITIGNORE_FILE" ".env"
+ensure_gitignore_line "$GITIGNORE_FILE" "secrets/"
+ensure_gitignore_line "$GITIGNORE_FILE" "runtime/"
+ensure_gitignore_line "$GITIGNORE_FILE" "sessions_public/"
+ensure_gitignore_line "$GITIGNORE_FILE" "*.sqlite3"
+ensure_gitignore_line "$GITIGNORE_FILE" "*.log"
 
 cat > "$LOCAL_ENV" <<EOF
 ORACLE_REPO_DIR=$REPO_DIR

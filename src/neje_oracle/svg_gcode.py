@@ -6,6 +6,7 @@ from svgpathtools import svg2paths2
 
 from .config import SYMBOL_FIT_RATIO
 from .models import SheetItem, SheetPlacement
+from .origin_markers import DEFAULT_MARKER_DIAMETER_MM, marker_center_for_position, marker_position_for_origin
 from .svg_normalizer import read_normalized_svg_metadata
 
 
@@ -42,6 +43,8 @@ def generate_sheet_gcode(
     title: str = "sheet",
     return_home: bool = True,
     include_rings: bool = True,
+    include_markers: bool = False,
+    marker_diameter_mm: float = DEFAULT_MARKER_DIAMETER_MM,
     use_z_servo: bool = False,
     z_down_mm: float = 0.0,
     z_up_mm: float = 25.0,
@@ -66,6 +69,9 @@ def generate_sheet_gcode(
         if include_rings:
             for ring in _ring_polylines(placement, item.source_kind):
                 _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up)
+        if include_markers:
+            for marker in _marker_polylines(item, placement, marker_diameter_mm=marker_diameter_mm):
+                _append_polyline_gcode(lines, marker, pen_down=pen_down, pen_up=pen_up)
         metadata = read_normalized_svg_metadata(item.svg_path)
         if metadata.normalized and metadata.scale > 1.0:
             lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")
@@ -85,7 +91,7 @@ def _pen_up_command(command: str, *, use_z_servo: bool, z_up_mm: float) -> str:
 
 
 def _pen_down_command(command: str, *, use_z_servo: bool, z_down_mm: float, z_feed_mm_min: float) -> str:
-    return f"G1 Z{z_down_mm:.3f} F{z_feed_mm_min:.2f}" if use_z_servo else command
+    return f"G0 Z{z_down_mm:.3f}" if use_z_servo else command
 
 
 def _append_polyline_gcode(
@@ -109,6 +115,17 @@ def _ring_polylines(placement: SheetPlacement, source_kind: str) -> list[list[tu
         return [outer]
     inner = _circle_polyline(placement.center_x_mm, placement.center_y_mm, placement.diameter_mm * 0.43)
     return [outer, inner]
+
+
+def _marker_polylines(
+    item: SheetItem,
+    placement: SheetPlacement,
+    *,
+    marker_diameter_mm: float,
+) -> list[list[tuple[float, float]]]:
+    position = item.marker_position or marker_position_for_origin(item.origin)
+    center_x, center_y = marker_center_for_position(placement, position, marker_diameter_mm=marker_diameter_mm)
+    return [_circle_polyline(center_x, center_y, max(marker_diameter_mm, 0.1) / 2.0, segments=24)]
 
 
 def _circle_polyline(center_x: float, center_y: float, radius: float, segments: int = 72) -> list[tuple[float, float]]:

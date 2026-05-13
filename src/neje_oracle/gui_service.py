@@ -37,6 +37,7 @@ from .gui_support import (
     save_symbol_scales,
 )
 from .oracle_logging import read_logs
+from .origin_markers import ALL_ORIGINS, ORIGIN_LABELS
 from .supervisor import SupervisorService
 
 
@@ -122,6 +123,14 @@ def build_page() -> None:
         settings.live_interval_seconds = float(fields["live_interval_seconds"].value or 1)
         settings.selected_symbol = str(fields["selected_symbol"].value)
         settings.include_rings = bool(fields["include_rings"].value)
+        settings.include_markers = bool(fields["include_markers"].value)
+        settings.marker_diameter_mm = float(fields["marker_diameter_mm"].value or 1.5)
+        settings.show_origins = [
+            origin for origin in ALL_ORIGINS if bool(fields.get(f"show_origin:{origin}") and fields[f"show_origin:{origin}"].value)
+        ] or list(ALL_ORIGINS)
+        settings.print_origins = [
+            origin for origin in ALL_ORIGINS if bool(fields.get(f"print_origin:{origin}") and fields[f"print_origin:{origin}"].value)
+        ] or list(ALL_ORIGINS)
         settings.sheet_width_mm = float(fields["sheet_width_mm"].value or 1)
         settings.sheet_height_mm = float(fields["sheet_height_mm"].value or 1)
         settings.sheet_margin_mm = float(fields["sheet_margin_mm"].value or 0)
@@ -161,6 +170,7 @@ def build_page() -> None:
         for symbol in symbols:
             scales[symbol.name] = float(fields[f"scale:{symbol.name}"].value or 1.0)
         save_gui_settings(settings)
+        save_oracle_plotter_config(settings)
         save_symbol_scales(scales)
         preview.content = build_preview_svg(settings)
         preview.update()
@@ -448,7 +458,13 @@ def build_page() -> None:
     def jog(axis: str, sign: float) -> None:
         distance = sign * float(fields["jog_step"].value or 1)
         feed = float(fields["jog_feed"].value or 1000)
-        fluidnc_action(f"jog {axis}", lambda: supervisor.jog_fluidnc(axis, distance, feed))
+        fluidnc_action(f"jog {axis}", lambda: supervisor.jog_fluidnc(axis, distance, feed), refresh_probe=False)
+
+    def pen_up() -> None:
+        fluidnc_action("pen up", supervisor.pen_up_fluidnc, refresh_probe=False)
+
+    def pen_down() -> None:
+        fluidnc_action("pen down", supervisor.pen_down_fluidnc, refresh_probe=False)
 
     def unlock_alarm() -> None:
         confirm_action("UNLOCK ALARM", "This sends $X. It clears FluidNC alarm state without moving the machine.", lambda: fluidnc_action("unlock", supervisor.unlock_fluidnc_alarm))
@@ -629,19 +645,19 @@ def build_page() -> None:
                                 ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
                                 ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
                             with ui.row().classes("gap-1"):
-                                ui.button("Z+", on_click=lambda: jog("Z", 1)).props("dense flat")
-                                ui.button("Z-", on_click=lambda: jog("Z", -1)).props("dense flat")
+                                ui.button("Z+ / Pen up", on_click=pen_up).props("dense flat")
+                                ui.button("Z- / Pen down", on_click=pen_down).props("dense flat")
                                 ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
                                 ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Motion quality").classes("text-sm font-bold")
-                            ui.label("Speed values are G-code feed rates in mm/min. Z servo PWM stays inside the FluidNC firmware config.").classes("text-xs text-[#8f4f2b]")
+                            ui.label("Speed values are G-code feed rates in mm/min. Z+/Z- send absolute Z servo positions, matching FluidNC rc_servo.").classes("text-xs text-[#8f4f2b]")
                             with ui.grid(columns=2).classes("w-full gap-2"):
                                 number_control(fields, "travel_rate", label="Travel mm/min", value=settings.travel_rate, default=5000, min_value=1, width_class="w-full", tooltip="Pen-up movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
                                 number_control(fields, "draw_rate", label="Draw mm/min", value=settings.draw_rate, default=1800, min_value=1, width_class="w-full", tooltip="Drawing movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
-                                number_control(fields, "z_up_mm", label="Z up", value=settings.z_up_mm, default=25, min_value=0, width_class="w-full", tooltip="Safe raised Z position.", on_change=persist_and_refresh)
-                                number_control(fields, "z_down_mm", label="Z down", value=settings.z_down_mm, default=0, min_value=-25, width_class="w-full", tooltip="Drawing/contact Z position.", on_change=persist_and_refresh)
-                                number_control(fields, "z_feed_mm_min", label="Z mm/min", value=settings.z_feed_mm_min, default=1000, min_value=1, width_class="w-full", tooltip="Z movement speed. Saved directly to G-code F. Servo PWM is configured in FluidNC.", on_change=persist_and_refresh)
+                                number_control(fields, "z_up_mm", label="Z up", value=settings.z_up_mm, default=0, min_value=-25, width_class="w-full", tooltip="Safe raised Z servo position.", on_change=persist_and_refresh)
+                                number_control(fields, "z_down_mm", label="Z down", value=settings.z_down_mm, default=-25, min_value=-25, width_class="w-full", tooltip="Drawing/contact Z servo position.", on_change=persist_and_refresh)
+                                number_control(fields, "z_feed_mm_min", label="Z mm/min", value=settings.z_feed_mm_min, default=1000, min_value=1, width_class="w-full", tooltip="Z servo axis feed rate. FluidNC maps this Z axis to PWM.", on_change=persist_and_refresh)
                 with ui.tab_panel(tests_tab).classes("p-0"):
                     with ui.column().classes("workspace-scroll gap-2") as test_panel:
                         with ui.card().classes("oracle-card compact-card w-full"):
@@ -748,12 +764,25 @@ def build_page() -> None:
                             with ui.row().classes("items-end gap-2"):
                                 fields["layout_mode"] = ui.select(["hex", "grid"], value=settings.layout_mode, label="Layout").props("dense outlined").classes("w-28").on_value_change(persist_and_refresh)
                                 fields["include_rings"] = ui.switch("Rings", value=settings.include_rings).on_value_change(persist_and_refresh)
+                                fields["include_markers"] = ui.switch("Origin dots", value=settings.include_markers).on_value_change(persist_and_refresh)
                             with ui.grid(columns=2).classes("w-full gap-2"):
                                 number_control(fields, "sheet_width_mm", label="Field W", value=settings.sheet_width_mm, default=GUI_DEFAULTS["sheet_width_mm"], min_value=1, width_class="w-full", tooltip="Printable field width in mm.", on_change=persist_and_refresh)
                                 number_control(fields, "sheet_height_mm", label="Field H", value=settings.sheet_height_mm, default=GUI_DEFAULTS["sheet_height_mm"], min_value=1, width_class="w-full", tooltip="Printable field height in mm.", on_change=persist_and_refresh)
                                 number_control(fields, "cell_diameter_mm", label="Cell", value=settings.cell_diameter_mm, default=GUI_DEFAULTS["cell_diameter_mm"], min_value=1, width_class="w-full", tooltip="Packing cell diameter and grid step base.", on_change=persist_and_refresh)
                                 number_control(fields, "gap_mm", label="Gap", value=settings.gap_mm, default=GUI_DEFAULTS["gap_mm"], min_value=0, width_class="w-full", tooltip="Distance between neighboring cell diameters.", on_change=persist_and_refresh)
                                 number_control(fields, "sheet_margin_mm", label="Margin", value=settings.sheet_margin_mm, default=GUI_DEFAULTS["sheet_margin_mm"], min_value=0, width_class="w-full", tooltip="Safe border inside printable field.", on_change=persist_and_refresh)
+                                number_control(fields, "marker_diameter_mm", label="Dot mm", value=settings.marker_diameter_mm, default=GUI_DEFAULTS["marker_diameter_mm"], min_value=0.5, width_class="w-full", tooltip="Printed origin-dot diameter.", on_change=persist_and_refresh)
+                        with ui.card().classes("oracle-card compact-card w-full"):
+                            ui.label("Filters / markers").classes("text-sm font-bold")
+                            ui.label("Display filters affect preview immediately. Print filters apply from the next row, never mid-row.").classes("text-xs text-[#8f4f2b]")
+                            with ui.grid(columns=3).classes("w-full gap-1"):
+                                ui.label("Origin").classes("text-[10px] font-bold text-[#8f4f2b]")
+                                ui.label("Preview").classes("text-[10px] font-bold text-[#8f4f2b]")
+                                ui.label("Print").classes("text-[10px] font-bold text-[#8f4f2b]")
+                                for origin in ALL_ORIGINS:
+                                    ui.label(ORIGIN_LABELS[origin]).classes("text-xs")
+                                    fields[f"show_origin:{origin}"] = ui.checkbox(value=origin in settings.show_origins).props("dense").on_value_change(persist_and_refresh)
+                                    fields[f"print_origin:{origin}"] = ui.checkbox(value=origin in settings.print_origins).props("dense").on_value_change(persist_and_refresh)
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Symbol scale correction").classes("text-sm font-bold")
                             ui.label("These controls define how generated symbols will look before test generation and printing.").classes("text-xs text-[#8f4f2b]")

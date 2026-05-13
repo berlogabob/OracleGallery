@@ -10,6 +10,7 @@ from .config import SYMBOL_FIT_RATIO, PlotterSettings, ensure_dir
 from .firebase_io import FirebaseRemoteRepository
 from .layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
 from .models import ComponentStatus, PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, PlotterRuntimeState, RuntimeStatus, SheetItem, SheetPlacement
+from .origin_markers import ALL_ORIGINS, DEFAULT_MARKER_DIAMETER_MM, ORIGIN_FILLER_MACBOOK, marker_position_for_origin, normalize_tags
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode
 from .transport import FluidNCTransport
@@ -132,6 +133,8 @@ class PlotterDaemon:
             "dry_run": control.dry_run,
             "run_mode": control.run_mode,
             "include_rings": config.include_rings,
+            "include_markers": config.include_markers,
+            "marker_diameter_mm": config.marker_diameter_mm,
             "use_z_servo": config.use_z_servo,
             "z_up_mm": config.z_up_mm,
             "z_down_mm": config.z_down_mm,
@@ -179,6 +182,8 @@ class PlotterDaemon:
                 title=f"{sheet_id} row {row_index}/{len(layout_rows)}",
                 return_home=row_index == len(layout_rows),
                 include_rings=config.include_rings,
+                include_markers=config.include_markers,
+                marker_diameter_mm=config.marker_diameter_mm,
                 use_z_servo=config.use_z_servo,
                 z_down_mm=config.z_down_mm,
                 z_up_mm=config.z_up_mm,
@@ -212,6 +217,7 @@ class PlotterDaemon:
                 items=items,
                 placements=active_placements,
                 status="streaming",
+                marker_diameter_mm=config.marker_diameter_mm,
             )
             self._append_manifest_row(manifest_path, manifest, row_payload)
             try:
@@ -320,15 +326,28 @@ class PlotterDaemon:
     def _claim_user_jobs(self, limit: int) -> list[PlotJobLease]:
         jobs: list[PlotJobLease] = []
         run_started_at = self.oracle_store.load_run_started_at() if self.oracle_store is not None else None
+        allowed_origins = self._load_print_origins()
         for _ in range(limit):
             try:
-                job = self.remote.claim_next_plot_job("macbook-plotter", run_started_at=run_started_at)
+                job = self.remote.claim_next_plot_job(
+                    "macbook-plotter",
+                    run_started_at=run_started_at,
+                    allowed_origins=allowed_origins,
+                )
             except TypeError:
-                job = self.remote.claim_next_plot_job("macbook-plotter")
+                try:
+                    job = self.remote.claim_next_plot_job("macbook-plotter", run_started_at=run_started_at)
+                except TypeError:
+                    job = self.remote.claim_next_plot_job("macbook-plotter")
             if job is None:
                 break
             jobs.append(job)
         return jobs
+
+    def _load_print_origins(self) -> list[str]:
+        if self.oracle_store is None:
+            return list(ALL_ORIGINS)
+        return self.oracle_store.load_origin_filters()["print_origins"]
 
     def _materialize_sheet_items(self, user_jobs: list[PlotJobLease], sheet_limit: int) -> list[SheetItem]:
         items: list[SheetItem] = []
@@ -344,6 +363,9 @@ class PlotterDaemon:
                     session_id=job.session_id,
                     title=job.title,
                     svg_path=local_svg,
+                    origin=job.origin,
+                    tags=job.tags,
+                    marker_position=marker_position_for_origin(job.origin),
                 )
             )
 
@@ -351,7 +373,7 @@ class PlotterDaemon:
         if remaining <= 0:
             return items
 
-        placeholders = sorted(self.settings.placeholder_root.glob("*.svg"))
+        placeholders = _list_placeholder_svg_paths(self.settings.placeholder_root)
         if not placeholders:
             return items
 
@@ -364,6 +386,9 @@ class PlotterDaemon:
                     session_id=f"placeholder_{start_index + offset}",
                     title=svg_path.stem,
                     svg_path=svg_path,
+                    origin=ORIGIN_FILLER_MACBOOK,
+                    tags=normalize_tags(["filler", "local", "macbook"]),
+                    marker_position=marker_position_for_origin(ORIGIN_FILLER_MACBOOK),
                 )
             )
         with self.state_lock:
@@ -380,6 +405,7 @@ class PlotterDaemon:
         items: list[SheetItem],
         placements: list[SheetPlacement],
         status: str,
+        marker_diameter_mm: float = DEFAULT_MARKER_DIAMETER_MM,
     ) -> dict[str, object]:
         return {
             "row_index": row_index,
@@ -389,6 +415,10 @@ class PlotterDaemon:
                 {
                     "session_id": item.session_id,
                     "source_kind": item.source_kind,
+                    "origin": item.origin,
+                    "tags": item.tags,
+                    "marker_position": item.marker_position or marker_position_for_origin(item.origin),
+                    "marker_diameter_mm": marker_diameter_mm,
                     "svg_path": str(item.svg_path),
                     "sheet_index": placement.index,
                     "center_x_mm": placement.center_x_mm,
@@ -462,6 +492,8 @@ class PlotterDaemon:
             run_mode="exhibition",
             dry_run=self.settings.dry_run,
             include_rings=True,
+            include_markers=self.settings.include_markers,
+            marker_diameter_mm=self.settings.marker_diameter_mm,
             use_z_servo=self.settings.use_z_servo,
             z_down_mm=self.settings.z_down_mm,
             z_up_mm=self.settings.z_up_mm,
@@ -577,3 +609,11 @@ class PlotterDaemon:
             current_cell_in_row = cell_in_row
             current_sheet_index = sheet_index
         return current_cell_in_row, current_sheet_index
+
+
+def _list_placeholder_svg_paths(root: Path) -> list[Path]:
+    flat_svgs = sorted(path for path in root.glob("*.svg") if path.is_file())
+    package_svgs: list[Path] = []
+    for session_dir in sorted(path for path in root.iterdir() if path.is_dir()):
+        package_svgs.extend(sorted(session_dir.glob("*_plotter.svg")))
+    return flat_svgs + package_svgs

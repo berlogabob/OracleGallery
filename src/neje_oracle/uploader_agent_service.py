@@ -35,6 +35,7 @@ class UploaderAgentController:
                 return self.status("already running")
             self._stop_event.clear()
             self.started_at = datetime.now(tz=UTC)
+            self.uploader.store.save_run_started_at(self.started_at)
             self._thread = threading.Thread(target=self._run_loop, daemon=True)
             self._thread.start()
         return self.status("started")

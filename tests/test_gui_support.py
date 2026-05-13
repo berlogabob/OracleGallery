@@ -10,6 +10,7 @@ from neje_oracle.gui_support import (
     build_preview_svg,
     confirm_plotter_reload,
     create_idle_bank_from_gui,
+    create_filler_packages_from_gui,
     create_user_sessions_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
@@ -124,6 +125,23 @@ def test_preview_rings_toggle_changes_sheet_preview() -> None:
     assert 'data-ring="inner"' not in without_rings
 
 
+def test_preview_origin_markers_toggle_and_filter() -> None:
+    settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80, include_markers=True)
+
+    with_markers = build_preview_svg(settings)
+    settings.include_markers = False
+    without_markers = build_preview_svg(settings)
+    settings.include_markers = True
+    settings.show_origins = ["test_macbook"]
+    user_only = build_preview_svg(settings)
+
+    assert 'data-origin-marker="test_macbook"' in with_markers
+    assert 'data-origin-marker="filler_macbook"' in with_markers
+    assert "data-origin-marker" not in without_markers
+    assert 'data-origin-marker="test_macbook"' in user_only
+    assert 'data-origin-marker="filler_macbook"' not in user_only
+
+
 def test_symbol_preview_randomness_visibly_changes_svg(tmp_path: Path) -> None:
     from neje_oracle.gui_support import build_symbol_preview_svg
 
@@ -230,6 +248,22 @@ def test_idle_generation_clears_stale_svg_files(tmp_path: Path) -> None:
 
     assert len(idle_svgs) == 2
     assert not (output_root / "stale.svg").exists()
+
+
+def test_filler_package_generation_uses_session_folder_shape(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    output_root = tmp_path / "filler"
+    settings = GuiSettings(idle_count=1, idle_variations_per_symbol=1, randomness=0)
+
+    filler_dirs = create_filler_packages_from_gui(settings, output_root=output_root, symbol_root=root)
+
+    assert len(filler_dirs) == 2
+    first = filler_dirs[0]
+    assert first.name.startswith("filler_")
+    assert (first / f"{first.name}_plotter.svg").exists()
+    assert (first / f"{first.name}_receipt.txt").exists()
+    assert (first / "metadata.json").exists()
+    assert (first / "READY").exists()
 
 
 def test_dry_run_sheet_and_status_helpers(tmp_path: Path) -> None:

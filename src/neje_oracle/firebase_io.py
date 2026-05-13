@@ -10,6 +10,7 @@ from firebase_admin import credentials, firestore, storage
 
 from .config import FirebaseSettings
 from .models import PlotJobLease, PlotStatus, PublicationResult, PublicStatus, SessionRecord
+from .origin_markers import classify_session_origin, normalize_origin, normalize_tags, origin_allowed
 
 
 class FirebaseRemoteRepository:
@@ -67,11 +68,21 @@ class FirebaseRemoteRepository:
         record.public_qr_url = qr_image_url
         record.last_error = ""
 
+        classification = classify_session_origin(record.extra_metadata)
+        origin = classification.origin
+        tags = classification.tags
+        visible_in_library = classification.visible_in_library
+        record.extra_metadata = {
+            **record.extra_metadata,
+            "origin": origin,
+            "tags": tags,
+            "visibleInLibrary": visible_in_library,
+        }
+
         manifest_blob.upload_from_string(
             record_to_json(record),
             content_type="application/json",
         )
-        origin, tags, visible_in_library = _session_visibility(record)
 
         session_ref = self._db.collection("sessions").document(record.session_id)
         session_ref.set(
@@ -154,7 +165,13 @@ class FirebaseRemoteRepository:
             public_qr_url=qr_image_url,
         )
 
-    def claim_next_plot_job(self, consumer_id: str, *, run_started_at: datetime | None = None) -> PlotJobLease | None:
+    def claim_next_plot_job(
+        self,
+        consumer_id: str,
+        *,
+        run_started_at: datetime | None = None,
+        allowed_origins: set[str] | list[str] | tuple[str, ...] | None = None,
+    ) -> PlotJobLease | None:
         query = (
             self._db.collection("plot_jobs")
             .where("status", "==", PlotStatus.PENDING.value)
@@ -172,6 +189,9 @@ class FirebaseRemoteRepository:
                 continue
             if run_started_at is not None and recorded_datetime(candidate_payload.get("createdAt")) < run_started_at:
                 self._mark_plot_job_skipped(candidate, candidate_payload, reason="before_run_started_at")
+                continue
+            candidate_origin = normalize_origin(candidate_payload.get("origin"))
+            if not origin_allowed(candidate_origin, allowed_origins):
                 continue
             doc = candidate
             payload = candidate_payload
@@ -201,6 +221,9 @@ class FirebaseRemoteRepository:
             queue=payload.get("queue", "user"),
             svg_storage_path=payload.get("svgStoragePath", ""),
             svg_url=payload.get("svgUrl", ""),
+            origin=normalize_origin(payload.get("origin")),
+            tags=normalize_tags(payload.get("tags")),
+            visible_in_queue=payload.get("visibleInQueue") is not False,
         )
 
     def skip_pending_before(self, cutoff: datetime, *, reason: str = "before_run_started_at") -> int:
@@ -403,14 +426,6 @@ def summarize_plot_job_counts(
             elif visible:
                 counts["pendingAfterBaseline"] = int(counts["pendingAfterBaseline"]) + 1
     return counts
-
-
-def _session_visibility(record: SessionRecord) -> tuple[str, list[str], bool]:
-    kind = str(record.extra_metadata.get("kind") or record.extra_metadata.get("origin") or "").lower()
-    generated_by = str(record.extra_metadata.get("generatedBy") or "").lower()
-    if kind.startswith("test") or "generate" in generated_by:
-        return "test", ["test", "generated"], False
-    return "oracle", ["real"], True
 
 
 def record_to_json(record: SessionRecord) -> str:

@@ -37,6 +37,7 @@ class EmptyRemote:
 class DryTransport:
     def __init__(self, settings: PlotterSettings) -> None:
         self.settings = settings
+        self.commands: list[str] = []
 
     def check_connection(self, *, timeout_seconds: float = 2.0):
         return True, "fake fluidnc online"
@@ -54,10 +55,25 @@ class DryTransport:
         return FluidNCCommandResult(ok=True, command="!", response_lines=["sent"])
 
     def jog(self, axis: str, distance_mm: float, feed_mm_min: float):
-        return FluidNCCommandResult(ok=True, command=f"$J={axis}{distance_mm}")
+        command = f"$J={axis}{distance_mm}"
+        self.commands.append(command)
+        return FluidNCCommandResult(ok=True, command=command)
+
+    def pen_up(self):
+        self.commands.append(self.settings.pen_up_command)
+        return FluidNCCommandResult(ok=True, command=self.settings.pen_up_command, response_lines=["ok"])
+
+    def pen_down(self):
+        self.commands.append(self.settings.pen_down_command)
+        return FluidNCCommandResult(ok=True, command=self.settings.pen_down_command, response_lines=["ok"])
 
     def send_command(self, command: str, *, wait_for_ok: bool = True, timeout_seconds=None):
+        self.commands.append(command)
         return FluidNCCommandResult(ok=True, command=command, response_lines=["ok"])
+
+    def send_commands(self, commands: list[str], *, timeout_seconds=None):
+        self.commands.extend(commands)
+        return FluidNCCommandResult(ok=True, command=" ; ".join(commands), response_lines=["ok"] * len(commands))
 
     def send(self, *, gcode: str, sheet_id: str, dry_run=None, progress_callback=None):
         path = self.settings.spool_root / f"{sheet_id}.gcode"
@@ -250,6 +266,60 @@ def test_manual_control_pauses_enabled_print_before_jog(tmp_path: Path) -> None:
     assert state.status == ComponentStatus.RUNNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
     assert supervisor.runtime_store.load_real_fluidnc_armed() is False
+
+
+def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = DryTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+
+    up = supervisor.pen_up_fluidnc()
+    down = supervisor.pen_down_fluidnc()
+
+    assert up.status == ComponentStatus.RUNNING
+    assert down.status == ComponentStatus.RUNNING
+    assert transport.commands == [
+        "G21",
+        "G90",
+        "G54",
+        "G0 Z0.000",
+        "G21",
+        "G90",
+        "G54",
+        "G0 Z-25.000",
+    ]
+    assert all(not command.startswith("$J=") for command in transport.commands)
+
+
+def test_ready_check_uses_absolute_servo_z_up(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = DryTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(use_z_servo=True))
+
+    supervisor.set_work_zero()
+    ready = supervisor.ready_check()
+
+    assert ready.status == ComponentStatus.RUNNING
+    assert transport.commands[:5] == [
+        plotter_settings.work_zero_command,
+        "G0 Z0.000",
+        "$H=X",
+        "$H=Y",
+        "G0 X0 Y0",
+    ]
 
 
 def test_ready_workflow_sets_work_zero_and_ready_state(tmp_path: Path) -> None:

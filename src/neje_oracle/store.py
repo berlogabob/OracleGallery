@@ -21,6 +21,7 @@ from .models import (
     SessionRecord,
     SystemMode,
 )
+from .origin_markers import ALL_ORIGINS, normalize_origin
 
 
 class _SQLiteStore:
@@ -86,6 +87,14 @@ class UploaderStore(_SQLiteStore):
                 "public_receipt_url": "TEXT NOT NULL DEFAULT ''",
             },
         )
+        self._execute(
+            """
+            CREATE TABLE IF NOT EXISTS runtime_state (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            )
+            """
+        )
 
     def get_session(self, session_id: str) -> sqlite3.Row | None:
         return self._fetchone("SELECT * FROM sessions WHERE session_id = ?", (session_id,))
@@ -150,6 +159,22 @@ class UploaderStore(_SQLiteStore):
                 datetime.now(tz=UTC).isoformat(),
             ),
         )
+
+    def save_run_started_at(self, value: datetime) -> None:
+        self._execute(
+            """
+            INSERT INTO runtime_state (key, value)
+            VALUES ('run_started_at', ?)
+            ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """,
+            (value.isoformat(),),
+        )
+
+    def load_run_started_at(self) -> datetime | None:
+        row = self._fetchone("SELECT value FROM runtime_state WHERE key = 'run_started_at'")
+        if not row:
+            return None
+        return datetime.fromisoformat(str(row["value"]))
 
     def _ensure_columns(self, table: str, columns: dict[str, str]) -> None:
         existing = {
@@ -312,6 +337,34 @@ class OracleRuntimeStore(_SQLiteStore):
             return default or PlotterRuntimeConfig()
         return PlotterRuntimeConfig.from_dict(json.loads(row["value"]))
 
+    def save_origin_filters(
+        self,
+        *,
+        show_origins: list[str] | tuple[str, ...] | set[str],
+        print_origins: list[str] | tuple[str, ...] | set[str],
+    ) -> None:
+        self.save_json(
+            "origin_filters",
+            {
+                "show_origins": _normalized_origin_list(show_origins),
+                "print_origins": _normalized_origin_list(print_origins),
+                "updated_at": datetime.now(tz=UTC).isoformat(),
+            },
+        )
+
+    def load_origin_filters(self) -> dict[str, list[str]]:
+        payload = self.load_json(
+            "origin_filters",
+            {
+                "show_origins": list(ALL_ORIGINS),
+                "print_origins": list(ALL_ORIGINS),
+            },
+        )
+        return {
+            "show_origins": _normalized_origin_list(payload.get("show_origins", ALL_ORIGINS)),
+            "print_origins": _normalized_origin_list(payload.get("print_origins", ALL_ORIGINS)),
+        }
+
     def save_print_control(self, state: PlotterControlState) -> None:
         self._execute(
             """
@@ -380,3 +433,14 @@ class OracleRuntimeStore(_SQLiteStore):
         if not payload:
             return None
         return PreflightResult.from_dict(payload)
+
+
+def _normalized_origin_list(values: Any) -> list[str]:
+    if not isinstance(values, (list, tuple, set)):
+        values = ALL_ORIGINS
+    result: list[str] = []
+    for value in values:
+        origin = normalize_origin(value)
+        if origin not in result:
+            result.append(origin)
+    return result or list(ALL_ORIGINS)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import random
 from base64 import b64encode
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,7 +13,17 @@ from .firebase_io import FirebaseRemoteRepository
 from .gui_modes import apply_mode_to_config, mode_policy
 from .layout import build_sheet_layout, calculate_layout_capacity
 from .models import PlotterControlState, PlotterRuntimeConfig, RuntimeStatus, SheetItem, SystemMode
-from .session_generator import build_variant_svg, generate_idle_symbols, generate_user_sessions
+from .origin_markers import (
+    ALL_ORIGINS,
+    DEFAULT_MARKER_DIAMETER_MM,
+    ORIGIN_FILLER_MACBOOK,
+    ORIGIN_PREVIEW_COLORS,
+    ORIGIN_TEST_MACBOOK,
+    marker_center_for_position,
+    marker_position_for_origin,
+    normalize_tags,
+)
+from .session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode, symbol_diameter_for_cell
 from .transport import FluidNCTransport
@@ -33,6 +43,8 @@ GUI_DEFAULTS = {
     "randomness": 35.0,
     "randomness_fine": 0.0,
     "include_rings": True,
+    "include_markers": True,
+    "marker_diameter_mm": DEFAULT_MARKER_DIAMETER_MM,
 }
 
 
@@ -51,10 +63,14 @@ class GuiSettings:
     randomness: float = GUI_DEFAULTS["randomness"]
     randomness_fine: float = GUI_DEFAULTS["randomness_fine"]
     include_rings: bool = GUI_DEFAULTS["include_rings"]
+    include_markers: bool = GUI_DEFAULTS["include_markers"]
+    marker_diameter_mm: float = GUI_DEFAULTS["marker_diameter_mm"]
+    show_origins: list[str] = field(default_factory=lambda: list(ALL_ORIGINS))
+    print_origins: list[str] = field(default_factory=lambda: list(ALL_ORIGINS))
     travel_rate: float = 5000.0
     draw_rate: float = 1800.0
-    z_down_mm: float = 0.0
-    z_up_mm: float = 25.0
+    z_down_mm: float = -25.0
+    z_up_mm: float = 0.0
     z_feed_mm_min: float = 1000.0
     user_count: int = 1
     live_interval_seconds: float = 12.0
@@ -86,6 +102,8 @@ class GuiSettings:
             z_down_mm=settings.z_down_mm,
             z_up_mm=settings.z_up_mm,
             z_feed_mm_min=settings.z_feed_mm_min,
+            include_markers=settings.include_markers,
+            marker_diameter_mm=settings.marker_diameter_mm,
         )
 
 
@@ -103,6 +121,10 @@ def default_symbol_root() -> Path:
 
 def default_idle_root() -> Path:
     return _repo_root() / "assets" / "generated_idle_symbols"
+
+
+def default_filler_package_root() -> Path:
+    return _repo_root() / "assets" / "generated_filler_sessions"
 
 
 def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSettings | None = None) -> GuiSettings:
@@ -124,6 +146,10 @@ def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSetting
             payload["system_mode"] = SystemMode.EXHIBITION_REAL.value
     merged.update({key: value for key, value in payload.items() if key in merged})
     settings = GuiSettings(**merged)
+    plotter_defaults = plotter_settings or PlotterSettings()
+    if plotter_defaults.use_z_servo and settings.z_up_mm == 25.0 and settings.z_down_mm == 0.0:
+        settings.z_up_mm = plotter_defaults.z_up_mm
+        settings.z_down_mm = plotter_defaults.z_down_mm
     settings.apply_system_mode()
     return settings
 
@@ -148,6 +174,8 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
         run_mode=settings.run_mode,
         dry_run=settings.dry_run,
         include_rings=settings.include_rings,
+        include_markers=settings.include_markers,
+        marker_diameter_mm=settings.marker_diameter_mm,
         travel_rate=settings.travel_rate,
         draw_rate=settings.draw_rate,
         use_z_servo=plotter_settings.use_z_servo,
@@ -163,6 +191,7 @@ def save_oracle_plotter_config(settings: GuiSettings) -> None:
     store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
     store.save_system_mode(settings.mode)
     store.save_plotter_config(gui_settings_to_plotter_config(settings))
+    store.save_origin_filters(show_origins=settings.show_origins, print_origins=settings.print_origins)
 
 
 def list_base_symbols(symbol_root: Path | None = None) -> list[Path]:
@@ -232,6 +261,8 @@ def build_preview_svg(
     row_lookup = _placement_row_lookup(placements)
     for index, placement in enumerate(placements):
         kind = "user" if index < user_count else "idle"
+        origin = ORIGIN_TEST_MACBOOK if kind == "user" else ORIGIN_FILLER_MACBOOK
+        visible_origin = origin in settings.show_origins
         row_index = row_lookup.get(placement.index, 0)
         highlighted_row = highlighted_row_index is not None and row_index == highlighted_row_index
         highlighted_cell = highlighted_cell_index is not None and placement.index == highlighted_cell_index
@@ -247,18 +278,30 @@ def build_preview_svg(
             f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{cell_radius:.2f}" fill="{fill}" '
             f'stroke="{cell_stroke}" stroke-width="{cell_stroke_width}"/>'
         )
-        if settings.include_rings:
+        if settings.include_rings and visible_origin:
             circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" stroke="{stroke}" stroke-width="1.4" data-ring="outer"/>')
             if kind == "idle":
                 circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" stroke="{stroke}" stroke-width="0.9" data-ring="inner"/>')
-        if symbol_images:
+        if settings.include_markers and visible_origin:
+            marker_x, marker_y = marker_center_for_position(
+                placement,
+                marker_position_for_origin(origin),
+                marker_diameter_mm=settings.marker_diameter_mm,
+            )
+            marker_color = ORIGIN_PREVIEW_COLORS.get(origin, "#1f1a17")
+            circles.append(
+                f'<circle cx="{marker_x * scale:.2f}" cy="{marker_y * scale:.2f}" '
+                f'r="{settings.marker_diameter_mm * scale / 2.0:.2f}" fill="none" '
+                f'stroke="{marker_color}" stroke-width="1.6" data-origin-marker="{origin}"/>'
+            )
+        if symbol_images and visible_origin:
             href, symbol_scale = symbol_images[index % len(symbol_images)]
             image_size = mark_size * max(symbol_scale, 1.0)
             circles.append(
                 f'<image href="{href}" x="{cx - image_size / 2.0:.2f}" y="{cy - image_size / 2.0:.2f}" '
                 f'width="{image_size:.2f}" height="{image_size:.2f}" preserveAspectRatio="xMidYMid meet"/>'
             )
-        else:
+        elif visible_origin:
             circles.append(
                 f'<text x="{cx:.2f}" y="{cy + 4:.2f}" text-anchor="middle" font-size="12" '
                 f'fill="{stroke}" font-family="monospace">{index + 1}</text>'
@@ -385,6 +428,37 @@ def create_idle_bank_from_gui(
         global_scale=settings.global_scale,
         include_rings=False,
     )
+
+
+def create_filler_packages_from_gui(
+    settings: GuiSettings,
+    *,
+    output_root: Path | None = None,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+) -> list[Path]:
+    symbol_count = len(list_base_symbols(symbol_root))
+    count = max(settings.idle_count, symbol_count * max(settings.idle_variations_per_symbol, 1))
+    destination = output_root or default_filler_package_root()
+    if destination.exists():
+        for old_dir in destination.iterdir():
+            if old_dir.is_dir() and old_dir.name.startswith("filler_"):
+                for child in sorted(old_dir.rglob("*"), reverse=True):
+                    if child.is_file() or child.is_symlink():
+                        child.unlink()
+                    elif child.is_dir():
+                        child.rmdir()
+                old_dir.rmdir()
+    generated = generate_filler_session_packages(
+        source_root=symbol_root or default_symbol_root(),
+        output_root=destination,
+        scale_config=scale_path or default_scale_config_path(),
+        count=count,
+        jitter_px=effective_randomness(settings) / 100.0 * 6.0,
+        global_scale=settings.global_scale,
+        include_rings=False,
+    )
+    return [session.session_dir for session in generated]
 
 
 def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = None) -> dict[str, Any]:
@@ -575,6 +649,9 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
             session_id=f"gui_dry_run_{index + 1:03d}",
             title=symbols[index % len(symbols)].stem,
             svg_path=symbols[index % len(symbols)],
+            origin=ORIGIN_FILLER_MACBOOK,
+            tags=normalize_tags(["filler", "local", "macbook"]),
+            marker_position=marker_position_for_origin(ORIGIN_FILLER_MACBOOK),
         )
         for index in range(len(placements))
     ]
@@ -584,15 +661,17 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
         placements,
         sample_step_mm=PlotterSettings().sample_step_mm,
         cell_diameter_mm=settings.cell_diameter_mm,
-        travel_rate=PlotterSettings().travel_rate,
-        draw_rate=PlotterSettings().draw_rate,
+        travel_rate=settings.travel_rate,
+        draw_rate=settings.draw_rate,
         pen_up_command=PlotterSettings().pen_up_command,
         pen_down_command=PlotterSettings().pen_down_command,
         include_rings=settings.include_rings,
+        include_markers=settings.include_markers,
+        marker_diameter_mm=settings.marker_diameter_mm,
         use_z_servo=PlotterSettings().use_z_servo,
-        z_down_mm=PlotterSettings().z_down_mm,
-        z_up_mm=PlotterSettings().z_up_mm,
-        z_feed_mm_min=PlotterSettings().z_feed_mm_min,
+        z_down_mm=settings.z_down_mm,
+        z_up_mm=settings.z_up_mm,
+        z_feed_mm_min=settings.z_feed_mm_min,
     )
     gcode_path = output_root / f"{sheet_id}.gcode"
     manifest_path = output_root / f"{sheet_id}.json"
@@ -606,10 +685,16 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
                 "cell_diameter_mm": settings.cell_diameter_mm,
                 "gap_mm": settings.gap_mm,
                 "symbol_fit_ratio": SYMBOL_FIT_RATIO,
+                "include_markers": settings.include_markers,
+                "marker_diameter_mm": settings.marker_diameter_mm,
                 "items": [
                     {
                         "session_id": item.session_id,
                         "source_kind": item.source_kind,
+                        "origin": item.origin,
+                        "tags": item.tags,
+                        "marker_position": item.marker_position,
+                        "marker_diameter_mm": settings.marker_diameter_mm,
                         "svg_path": str(item.svg_path),
                         "sheet_index": index,
                         "center_x_mm": placements[index].center_x_mm,

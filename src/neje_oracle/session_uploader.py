@@ -36,9 +36,12 @@ class SessionUploader:
 
     def scan_once(self) -> list[str]:
         imported: list[str] = []
+        run_started_at = self.store.load_run_started_at()
         for session_dir in sorted(path for path in self.settings.session_root.iterdir() if path.is_dir()):
             row = self.store.get_session_by_source(session_dir)
             if row and row["public_status"] == PublicStatus.PUBLISHED.value and row["public_receipt_path"]:
+                continue
+            if run_started_at is not None and self._session_folder_timestamp(session_dir) < run_started_at:
                 continue
             if not self._is_ready(session_dir):
                 continue
@@ -81,6 +84,11 @@ class SessionUploader:
 
     def _has_required_assets(self, session_dir: Path) -> bool:
         return self._resolve_svg_source(session_dir) is not None and self._resolve_receipt_source(session_dir) is not None
+
+    def _session_folder_timestamp(self, session_dir: Path) -> datetime:
+        mtimes = [session_dir.stat().st_mtime]
+        mtimes.extend(path.stat().st_mtime for path in session_dir.rglob("*") if path.is_file())
+        return datetime.fromtimestamp(max(mtimes), tz=UTC)
 
     def _load_metadata(self, session_dir: Path) -> dict[str, Any]:
         for candidate in ("metadata.json", "session.json"):

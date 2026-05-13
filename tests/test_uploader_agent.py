@@ -9,10 +9,19 @@ from neje_oracle.uploader_agent_service import UploaderAgentController
 class FakeUploader:
     def __init__(self) -> None:
         self.scans = 0
+        self.store = FakeStore()
 
     def scan_once(self) -> list[str]:
         self.scans += 1
         return [f"session_{self.scans:03d}"]
+
+
+class FakeStore:
+    def __init__(self) -> None:
+        self.run_started_at = None
+
+    def save_run_started_at(self, value):
+        self.run_started_at = value
 
 
 @dataclass
@@ -35,3 +44,16 @@ def test_uploader_agent_scan_once_updates_status(tmp_path: Path) -> None:
     assert status["imported_count"] == 1
     assert status["last_imported"] == ["session_001"]
     assert status["running"] is False
+
+
+def test_uploader_agent_start_sets_baseline(tmp_path: Path) -> None:
+    uploader = FakeUploader()
+    controller = UploaderAgentController(
+        uploader,  # type: ignore[arg-type]
+        FakeUploaderSettings(session_root=tmp_path / "sessions", public_root=tmp_path / "public"),  # type: ignore[arg-type]
+    )
+
+    controller.start()
+    controller.stop()
+
+    assert uploader.store.run_started_at is not None

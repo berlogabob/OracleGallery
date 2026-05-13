@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import re
 from random import Random
 from pathlib import Path
 
 from neje_oracle.config import FirebaseSettings, UploaderSettings
 from neje_oracle.models import PublicationResult, PublicStatus, SheetItem, SheetPlacement
-from neje_oracle.session_generator import build_variant_svg, generate_idle_symbols, generate_user_sessions
+from neje_oracle.session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
 from neje_oracle.session_uploader import SessionUploader
 from neje_oracle.store import UploaderStore
 from neje_oracle.svg_gcode import generate_sheet_gcode
@@ -83,6 +84,9 @@ def test_user_generator_writes_touchdesigner_like_session_folder(tmp_path: Path)
     assert (session.session_dir / "metadata.json").exists()
     assert (output_root / "session_log.csv").exists()
     assert session.svg_file.read_text(encoding="utf-8").count("<circle") == 0
+    metadata = json.loads((session.session_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["origin"] == "test_macbook"
+    assert metadata["tags"] == ["test", "generated", "macbook"]
 
 
 def test_idle_generator_writes_mark_only_svg(tmp_path: Path) -> None:
@@ -98,6 +102,29 @@ def test_idle_generator_writes_mark_only_svg(tmp_path: Path) -> None:
 
     svg_text = generated[0].read_text(encoding="utf-8")
     assert svg_text.count("<circle") == 0
+
+
+def test_filler_generator_writes_session_like_package_without_private_media(tmp_path: Path) -> None:
+    source_root = _write_symbol_bank(tmp_path)
+    generated = generate_filler_session_packages(
+        source_root=source_root,
+        output_root=tmp_path / "filler",
+        scale_config=tmp_path / "missing_scales.json",
+        count=1,
+        seed=1,
+        jitter_px=0,
+    )
+
+    session = generated[0]
+    metadata = json.loads((session.session_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert session.session_dir.name.startswith("filler_")
+    assert session.svg_file.name == f"{session.session_id}_plotter.svg"
+    assert session.receipt_file.name == f"{session.session_id}_receipt.txt"
+    assert (session.session_dir / "READY").exists()
+    assert metadata["origin"] == "filler_macbook"
+    assert metadata["uploadToFirebase"] is False
+    assert not list(session.session_dir.glob("*.wav"))
+    assert not list(session.session_dir.glob("*visitor*"))
 
 
 def test_symbol_scale_changes_inner_mark_transform(tmp_path: Path) -> None:

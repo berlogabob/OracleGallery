@@ -54,11 +54,11 @@
 - `[x] done` `START PRINT` в real mode дополнительно блокируется без explicit arm и без FluidNC `Idle`.
 - `[x] done` Test generation создаёт обычные session folders и помечает test-сессии как `origin=test`, `tags=["test","generated"]`, `visibleInLibrary=false`.
 - `[x] done` Print queue берёт только `pending` jobs после baseline; старые jobs не печатаются в новом run.
-- `[x] done` TinyBee/Z workflow поддержан в коде: `Z0=down`, `Z25=up`, `$H=X`, `$H=Y`, `G10 L20 P1 X0 Y0 Z0`.
+- `[x] done` TinyBee workflow поддержан в коде: FluidNC `rc_servo` на оси Z, `G0 Z0` up, `G0 Z-25` down, `$H=X`, `$H=Y`, `G10 L20 P1 X0 Y0 Z0`.
 - `[x] done` Preflight валидирует `assets/tinybee.json`: board XXYYZ, Telnet 23, X/Y/Z travel, X/Y single-axis homing, Z rc_servo assumptions.
 - `[x] done` Rings перенесены в print-time overlay: mark SVG генерируются без baked rings, G-code рисует user single ring и idle double ring по GUI toggle.
 - `[x] done` `include_rings` влияет и на preview, и на следующий G-code.
-- `[x] done` Z-servo G-code поддержан: при `use_z_servo=true` используются `G0/G1 Z...`, а не `M3/M5`.
+- `[x] done` Z-servo G-code включён для TinyBee touch connector: `use_z_servo=true` использует `G0/G1 Z...`; физически FluidNC мапит Z-axis на PWM servo.
 - `[x] done` Runtime/GUI показывают current row, approximate current cell, row progress и sheet progress.
 - `[x] done` Flutter app восстановлен как read-only public gallery; Auth/Storage/write paths удалены из Flutter.
 - `[x] done` Flutter routes работают через hash routing: `/`, `/cloth`, `/library`, `/marks`, `/about`, `/session/:sessionId`, `/debug/sessions`.
@@ -78,7 +78,7 @@
 | `[x] done` | `plotter` | Exact cell progress | Runtime current cell теперь считается по `; cell-start` markers, преобразованным в пороги acknowledged FluidNC commands, а не по грубой доле строки. |
 | `[ ] open` | `plotter` | `PrintRow` / `PrintCell` models | Вынести row/cell assembly из `PlotterDaemon.run_cycle()` в pure helper и manifest schema через явные dataclasses. |
 | `[x] done` | `GUI` | Queue dashboard counts | GUI показывает read-only queue counts: pending after baseline, active leased/plotting, failed/skipped, online/offline; idle printing не зависит от Firebase status. |
-| `[~] partial` | `plotter` | Production Z-servo config | Code/env defaults переключены на `NEJE_PLOTTER_USE_Z_SERVO=true`; остаётся ручная проверка реальной механики перед выставкой. |
+| `[x] done` | `plotter` | Working Z-axis baseline | Confirmed on hardware 2026-05-13: `NEJE_PLOTTER_USE_Z_SERVO=true`, `Z+` sends `G21/G90/G54/G0 Z0`, `Z-` sends `G21/G90/G54/G0 Z-25`; no `$J Z...`, no `M3/M5`, no auto-probe after manual Z. |
 | `[~] partial` | `docs` | One-page operator runbook | RUNBOOK покрывает FluidNC/manual control, но нужен короткий окончательный порядок выставки: hotspot -> GUI -> CONNECT -> baseline -> calibration -> ready -> print -> reload. |
 | `[ ] open` | `Firebase` | Normalization handoff on MacBook | Реализовать pipeline: download raw SVG from Firebase -> normalize with current GUI scales -> upload normalized `artwork.svg` -> release print job. |
 | `[ ] open` | `Flutter` | Final visual polish | Завершить дизайн по Oracle direction: cloth/fabric presentation, marks, about, receipt polish, without reintroducing freezes. |
@@ -90,7 +90,7 @@
 
 ## Risks
 
-- `[!] risk` Z-servo включён как production/example default, но реальная механика всё равно требует ручной проверки перед физической печатью.
+- `[!] risk` TinyBee touch connector uses FluidNC Z-axis commands for PWM servo. This is a confirmed working baseline; do not refactor it back to `$J Z...` or `M3/M5`.
 - `[!] risk` Firestore queue queries зависят от индекса `plot_jobs(status, createdAt)`; индекс есть в repo, но должен быть deployed в Firebase.
 - `[!] risk` GUI теперь разделён top-level workflow-вкладками, но плотность отдельных panels нужно проверить на реальном MacBook 14-inch и при необходимости ещё сократить.
 - `[!] risk` Physical emergency stop не заменяется GUI `Emergency Stop`; software feed hold `!` — только дополнительный уровень безопасности.

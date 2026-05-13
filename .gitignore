@@ -23,6 +23,7 @@ spool/
 assets/sessions/*
 !assets/sessions/START_ORACLE_UPLOADER.command
 assets/generated_idle_symbols/
+assets/generated_filler_sessions/
 public_gallery/build/
 public_gallery/.dart_tool/
 public_gallery/.flutter-plugins
@@ -37,3 +38,4 @@ __pycache__/
 *.flac
 *.zip
 hermes_conversation_*.json
+ESP32-BTN_Printer/**/config.local.h

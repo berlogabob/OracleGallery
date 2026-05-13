@@ -26,8 +26,24 @@ class DebugSessionsPage extends StatelessWidget {
   }
 }
 
-class _DebugSessionStream extends StatelessWidget {
+const _debugOrigins = <String>[
+  'real_macmini',
+  'test_macbook',
+  'test_macmini',
+  'filler_macbook',
+  'unknown',
+];
+
+class _DebugSessionStream extends StatefulWidget {
   const _DebugSessionStream();
+
+  @override
+  State<_DebugSessionStream> createState() => _DebugSessionStreamState();
+}
+
+class _DebugSessionStreamState extends State<_DebugSessionStream> {
+  final Set<String> _selectedOrigins = {..._debugOrigins};
+  final Set<String> _selectedTags = {};
 
   @override
   Widget build(BuildContext context) {
@@ -41,6 +57,13 @@ class _DebugSessionStream extends StatelessWidget {
           return const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()));
         }
         final sessions = snapshot.data ?? const <SessionData>[];
+        final allTags = sessions
+            .expand((session) => session.tags)
+            .map((tag) => tag.toLowerCase())
+            .toSet()
+            .toList()
+          ..sort();
+        final filtered = sessions.where(_matchesFilters).toList();
         if (sessions.isEmpty) {
           return const StatusPanel(title: 'No sessions found', message: 'Firestore returned no session documents.');
         }
@@ -49,8 +72,17 @@ class _DebugSessionStream extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'TOTAL SESSIONS · ${sessions.length.toString().padLeft(3, '0')}',
+              'TOTAL SESSIONS · ${sessions.length.toString().padLeft(3, '0')} / SHOWN · ${filtered.length.toString().padLeft(3, '0')}',
               style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 18),
+            _DebugFilters(
+              origins: _debugOrigins,
+              selectedOrigins: _selectedOrigins,
+              tags: allTags,
+              selectedTags: _selectedTags,
+              onOriginChanged: _toggleOrigin,
+              onTagChanged: _toggleTag,
             ),
             const SizedBox(height: 18),
             LayoutBuilder(
@@ -59,20 +91,115 @@ class _DebugSessionStream extends StatelessWidget {
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: sessions.length,
+                  itemCount: filtered.length,
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: crossAxisCount,
                     mainAxisSpacing: 14,
                     crossAxisSpacing: 14,
                     childAspectRatio: 0.66,
                   ),
-                  itemBuilder: (context, index) => _DebugSessionCard(session: sessions[index]),
+                  itemBuilder: (context, index) => _DebugSessionCard(session: filtered[index]),
                 );
               },
             ),
           ],
         );
       },
+    );
+  }
+
+  bool _matchesFilters(SessionData session) {
+    final origin = session.origin.isEmpty ? 'unknown' : session.origin;
+    if (!_selectedOrigins.contains(origin)) {
+      return false;
+    }
+    if (_selectedTags.isEmpty) {
+      return true;
+    }
+    final tags = session.tags.map((tag) => tag.toLowerCase()).toSet();
+    return _selectedTags.every(tags.contains);
+  }
+
+  void _toggleOrigin(String origin, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedOrigins.add(origin);
+      } else {
+        _selectedOrigins.remove(origin);
+      }
+    });
+  }
+
+  void _toggleTag(String tag, bool selected) {
+    setState(() {
+      if (selected) {
+        _selectedTags.add(tag.toLowerCase());
+      } else {
+        _selectedTags.remove(tag.toLowerCase());
+      }
+    });
+  }
+}
+
+class _DebugFilters extends StatelessWidget {
+  const _DebugFilters({
+    required this.origins,
+    required this.selectedOrigins,
+    required this.tags,
+    required this.selectedTags,
+    required this.onOriginChanged,
+    required this.onTagChanged,
+  });
+
+  final List<String> origins;
+  final Set<String> selectedOrigins;
+  final List<String> tags;
+  final Set<String> selectedTags;
+  final void Function(String origin, bool selected) onOriginChanged;
+  final void Function(String tag, bool selected) onTagChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: OracleColors.paper,
+        border: Border.all(color: OracleColors.rule, width: 0.7),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('DEBUG FILTERS', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final origin in origins)
+                FilterChip(
+                  label: Text(origin.replaceAll('_', ' ').toUpperCase()),
+                  selected: selectedOrigins.contains(origin),
+                  onSelected: (selected) => onOriginChanged(origin, selected),
+                ),
+            ],
+          ),
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final tag in tags)
+                  FilterChip(
+                    label: Text('#$tag'),
+                    selected: selectedTags.contains(tag),
+                    onSelected: (selected) => onTagChanged(tag, selected),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

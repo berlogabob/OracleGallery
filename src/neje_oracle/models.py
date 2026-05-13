@@ -134,6 +134,9 @@ class PlotJobLease:
     queue: str
     svg_storage_path: str
     svg_url: str
+    origin: str = "unknown"
+    tags: list[str] = field(default_factory=list)
+    visible_in_queue: bool = True
 
 
 @dataclass
@@ -150,6 +153,9 @@ class SheetItem:
     session_id: str
     title: str
     svg_path: Path
+    origin: str = "unknown"
+    tags: list[str] = field(default_factory=list)
+    marker_position: str = ""
 
 
 @dataclass
@@ -375,11 +381,13 @@ class PlotterRuntimeConfig:
     run_mode: str = "exhibition"
     dry_run: bool = True
     include_rings: bool = True
+    include_markers: bool = True
+    marker_diameter_mm: float = 1.5
     travel_rate: float = 5000.0
     draw_rate: float = 1800.0
     use_z_servo: bool = True
-    z_down_mm: float = 0.0
-    z_up_mm: float = 25.0
+    z_down_mm: float = -25.0
+    z_up_mm: float = 0.0
     z_feed_mm_min: float = 1000.0
     work_zero_command: str = "G10 L20 P1 X0 Y0 Z0"
     updated_at: datetime = field(default_factory=utcnow)
@@ -395,6 +403,8 @@ class PlotterRuntimeConfig:
             "run_mode": self.run_mode,
             "dry_run": self.dry_run,
             "include_rings": self.include_rings,
+            "include_markers": self.include_markers,
+            "marker_diameter_mm": self.marker_diameter_mm,
             "travel_rate": self.travel_rate,
             "draw_rate": self.draw_rate,
             "use_z_servo": self.use_z_servo,
@@ -417,11 +427,13 @@ class PlotterRuntimeConfig:
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
             include_rings=bool(payload.get("include_rings", True)),
+            include_markers=bool(payload.get("include_markers", True)),
+            marker_diameter_mm=float(payload.get("marker_diameter_mm", 1.5)),
             travel_rate=float(payload.get("travel_rate", 5000.0)),
             draw_rate=float(payload.get("draw_rate", 1800.0)),
             use_z_servo=bool(payload.get("use_z_servo", True)),
-            z_down_mm=float(payload.get("z_down_mm", 0.0)),
-            z_up_mm=float(payload.get("z_up_mm", 25.0)),
+            z_down_mm=float(payload.get("z_down_mm", -25.0)),
+            z_up_mm=float(payload.get("z_up_mm", 0.0)),
             z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),
             work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0 Z0")),
             updated_at=datetime.fromisoformat(payload["updated_at"])

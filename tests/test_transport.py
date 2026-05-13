@@ -195,3 +195,12 @@ def test_control_commands_send_expected_payloads(tmp_path: Path) -> None:
     assert b"!" in server.realtime
     assert b"~" in server.realtime
     assert b"\x18" in server.realtime
+
+
+def test_send_commands_uses_one_connection_for_modal_preamble(tmp_path: Path) -> None:
+    with FakeFluidNCServer() as server:
+        transport = FluidNCTransport(_settings(tmp_path, server))
+        result = transport.send_commands(["G21", "G90", "G54", "G0 Z-25"])
+
+    assert result.ok
+    assert server.commands[-4:] == ["G21", "G90", "G54", "G0 Z-25"]

@@ -50,6 +50,21 @@ Required session folder shape:
 
 The uploader ignores photos, audio, and transcripts. It publishes normalized SVG, raw SVG backup, receipt TXT, QR PNG, and manifest JSON.
 
+Reference package:
+
+```text
+assets/sessions/20260505_155503/
+```
+
+Treat `20260505_155503` as the latest known-good local package structure. Older copied session folders may be removed from `assets/sessions/` only after both checks pass:
+
+```text
+Firestore document exists: sessions/<session_id>
+Storage artwork exists: sessions/<session_id>/artwork.svg
+```
+
+Do not delete local old folders that are missing either Firebase check; they may be the only remaining copy.
+
 Developer terminal start, only for debugging:
 
 ```bash
@@ -181,6 +196,26 @@ assets/generated_idle_symbols/
 
 If this folder exists and contains SVG files, `start_plotter_daemon.sh` uses it automatically. Otherwise the plotter falls back to `assets/symbols`.
 
+The GUI marks filler cells as `origin=filler_macbook`. Filler symbols are local and do not create Firestore `plot_jobs`.
+
+For package-shape consistency, filler can also be generated as local session-like folders:
+
+```bash
+uv run neje-generate-sessions --mode filler --count 8
+```
+
+Output:
+
+```text
+assets/generated_filler_sessions/filler_<timestamp>_<n>/
+  filler_<timestamp>_<n>_plotter.svg
+  filler_<timestamp>_<n>_receipt.txt
+  metadata.json
+  READY
+```
+
+Filler packages intentionally contain no visitor photo, WAV, or transcript. They are local print material, not public Firebase sessions, and `metadata.json` includes `uploadToFirebase=false`.
+
 Manual per-symbol scale correction:
 
 ```text
@@ -188,6 +223,13 @@ assets/symbols/symbol_scales.json
 ```
 
 Set values above or below `1.0` after visual tests. This changes the canonical symbol scale before upload, preview, and G-code. The physical packing is controlled by `NEJE_PLOTTER_CELL_DIAMETER_MM`; scale above `1.0` may deliberately cross cell boundaries for calibration.
+
+Origin dots:
+
+- `Rings` controls user/filler circles.
+- `Origin dots` controls the small printed origin marker.
+- Dot positions distinguish origins on monochrome output: real Mac mini, test MacBook, test Mac mini, filler MacBook, and unknown.
+- Preview filters update immediately. Print filters apply from the next row, never in the middle of a row.
 
 ## 6. SVG Normalization and Firebase Reprocessing
 
@@ -275,14 +317,29 @@ NEJE_PLOTTER_SHEET_HEIGHT_MM=440
 NEJE_PLOTTER_SHEET_MARGIN_MM=0
 NEJE_PLOTTER_CELL_DIAMETER_MM=80
 NEJE_PLOTTER_CELL_GAP_MM=0
-NEJE_PLOTTER_USE_Z_SERVO=false
-NEJE_PLOTTER_Z_DOWN_MM=0
-NEJE_PLOTTER_Z_UP_MM=25
+NEJE_PLOTTER_USE_Z_SERVO=true
+NEJE_PLOTTER_PEN_UP=M5
+NEJE_PLOTTER_PEN_DOWN="M3 S15"
+NEJE_PLOTTER_Z_DOWN_MM=-25
+NEJE_PLOTTER_Z_UP_MM=0
 NEJE_PLOTTER_Z_FEED_MM_MIN=1000
 NEJE_PLOTTER_WORK_ZERO_COMMAND="G10 L20 P1 X0 Y0 Z0"
 NEJE_PLOTTER_TINYBEE_CONFIG_PATH=assets/tinybee.json
 NEJE_PLOTTER_DRY_RUN=true
 ```
+
+Working Z-axis baseline, confirmed on 2026-05-13:
+
+- Keep `NEJE_PLOTTER_USE_Z_SERVO=true`.
+- FluidNC exposes the TinyBee touch PWM servo as the Z axis.
+- `G0 Z0` is pen up/safe.
+- `G0 Z-25` is pen down/contact.
+- GUI `Z+ / Pen up` sends `G21`, `G90`, `G54`, `G0 Z0`.
+- GUI `Z- / Pen down` sends `G21`, `G90`, `G54`, `G0 Z-25`.
+- Do not replace these buttons with `$J Z...` jog or `M3/M5`; both broke this hardware path.
+- Do not auto-probe immediately after manual Z buttons; that looked like a FluidNC reconnect and disturbed operation.
+
+This matches the known-good `/Users/berloga/Downloads/matrix_col12.nc` test file.
 
 Set the GUI mode to `EXHIBITION REAL` only after dry-run G-code and layout are inspected. Then run `PREFLIGHT`, confirm there are no critical failures, press `ARM REAL FLUIDNC`, and only then press `START PRINT`.
 

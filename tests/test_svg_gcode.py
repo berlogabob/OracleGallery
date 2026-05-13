@@ -87,15 +87,15 @@ def test_z_servo_gcode_uses_z_commands_instead_of_spindle(tmp_path: Path) -> Non
         pen_down_command="M3 S15",
         include_rings=False,
         use_z_servo=True,
-        z_down_mm=0,
-        z_up_mm=25,
+        z_down_mm=-25,
+        z_up_mm=0,
         z_feed_mm_min=1000,
     )
 
     assert "M3" not in gcode
     assert "M5" not in gcode
-    assert "G0 Z25.000" in gcode
-    assert "G1 Z0.000 F1000.00" in gcode
+    assert "G0 Z0.000" in gcode
+    assert "G0 Z-25.000" in gcode
 
 
 def test_rings_are_generated_at_print_time(tmp_path: Path) -> None:
@@ -131,6 +131,44 @@ def test_rings_are_generated_at_print_time(tmp_path: Path) -> None:
     )
 
     assert with_rings.count("G1 X") > without_rings.count("G1 X")
+
+
+def test_origin_markers_are_generated_at_print_time(tmp_path: Path) -> None:
+    svg_path = tmp_path / "mark.svg"
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<path d='M10,10 L90,90' stroke='black' fill='none'/>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    without_markers = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="real", title="real", svg_path=svg_path, origin="real_macmini")],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80)],
+        sample_step_mm=20,
+        cell_diameter_mm=80,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+        include_markers=False,
+    )
+    with_markers = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="real", title="real", svg_path=svg_path, origin="real_macmini")],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80)],
+        sample_step_mm=20,
+        cell_diameter_mm=80,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+        include_markers=True,
+        marker_diameter_mm=1.5,
+    )
+
+    assert with_markers.count("G1 X") > without_markers.count("G1 X")
 
 
 def _gcode_draw_width(svg_path: Path) -> float:
