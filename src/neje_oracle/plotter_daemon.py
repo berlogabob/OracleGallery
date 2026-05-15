@@ -308,7 +308,7 @@ class PlotterDaemon:
 
     def _post_sheet_safety_gcode(self, config: PlotterRuntimeConfig, sheet_id: str) -> str:
         if config.use_z_servo:
-            pen_up = f"G0 Z{config.z_up_mm:.3f}"
+            pen_up = "$H=Z"
         else:
             pen_up = self.settings.pen_up_command
         return "\n".join(

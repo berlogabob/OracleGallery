@@ -31,6 +31,7 @@ from .oracle_logging import append_log
 from .plotter_daemon import PlotterDaemon
 from .preflight import PreflightService
 from .store import OracleRuntimeStore, PlotterStore
+from .svg_gcode import Z_SERVO_PEN_DOWN_COMMAND
 from .transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
 
 
@@ -324,7 +325,7 @@ class SupervisorService:
         if not self._manual_control_allowed("set work zero"):
             return self.runtime_store.load_component_state("ready")
         config = self.runtime_store.load_plotter_config()
-        command = config.work_zero_command or self.plotter_settings.work_zero_command
+        command = self._work_zero_command(config)
         result = self.transport_factory(self.plotter_settings).send_command(command, wait_for_ok=True)
         if not result.ok:
             self.runtime_store.save_plotter_readiness(PlotterReadinessState(message=f"Set work zero failed: {result.message}"))
@@ -340,33 +341,32 @@ class SupervisorService:
             return self.runtime_store.set_component("ready", ComponentStatus.WARNING, message="Set work zero before Ready Check")
         if not self._manual_control_allowed("ready check"):
             return self.runtime_store.load_component_state("ready")
-        config = self.runtime_store.load_plotter_config()
         transport = self.transport_factory(self.plotter_settings)
-        use_z_axis_servo = config.use_z_servo or self.plotter_settings.use_z_servo
-        pen_up_command = f"G0 Z{config.z_up_mm:.3f}" if use_z_axis_servo else self.plotter_settings.pen_up_command
         sequence = [
-            pen_up_command,
-            "$H=X",
-            "$H=Y",
+            "G21",
+            "G90",
+            "G54",
             "G0 X0 Y0",
         ]
-        for command in sequence:
-            timeout = max(self.plotter_settings.fluidnc_ack_timeout_seconds, 60.0) if command.startswith("$H") else self.plotter_settings.fluidnc_ack_timeout_seconds
-            result = transport.send_command(command, wait_for_ok=True, timeout_seconds=timeout)
-            if not result.ok:
-                failed = PlotterReadinessState(work_zero_set=True, plotter_ready=False, message=f"Ready Check failed at {command}: {result.message}")
-                self.runtime_store.save_plotter_readiness(failed)
-                self.runtime_store.set_component("ready", ComponentStatus.ERROR, message=failed.message, last_error=result.message)
-                return self._record_fluidnc_command(result, f"Ready Check {command}")
-        probe = transport.probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
-        if not probe.online or not probe.controller.is_idle:
-            failed = PlotterReadinessState(work_zero_set=True, plotter_ready=False, message=f"Ready Check failed: {probe.message}")
+        result = transport.send_commands(sequence)
+        if not result.ok:
+            failed = PlotterReadinessState(work_zero_set=True, plotter_ready=False, message=f"Ready Check failed: {result.message}")
             self.runtime_store.save_plotter_readiness(failed)
-            return self.runtime_store.set_component("ready", ComponentStatus.ERROR, message=failed.message, last_error=probe.last_error)
+            self.runtime_store.set_component("ready", ComponentStatus.ERROR, message=failed.message, last_error=result.message)
+            return self._record_fluidnc_command(result, "Ready Check")
         ready = PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="Plotter ready at work zero")
         self.runtime_store.save_plotter_readiness(ready)
         append_log("plotter", "Ready Check passed", settings=self.settings)
         return self.runtime_store.set_component("ready", ComponentStatus.RUNNING, message=ready.message, heartbeat=True)
+
+    def _work_zero_command(self, config: PlotterRuntimeConfig) -> str:
+        command = (config.work_zero_command or self.plotter_settings.work_zero_command).strip()
+        if (config.use_z_servo or self.plotter_settings.use_z_servo) and command.upper() in {
+            "G10 L20 P1 X0 Y0",
+            "G10 L20 P1 X0 Y0 Z0",
+        }:
+            return "G10 L20 P1 X0 Y0"
+        return command
 
     def home_fluidnc(self, axis: str | None = None) -> ComponentState:
         if not self._manual_control_allowed("home"):
@@ -385,9 +385,13 @@ class SupervisorService:
             return self.runtime_store.load_component_state("fluidnc")
         config = self.runtime_store.load_plotter_config()
         if config.use_z_servo or self.plotter_settings.use_z_servo:
-            command = f"G0 Z{config.z_up_mm:.3f}"
-            result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
-            return self._record_fluidnc_command(result, f"Z up servo {command}")
+            command = "$H=Z"
+            result = self.transport_factory(self.plotter_settings).send_command(
+                command,
+                wait_for_ok=True,
+                timeout_seconds=max(self.plotter_settings.fluidnc_ack_timeout_seconds, 60.0),
+            )
+            return self._record_fluidnc_command(result, f"Z home / pen up {command}")
         result = self.transport_factory(self.plotter_settings).pen_up()
         return self._record_fluidnc_command(result, f"Pen up {self.plotter_settings.pen_up_command}")
 
@@ -396,7 +400,7 @@ class SupervisorService:
             return self.runtime_store.load_component_state("fluidnc")
         config = self.runtime_store.load_plotter_config()
         if config.use_z_servo or self.plotter_settings.use_z_servo:
-            command = f"G0 Z{config.z_down_mm:.3f}"
+            command = Z_SERVO_PEN_DOWN_COMMAND
             result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
             return self._record_fluidnc_command(result, f"Z down servo {command}")
         result = self.transport_factory(self.plotter_settings).pen_down()

@@ -35,6 +35,7 @@ def _write_tinybee_config(path: Path, *, x_travel: float = 255.0, y_travel: floa
                 {"id": "/axes/Z/max_travel_mm", "value": f"{z_travel:.3f}"},
                 {"id": "/axes/X/homing/allow_single_axis", "value": "1"},
                 {"id": "/axes/Y/homing/allow_single_axis", "value": "1"},
+                {"id": "/axes/Z/homing/allow_single_axis", "value": "1"},
                 {"id": "/axes/Z/motor0/rc_servo/pwm_hz", "value": "50"},
             ]
         },

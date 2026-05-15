@@ -83,13 +83,36 @@ If phone testing proves the printer is Bluetooth Classic SPP instead of BLE, set
 
 ## TouchDesigner
 
-Create a `UDP In DAT`:
+Open the single prepared TouchDesigner project:
+
+```text
+ESP32-BTN_Printer/TouchDesigner/TD_BTN.toe
+```
+
+It contains an `esp32_bridge` component with both input paths wired:
+
+- `UDP In DAT` on port `7000`, for the firmware's broadcast `START` packet.
+- `Serial DAT` on `/dev/cu.usbserial-0001` at `115200`, for the USB-connected ESP32 log line `Button pressed: START`.
+
+Select the active path with `esp32_bridge/source_switch`:
+
+- `wifi = 0`: USB serial only.
+- `wifi = 1`: Wi-Fi UDP only.
+
+When the selected input receives `START`, the `esp32_bridge` operator flashes
+green and the `status_log` table records the event.
+
+`WAKE_PRINTER_ON_BUTTON` is disabled by default so button presses stay responsive
+for TouchDesigner. Printer code is still present; use `/wake`, `/test-print`, or
+`/print` when you want the ESP32 to talk to the BLE printer.
+
+If you are rebuilding the network manually, create a `UDP In DAT`:
 
 - Network Port: `7000`
 - Active: `On`
 - Callback DAT: check incoming lines/messages for `START`
 
-The ESP32 sends `START` to `255.255.255.255:7000` on every debounced button press.
+The ESP32 sends `START` to `255.255.255.255:7000` on every debounced button press. It also prints `Button pressed: START` over USB serial before attempting UDP, so the TouchDesigner project can still detect the switch while Wi-Fi is disconnected.
 
 ## Receipt JSON
 

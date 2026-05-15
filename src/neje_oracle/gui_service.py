@@ -52,6 +52,8 @@ def build_page() -> None:
     fluidnc_labels: dict[str, Any] = {}
     ready_labels: dict[str, Any] = {}
     node_pills: dict[str, Any] = {}
+    arm_buttons: list[Any] = []
+    real_output_labels: list[Any] = []
     cycle_state = {"index": 0}
     supervisor = SupervisorService()
     valid_workspaces = {"connection", "calibration", "tests", "work", "exhibition"}
@@ -151,16 +153,23 @@ def build_page() -> None:
         policy = mode_policy(settings.mode)
         real_warning.visible = policy.real_fluidnc_required
         real_warning.update()
+        if not policy.real_fluidnc_required:
+            supervisor.runtime_store.save_real_fluidnc_armed(False)
+        armed = supervisor.runtime_store.load_real_fluidnc_armed()
+        real_output_text = "REAL OUTPUT ARMED" if armed else "DRY RUN - physical FluidNC output is off"
+        if policy.real_fluidnc_required and not armed:
+            real_output_text = "REAL MODE - press ENABLE REAL OUTPUT"
+        for label in real_output_labels:
+            label.set_text(real_output_text)
+        for button in arm_buttons:
+            button.enable()
         if policy.real_fluidnc_required:
-            arm_button.enable()
-            if supervisor.runtime_store.load_real_fluidnc_armed():
+            if armed:
                 start_print_button.enable()
             else:
                 start_print_button.disable()
         else:
-            arm_button.disable()
             start_print_button.enable()
-            supervisor.runtime_store.save_real_fluidnc_armed(False)
         live_timer.interval = max(settings.live_interval_seconds, 1.0)
         refresh_status()
         refresh_component_status()
@@ -358,6 +367,10 @@ def build_page() -> None:
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
+        if read_plotter_status().get("pending_reload"):
+            ui.notify("Plotter is waiting for reload confirmation. Press RELOAD OK before START PRINT.", color="warning")
+            refresh_status()
+            return
         if not run_system_check():
             refresh_status()
             return
@@ -399,15 +412,15 @@ def build_page() -> None:
     def set_work_zero() -> None:
         confirm_action(
             "SET WORK ZERO",
-            "Current position becomes G54 X0 Y0 Z0. Use only after placing the tool at the upper-left work origin.",
+            "Current XY becomes G54 X0 Y0. Z is not zeroed; Z moves use absolute configured values. Use after placing the tool at the upper-left origin.",
             lambda: fluidnc_action("set work zero", supervisor.set_work_zero),
         )
 
     def ready_check() -> None:
         confirm_action(
             "READY CHECK",
-            "Raises Z, homes X/Y, returns to X0 Y0, then checks FluidNC Idle. Confirm only when the machine is clear.",
-            lambda: fluidnc_action("ready check", supervisor.ready_check),
+            "Returns to G54 X0 Y0 without homing, then checks FluidNC Idle. Confirm only when the machine is clear.",
+            lambda: fluidnc_action("ready check", supervisor.ready_check, refresh_probe=False),
         )
 
     def check_fluidnc() -> None:
@@ -645,18 +658,18 @@ def build_page() -> None:
                                 ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
                                 ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
                             with ui.row().classes("gap-1"):
-                                ui.button("Z+ / Pen up", on_click=pen_up).props("dense flat")
+                                ui.button("Z Home / Pen up", on_click=pen_up).props("dense flat")
                                 ui.button("Z- / Pen down", on_click=pen_down).props("dense flat")
                                 ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
                                 ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Motion quality").classes("text-sm font-bold")
-                            ui.label("Speed values are G-code feed rates in mm/min. Z+/Z- send absolute Z servo positions, matching FluidNC rc_servo.").classes("text-xs text-[#8f4f2b]")
+                            ui.label("Speed values are G-code feed rates in mm/min. Pen up uses Z homing; pen down is fixed absolute G0 Z-25.").classes("text-xs text-[#8f4f2b]")
                             with ui.grid(columns=2).classes("w-full gap-2"):
                                 number_control(fields, "travel_rate", label="Travel mm/min", value=settings.travel_rate, default=5000, min_value=1, width_class="w-full", tooltip="Pen-up movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
                                 number_control(fields, "draw_rate", label="Draw mm/min", value=settings.draw_rate, default=1800, min_value=1, width_class="w-full", tooltip="Drawing movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
-                                number_control(fields, "z_up_mm", label="Z up", value=settings.z_up_mm, default=0, min_value=-25, width_class="w-full", tooltip="Safe raised Z servo position.", on_change=persist_and_refresh)
-                                number_control(fields, "z_down_mm", label="Z down", value=settings.z_down_mm, default=-25, min_value=-25, width_class="w-full", tooltip="Drawing/contact Z servo position.", on_change=persist_and_refresh)
+                                number_control(fields, "z_up_mm", label="Z up legacy", value=settings.z_up_mm, default=0, min_value=-25, width_class="w-full", tooltip="Legacy absolute Z-up value; current pen-up behavior uses Z homing.", on_change=persist_and_refresh)
+                                number_control(fields, "z_down_mm", label="Z down legacy", value=settings.z_down_mm, default=-25, min_value=-25, width_class="w-full", tooltip="Legacy value; current pen-down behavior is fixed at absolute G0 Z-25.", on_change=persist_and_refresh)
                                 number_control(fields, "z_feed_mm_min", label="Z mm/min", value=settings.z_feed_mm_min, default=1000, min_value=1, width_class="w-full", tooltip="Z servo axis feed rate. FluidNC maps this Z axis to PWM.", on_change=persist_and_refresh)
                 with ui.tab_panel(tests_tab).classes("p-0"):
                     with ui.column().classes("workspace-scroll gap-2") as test_panel:
@@ -727,7 +740,8 @@ def build_page() -> None:
                             ready_labels["message"] = ui.label("-").classes("path-label text-xs")
                             ui.separator()
                             with ui.row().classes("gap-2"):
-                                arm_button = danger_action_button("Enable Real Output", arm_real_fluidnc)
+                                arm_buttons.append(danger_action_button("Enable Real Output", arm_real_fluidnc))
+                            real_output_labels.append(ui.label("-").classes("path-label text-xs font-bold"))
                             system_check_label = ui.label("System check runs automatically when print starts.").classes("text-xs text-[#8f4f2b]")
 
                 with ui.tab_panel(exhibition_tab).classes("p-0"):
@@ -736,6 +750,8 @@ def build_page() -> None:
                             ui.label("Exhibition controls").classes("text-sm font-bold")
                             ui.label("Minimal live-print controls. No layout, jog, scale or test generation here.").classes("text-xs text-[#8f4f2b]")
                             with ui.column().classes("gap-2"):
+                                real_output_labels.append(ui.label("-").classes("path-label text-xs font-bold"))
+                                arm_buttons.append(ui.button("ENABLE REAL OUTPUT", on_click=arm_real_fluidnc).props("dense color=warning").classes("w-full"))
                                 start_print_button = ui.button("START PRINT", on_click=start_print).props("dense color=positive").classes("w-full")
                                 ui.button("STOP AFTER SHEET", on_click=stop_print).props("dense color=warning").classes("w-full")
                                 reload_button = ui.button("RELOAD OK", on_click=confirm_reload).props("dense").classes("w-full")

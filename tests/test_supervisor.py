@@ -84,6 +84,11 @@ class DryTransport:
         return path
 
 
+class ProbeBlockedTransport(DryTransport):
+    def probe(self, *, timeout_seconds: float = 2.0):
+        raise AssertionError("Ready Check must not probe FluidNC after moving")
+
+
 def _plotter_settings(tmp_path: Path) -> PlotterSettings:
     placeholders = tmp_path / "placeholders"
     placeholders.mkdir(parents=True)
@@ -278,6 +283,7 @@ def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
         remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
         transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
     )
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(use_z_servo=True, z_down_mm=-12.0))
 
     up = supervisor.pen_up_fluidnc()
     down = supervisor.pen_down_fluidnc()
@@ -285,10 +291,7 @@ def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
     assert up.status == ComponentStatus.RUNNING
     assert down.status == ComponentStatus.RUNNING
     assert transport.commands == [
-        "G21",
-        "G90",
-        "G54",
-        "G0 Z0.000",
+        "$H=Z",
         "G21",
         "G90",
         "G54",
@@ -297,7 +300,7 @@ def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
     assert all(not command.startswith("$J=") for command in transport.commands)
 
 
-def test_ready_check_uses_absolute_servo_z_up(tmp_path: Path) -> None:
+def test_ready_check_returns_to_work_zero_without_homing(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     plotter_settings = _plotter_settings(tmp_path)
     transport = DryTransport(plotter_settings)
@@ -313,13 +316,56 @@ def test_ready_check_uses_absolute_servo_z_up(tmp_path: Path) -> None:
     ready = supervisor.ready_check()
 
     assert ready.status == ComponentStatus.RUNNING
-    assert transport.commands[:5] == [
-        plotter_settings.work_zero_command,
-        "G0 Z0.000",
-        "$H=X",
-        "$H=Y",
+    assert transport.commands == [
+        "G10 L20 P1 X0 Y0",
+        "G21",
+        "G90",
+        "G54",
         "G0 X0 Y0",
     ]
+    assert all(not command.startswith("$H") for command in transport.commands)
+
+
+def test_ready_check_does_not_probe_after_ready_move(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = ProbeBlockedTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(use_z_servo=True))
+
+    supervisor.set_work_zero()
+    ready = supervisor.ready_check()
+
+    assert ready.status == ComponentStatus.RUNNING
+    assert transport.commands == [
+        "G10 L20 P1 X0 Y0",
+        "G21",
+        "G90",
+        "G54",
+        "G0 X0 Y0",
+    ]
+
+
+def test_set_work_zero_migrates_legacy_z_zero_for_servo(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = DryTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(work_zero_command="G10 L20 P1 X0 Y0 Z0"))
+
+    supervisor.set_work_zero()
+
+    assert transport.commands == ["G10 L20 P1 X0 Y0"]
 
 
 def test_ready_workflow_sets_work_zero_and_ready_state(tmp_path: Path) -> None:
@@ -331,7 +377,7 @@ def test_ready_workflow_sets_work_zero_and_ready_state(tmp_path: Path) -> None:
         remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
         transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
     )
-    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(work_zero_command="G10 L20 P1 X0 Y0 Z0"))
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(work_zero_command="G10 L20 P1 X0 Y0"))
 
     supervisor.set_work_zero()
     ready = supervisor.ready_check()

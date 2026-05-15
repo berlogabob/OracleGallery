@@ -110,7 +110,7 @@ class PlotterSettings:
     z_down_mm: float = _env_float("NEJE_PLOTTER_Z_DOWN_MM", -25.0)
     z_up_mm: float = _env_float("NEJE_PLOTTER_Z_UP_MM", 0.0)
     z_feed_mm_min: float = _env_float("NEJE_PLOTTER_Z_FEED_MM_MIN", 1000.0)
-    work_zero_command: str = os.getenv("NEJE_PLOTTER_WORK_ZERO_COMMAND", "G10 L20 P1 X0 Y0 Z0")
+    work_zero_command: str = os.getenv("NEJE_PLOTTER_WORK_ZERO_COMMAND", "G10 L20 P1 X0 Y0")
     tinybee_config_path: Path = Path(os.getenv("NEJE_PLOTTER_TINYBEE_CONFIG_PATH", str(_repo_root() / "assets" / "tinybee.json")))
     dry_run: bool = _env_bool("NEJE_PLOTTER_DRY_RUN", True)
     include_markers: bool = _env_bool("NEJE_PLOTTER_INCLUDE_MARKERS", True)

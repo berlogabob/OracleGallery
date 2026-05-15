@@ -42,6 +42,10 @@
 #define SERIAL_STARTUP_DELAY_MS 1500
 #endif
 
+#ifndef WAKE_PRINTER_ON_BUTTON
+#define WAKE_PRINTER_ON_BUTTON 0
+#endif
+
 WebServer server(HTTP_PORT);
 WiFiUDP udp;
 
@@ -428,7 +432,9 @@ void handleButton() {
     if (stableButtonState == LOW) {
       Serial.println("Button pressed: START");
       sendStartUdp();
+#if WAKE_PRINTER_ON_BUTTON
       requestPrinterWake();
+#endif
     }
   }
 }

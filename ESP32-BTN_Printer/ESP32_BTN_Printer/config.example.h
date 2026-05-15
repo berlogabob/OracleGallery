@@ -21,6 +21,10 @@
 #define TOUCHDESIGNER_UDP_PORT 7000
 #define BUTTON_UDP_MESSAGE "START"
 
+// Keep button-to-TouchDesigner responsive. Printer code remains available via
+// HTTP endpoints, but button presses do not start a blocking BLE wake scan.
+#define WAKE_PRINTER_ON_BUTTON 0
+
 // BLE is the default because the WP9509 is app-oriented and its exact
 // Bluetooth transport still needs to be discovered on the real printer.
 #define USE_CLASSIC_SPP 0

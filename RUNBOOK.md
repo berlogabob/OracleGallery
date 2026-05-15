@@ -140,7 +140,7 @@ GUI sections:
 - `Sheet Preview`: static schematic preview of current placement, not a plotter animation.
 - `Plotter Status`: read local plotter runtime state, latest spool manifest, and confirm reload.
 - `FluidNC Control`: check WebUI/Telnet/status, home, jog, unlock alarm, feed hold, resume, and soft reset.
-- `Ready`: `Set Work Zero` saves current position as G54 X0 Y0 Z0; `Ready Check` raises Z, homes X/Y, returns to X0 Y0, and requires FluidNC `Idle`.
+- `Ready`: `Set Work Zero` saves current XY position as G54 X0 Y0 without changing Z. `Ready Check` does not home; it returns to G54 X0 Y0 and requires FluidNC `Idle`.
 - `Logs`: shows the last local supervisor/preflight/uploader/plotter log lines from `logs/oracle_supervisor.log`.
 - `Symbol Scale Correction`: edit `assets/symbols/symbol_scales.json` with global and per-symbol scale controls.
 - Scale values can go up to `5.0`. Values above `1.0` intentionally may overlap neighbouring cells; use dry-run before enabling real FluidNC.
@@ -323,7 +323,7 @@ NEJE_PLOTTER_PEN_DOWN="M3 S15"
 NEJE_PLOTTER_Z_DOWN_MM=-25
 NEJE_PLOTTER_Z_UP_MM=0
 NEJE_PLOTTER_Z_FEED_MM_MIN=1000
-NEJE_PLOTTER_WORK_ZERO_COMMAND="G10 L20 P1 X0 Y0 Z0"
+NEJE_PLOTTER_WORK_ZERO_COMMAND="G10 L20 P1 X0 Y0"
 NEJE_PLOTTER_TINYBEE_CONFIG_PATH=assets/tinybee.json
 NEJE_PLOTTER_DRY_RUN=true
 ```
@@ -332,9 +332,9 @@ Working Z-axis baseline, confirmed on 2026-05-13:
 
 - Keep `NEJE_PLOTTER_USE_Z_SERVO=true`.
 - FluidNC exposes the TinyBee touch PWM servo as the Z axis.
-- `G0 Z0` is pen up/safe.
-- `G0 Z-25` is pen down/contact.
-- GUI `Z+ / Pen up` sends `G21`, `G90`, `G54`, `G0 Z0`.
+- `$H=Z` is pen up/safe everywhere, including generated drawing G-code.
+- `G0 Z-25` is fixed absolute pen down/contact everywhere; saved GUI/runtime Z-down values are ignored in Z-servo mode.
+- GUI `Z Home / Pen up` sends `$H=Z`.
 - GUI `Z- / Pen down` sends `G21`, `G90`, `G54`, `G0 Z-25`.
 - Do not replace these buttons with `$J Z...` jog or `M3/M5`; both broke this hardware path.
 - Do not auto-probe immediately after manual Z buttons; that looked like a FluidNC reconnect and disturbed operation.

@@ -109,11 +109,9 @@ class PreflightService:
             problems.append(f"sheet width {gui_settings.sheet_width_mm:.1f}mm exceeds X travel {x_travel:.1f}mm")
         if y_travel < gui_settings.sheet_height_mm:
             problems.append(f"sheet height {gui_settings.sheet_height_mm:.1f}mm exceeds Y travel {y_travel:.1f}mm")
-        if z_travel < self.plotter_settings.z_up_mm:
-            problems.append(f"z_up {self.plotter_settings.z_up_mm:.1f}mm exceeds Z travel {z_travel:.1f}mm")
         if abs(z_travel - 25.0) > 0.5:
             warnings.append(f"Z travel is {z_travel:.1f}mm; expected 25mm servo travel")
-        for axis in ("X", "Y"):
+        for axis in ("X", "Y", "Z"):
             if values.get(f"/axes/{axis}/homing/allow_single_axis") != "1":
                 problems.append(f"{axis} single-axis homing is disabled")
         if values.get("/axes/Z/motor0/rc_servo/pwm_hz") in {None, ""}:

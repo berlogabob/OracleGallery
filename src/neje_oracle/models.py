@@ -389,7 +389,7 @@ class PlotterRuntimeConfig:
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
     z_feed_mm_min: float = 1000.0
-    work_zero_command: str = "G10 L20 P1 X0 Y0 Z0"
+    work_zero_command: str = "G10 L20 P1 X0 Y0"
     updated_at: datetime = field(default_factory=utcnow)
 
     def to_dict(self) -> dict[str, Any]:
@@ -435,7 +435,7 @@ class PlotterRuntimeConfig:
             z_down_mm=float(payload.get("z_down_mm", -25.0)),
             z_up_mm=float(payload.get("z_up_mm", 0.0)),
             z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),
-            work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0 Z0")),
+            work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0")),
             updated_at=datetime.fromisoformat(payload["updated_at"])
             if payload.get("updated_at")
             else utcnow(),

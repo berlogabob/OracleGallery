@@ -265,7 +265,7 @@ def test_plotter_writes_explicit_post_sheet_safety_gcode(tmp_path: Path) -> None
     assert len(safety_files) == 1
     safety_gcode = safety_files[0].read_text(encoding="utf-8")
     assert "post-sheet safety" in safety_gcode
-    assert "G0 Z25.000" in safety_gcode
+    assert "$H=Z" in safety_gcode
     assert "G0 X0 Y0" in safety_gcode
     manifest = next((tmp_path / "spool").glob("*.json")).read_text(encoding="utf-8")
     assert "post_sheet_safety_gcode_path" in manifest
