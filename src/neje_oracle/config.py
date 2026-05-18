@@ -100,7 +100,7 @@ class PlotterSettings:
     cell_diameter_mm: float = _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 80.0)
     cell_gap_mm: float = _env_float("NEJE_PLOTTER_CELL_GAP_MM", 0.0)
     layout_mode: str = os.getenv("NEJE_PLOTTER_LAYOUT_MODE", "hex")
-    sample_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_STEP_MM", 3.0)
+    sample_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_STEP_MM", 1.0)
     travel_rate: float = _env_float("NEJE_PLOTTER_TRAVEL_RATE", 5000.0)
     draw_rate: float = _env_float("NEJE_PLOTTER_DRAW_RATE", 1800.0)
     pen_up_command: str = os.getenv("NEJE_PLOTTER_PEN_UP", "M5")

@@ -62,6 +62,13 @@ class PlotterDaemon:
             self.runtime_state.message = "Operator confirmed reload"
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
+        control = self._load_control_state()
+        if control.dry_run:
+            control.print_enabled = False
+            control.operator_paused = True
+            self.store.save_control_state(control)
+            if self.oracle_store is not None:
+                self.oracle_store.save_print_control(control)
         if self.oracle_store is not None:
             self.oracle_store.set_component("plotter", ComponentStatus.RUNNING, message="Reload confirmed", heartbeat=True)
 

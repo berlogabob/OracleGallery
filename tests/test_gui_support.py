@@ -20,8 +20,8 @@ from neje_oracle.gui_support import (
     save_gui_settings,
     save_symbol_scales,
 )
-from neje_oracle.models import PlotterRuntimeState, RuntimeStatus, SystemMode
-from neje_oracle.store import PlotterStore
+from neje_oracle.models import PlotterControlState, PlotterRuntimeState, RuntimeStatus, SystemMode
+from neje_oracle.store import OracleRuntimeStore, PlotterStore
 
 
 SIMPLE_SYMBOL = (
@@ -288,6 +288,7 @@ def test_read_status_does_not_create_runtime_db(tmp_path: Path) -> None:
 
 def test_confirm_reload_updates_runtime_state(tmp_path: Path) -> None:
     db_path = tmp_path / "runtime" / "plotter.sqlite3"
+    oracle_db_path = tmp_path / "runtime" / "oracle.sqlite3"
     store = PlotterStore(db_path)
     store.save_runtime_state(
         PlotterRuntimeState(
@@ -297,8 +298,56 @@ def test_confirm_reload_updates_runtime_state(tmp_path: Path) -> None:
         )
     )
 
-    confirm_plotter_reload(db_path)
+    confirm_plotter_reload(db_path, oracle_db_path=oracle_db_path)
     status = read_plotter_status(db_path=db_path, spool_root=tmp_path / "spool")
 
     assert status["status"] == RuntimeStatus.IDLE.value
     assert status["pending_reload"] is False
+
+
+def test_confirm_reload_pauses_dry_run_to_avoid_immediate_reload_loop(tmp_path: Path) -> None:
+    db_path = tmp_path / "runtime" / "plotter.sqlite3"
+    oracle_db_path = tmp_path / "runtime" / "oracle.sqlite3"
+    store = PlotterStore(db_path)
+    oracle_store = OracleRuntimeStore(oracle_db_path)
+    control = PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=True)
+    store.save_control_state(control)
+    oracle_store.save_print_control(control)
+    store.save_runtime_state(
+        PlotterRuntimeState(
+            status=RuntimeStatus.PAUSED,
+            message="Waiting",
+            pending_reload=True,
+        )
+    )
+
+    assert confirm_plotter_reload(db_path, oracle_db_path=oracle_db_path) is True
+
+    plotter_control = store.load_control_state()
+    oracle_control = oracle_store.load_print_control()
+    assert plotter_control.print_enabled is False
+    assert plotter_control.operator_paused is True
+    assert oracle_control.print_enabled is False
+    assert oracle_control.operator_paused is True
+
+
+def test_confirm_reload_keeps_real_print_enabled_for_next_sheet(tmp_path: Path) -> None:
+    db_path = tmp_path / "runtime" / "plotter.sqlite3"
+    oracle_db_path = tmp_path / "runtime" / "oracle.sqlite3"
+    store = PlotterStore(db_path)
+    oracle_store = OracleRuntimeStore(oracle_db_path)
+    control = PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=False)
+    store.save_control_state(control)
+    oracle_store.save_print_control(control)
+    store.save_runtime_state(
+        PlotterRuntimeState(
+            status=RuntimeStatus.PAUSED,
+            message="Waiting",
+            pending_reload=True,
+        )
+    )
+
+    assert confirm_plotter_reload(db_path, oracle_db_path=oracle_db_path) is True
+
+    assert store.load_control_state().print_enabled is True
+    assert oracle_store.load_print_control().print_enabled is True

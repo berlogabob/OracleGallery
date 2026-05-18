@@ -575,7 +575,7 @@ def _queue_status_offline(message: str) -> dict[str, Any]:
     }
 
 
-def confirm_plotter_reload(db_path: Path | None = None) -> bool:
+def confirm_plotter_reload(db_path: Path | None = None, oracle_db_path: Path | None = None) -> bool:
     plotter_settings = PlotterSettings()
     store = PlotterStore(db_path or plotter_settings.db_path)
     state = store.load_runtime_state()
@@ -586,6 +586,13 @@ def confirm_plotter_reload(db_path: Path | None = None) -> bool:
     state.message = "Operator confirmed reload from GUI"
     state.updated_at = datetime.now(tz=UTC)
     store.save_runtime_state(state)
+    oracle_store = OracleRuntimeStore(oracle_db_path or OracleSupervisorSettings().runtime_db_path)
+    control = oracle_store.load_print_control(store.load_control_state())
+    if control.dry_run:
+        control.print_enabled = False
+        control.operator_paused = True
+        oracle_store.save_print_control(control)
+        store.save_control_state(control)
     return True
 
 

@@ -2,7 +2,12 @@
 
 Arduino IDE firmware for the Oracle installation button and thermal printer bridge.
 
-The ESP32 joins the `Nothing32` hotspot, reads a limit switch, sends `START` to TouchDesigner over UDP, wakes the thermal printer, and accepts receipt JSON at `POST /print`.
+There are two Arduino sketches:
+
+- `ESP32_BTN_Printer`: button plus TouchDesigner UDP plus printer HTTP endpoints.
+- `ESP32_PrinterOnly`: printer-focused HTTP bridge only. Use this while finding the exact print protocol.
+
+Both sketches join the `Nothing32` hotspot and expose printer commands over HTTP. The button sketch also reads a limit switch and sends `START` to TouchDesigner over UDP.
 
 ## Hardware
 
@@ -32,17 +37,30 @@ Use the Espressif ESP32 Arduino board package. Select your ESP32 board and uploa
 ```text
 ESP32-BTN_Printer/PrinterDiscovery/PrinterDiscovery.ino
 ESP32-BTN_Printer/ESP32_BTN_Printer/ESP32_BTN_Printer.ino
+ESP32-BTN_Printer/ESP32_PrinterOnly/ESP32_PrinterOnly.ino
 ```
 
 ## Configure
 
-Copy the example config:
+For the combined button/printer sketch, copy the example config:
 
 ```bash
 cp ESP32-BTN_Printer/ESP32_BTN_Printer/config.example.h ESP32-BTN_Printer/ESP32_BTN_Printer/config.local.h
 ```
 
-Edit `config.local.h`:
+For the printer-only sketch, copy its config instead:
+
+```bash
+cp ESP32-BTN_Printer/ESP32_PrinterOnly/config.example.h ESP32-BTN_Printer/ESP32_PrinterOnly/config.local.h
+```
+
+Or reuse the already-working local config from the combined sketch:
+
+```bash
+cp ESP32-BTN_Printer/ESP32_BTN_Printer/config.local.h ESP32-BTN_Printer/ESP32_PrinterOnly/config.local.h
+```
+
+For the combined button/printer sketch, edit the network and button values:
 
 ```cpp
 #define WIFI_SSID "Nothing32"
@@ -52,6 +70,17 @@ Edit `config.local.h`:
 ```
 
 `config.local.h` is ignored by git.
+
+The printer-only config does not contain button or TouchDesigner settings. Its important values are:
+
+```cpp
+#define PRINTER_BLE_ADDRESS "95:09:25:47:56:b3"
+#define PRINTER_SERVICE_UUID "0000fff0-0000-1000-8000-00805f9b34fb"
+#define PRINTER_WRITE_CHAR_UUID "0000fff1-0000-1000-8000-00805f9b34fb"
+#define PRINTER_ALT_WRITE_CHAR_UUID "0000fff2-0000-1000-8000-00805f9b34fb"
+#define PRINTER_NOTIFY_CHAR_UUID "0000fff4-0000-1000-8000-00805f9b34fb"
+#define PRINTER_DEFAULT_PROTOCOL "escpos"
+```
 
 ## Discover The Printer
 
@@ -173,9 +202,96 @@ If auto-discovery cannot determine the hotspot subnet, pass it explicitly:
 uv run python ESP32-BTN_Printer/tools/printer_connect.py test --subnet 10.60.149.0/24
 ```
 
-If `/probe-print` returns `ok: true` but the printer does not move paper, check the `notify` and `notify_packets` fields. `ok` only means the BLE characteristic accepted bytes; a silent printer can still mean the WP9509 expects a proprietary VSON/iDoodle frame before it will print.
+If `/probe-print` returns `ok: true` but the printer does not move paper, check the `notify` and `notify_packets` fields. `ok` only means the BLE characteristic accepted bytes; a silent printer can still mean the WP9509 expects the proprietary VSON/iLabel command sequence before it will print.
+
+## Printer-Only Sketch
+
+Upload:
+
+```text
+ESP32-BTN_Printer/ESP32_PrinterOnly/ESP32_PrinterOnly.ino
+```
+
+Then use the helper:
+
+```bash
+uv run python ESP32-BTN_Printer/tools/printer_connect.py status
+uv run python ESP32-BTN_Printer/tools/printer_connect.py connect
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol escpos
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol raw
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol tspl
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol cpcl
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol zpl
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol catfeed
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol catblack
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol ilabel-status
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol ilabel-info
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol ilabel --message "HELLO ROLL"
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol ilabel-text
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol ilabel-roll
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test --protocol ilabel-black
+uv run python ESP32-BTN_Printer/tools/printer_connect.py probe
+```
+
+Those commands are written for the repo root. If your terminal is already inside `ESP32-BTN_Printer`, use `uv run python tools/printer_connect.py ...` instead.
+
+If `/connect` works but `/test-print` is silent, run `/probe-print`. It tries:
+
+- writable characteristics `fff1` and `fff2`
+- BLE write-no-response and write-with-response
+- payload formats `raw`, `escpos`, `tspl`, `cpcl`, `zpl`, cat-printer packet probes, and iLabel-style WP9509 probes
+
+The cat-printer probes are for app-driven pocket printers that ignore plain ESC/POS bytes:
+
+- `catstate`: request printer state/info packets
+- `catfeed`: send the packetized feed-paper command
+- `catblack`: send a short packetized black bitmap stripe
+
+The iLabel probes come from the official VSON app code path for WP9509:
+
+- `ilabel`: print wrapped raster text on continuous 57 mm roll paper
+- `ilabel-status`: write `01` and collect notify bytes
+- `ilabel-info`: write `AC` and collect notify bytes
+- `ilabel-cancel`: write `04`
+- `ilabel-text`: alias for the same continuous-roll raster text path
+- `ilabel-roll`: send an iLabel print header with paper type `1` for continuous 57 mm roll paper, plus a short low-density 576-dot raster test
+- `ilabel-black`: alias for the same continuous-roll raster test
+
+Do not use gap-label mode with roll paper. The printer can keep feeding while trying to find a label gap and then enter an error state.
+
+For a targeted BLE write test:
+
+```bash
+uv run python ESP32-BTN_Printer/tools/printer_connect.py test \
+  --protocol tspl \
+  --characteristic 0000fff2-0000-1000-8000-00805f9b34fb \
+  --write-response
+```
 
 ## Useful Endpoints
+
+Printer-only sketch:
+
+```text
+GET  /status   ESP32 Wi-Fi/printer state
+POST /connect  scan/connect to configured printer and report write/notify chars
+POST /wake     send ESC/POS init bytes
+POST /test-print?protocol=escpos print a small test using raw/escpos/tspl/cpcl/zpl/ilabel-*
+POST /raw      write raw hex bytes and report notify bytes, for replaying captured app traffic
+POST /ilabel-test?protocol=ilabel-status run one official-app-style iLabel probe
+POST /probe-print try BLE chars/common protocols and report notify bytes
+POST /print?protocol=escpos print receipt JSON
+```
+
+Raw replay helper:
+
+```bash
+uv run python ESP32-BTN_Printer/tools/printer_connect.py raw \
+  --esp32 http://<esp32-ip> \
+  --hex "51 78 a1 00 01 00 50 b9 ff"
+```
+
+Button/printer sketch:
 
 ```text
 GET  /status   ESP32 Wi-Fi/printer state
@@ -187,6 +303,18 @@ POST /print    print receipt JSON
 ```
 
 ## First Hardware Test Order
+
+Printer-only path:
+
+1. Upload `PrinterDiscovery.ino` and confirm the BLE address/service/characteristics.
+2. Fill `ESP32_PrinterOnly/config.local.h`.
+3. Upload `ESP32_PrinterOnly.ino`.
+4. Run `printer_connect.py status`, then `printer_connect.py connect`.
+5. Run `printer_connect.py test --protocol escpos`.
+6. If no paper moves, run `printer_connect.py probe` and inspect which attempts return notifications.
+7. After a protocol prints, set `PRINTER_DEFAULT_PROTOCOL` to that protocol and run `printer_connect.py sample`.
+
+Full button plus printer path:
 
 1. Upload `PrinterDiscovery.ino` and record BLE details.
 2. Fill `config.local.h`.

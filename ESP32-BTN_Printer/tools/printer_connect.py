@@ -6,6 +6,7 @@ import json
 import socket
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import ip_network
@@ -26,12 +27,32 @@ def main() -> None:
         print_json(get_json(base_url, "/status", timeout=args.timeout))
         return
 
+    if args.action == "connect":
+        print_json(post_json(base_url, "/connect", None, timeout=args.timeout))
+        return
+
     if args.action == "wake":
         print_json(post_json(base_url, "/wake", None, timeout=args.timeout))
         return
 
     if args.action == "test":
-        print_json(post_json(base_url, "/test-print", None, timeout=args.timeout))
+        params = {"protocol": args.protocol}
+        if args.message:
+            params["message"] = args.message
+        if args.write_response:
+            params["response"] = "1"
+        if args.characteristic:
+            params["char"] = args.characteristic
+        print_json(post_json(base_url, query_path("/test-print", params), None, timeout=args.timeout))
+        return
+
+    if args.action == "raw":
+        payload = {"hex": args.hex}
+        if args.write_response:
+            payload["response"] = True
+        if args.characteristic:
+            payload["char"] = args.characteristic
+        print_json(post_json(base_url, "/raw", payload, timeout=args.timeout))
         return
 
     if args.action == "probe":
@@ -40,12 +61,12 @@ def main() -> None:
 
     if args.action == "sample":
         payload = json.loads(SAMPLE_PAYLOAD.read_text(encoding="utf-8"))
-        print_json(post_json(base_url, "/print", payload, timeout=args.timeout))
+        print_json(post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout))
         return
 
     if args.action == "receipt":
         payload = build_receipt_payload(args)
-        print_json(post_json(base_url, "/print", payload, timeout=args.timeout))
+        print_json(post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout))
         return
 
     raise SystemExit(f"Unsupported action: {args.action}")
@@ -58,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "action",
         nargs="?",
-        choices=("status", "wake", "test", "probe", "sample", "receipt"),
+        choices=("status", "connect", "wake", "test", "raw", "probe", "sample", "receipt"),
         default="status",
         help="Command to run after discovery.",
     )
@@ -73,8 +94,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--subnet", help="Subnet to scan, for example 10.60.149.0/24. Defaults to this Mac's /24.")
     parser.add_argument("--port", type=int, default=80)
     parser.add_argument("--scan-timeout", type=float, default=0.6)
-    parser.add_argument("--timeout", type=float, default=20.0)
+    parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--workers", type=int, default=96)
+    parser.add_argument(
+        "--protocol",
+        default="ilabel",
+        choices=(
+            "raw",
+            "escpos",
+            "tspl",
+            "cpcl",
+            "zpl",
+            "catstate",
+            "catfeed",
+            "catblack",
+            "ilabel",
+            "ilabel-status",
+            "ilabel-info",
+            "ilabel-cancel",
+            "ilabel-text",
+            "ilabel-roll",
+            "ilabel-black",
+        ),
+    )
+    parser.add_argument("--message", help="Text to print for action=test.")
+    parser.add_argument("--write-response", action="store_true", help="Use BLE write-with-response for action=test.")
+    parser.add_argument("--characteristic", help="BLE characteristic UUID to use for action=test.")
+    parser.add_argument("--hex", help="Hex bytes for action=raw, for example '1b 40 0a'.")
     parser.add_argument(
         "--session-dir",
         type=Path,
@@ -88,7 +134,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def parse_args() -> argparse.Namespace:
-    return build_parser().parse_args()
+    args = build_parser().parse_args()
+    if args.action == "raw" and not args.hex:
+        raise SystemExit("action=raw requires --hex, for example --hex '51 78 a1 00 01 00 50 b9 ff'")
+    return args
 
 
 def resolve_base_url(args: argparse.Namespace) -> str:
@@ -164,7 +213,9 @@ def probe_host(host: str, port: int, timeout: float) -> str | None:
         status = get_json(base_url, "/status", timeout=timeout)
     except Exception:
         return None
-    if {"wifi", "printer", "button_pin"}.issubset(status):
+    if {"wifi", "printer"}.issubset(status) and (
+        "button_pin" in status or "transport" in status or "default_protocol" in status
+    ):
         return base_url
     return None
 
@@ -190,6 +241,13 @@ def post_json(base_url: str, path: str, payload: dict[str, Any] | None, *, timeo
         raise SystemExit(f"ESP32 returned HTTP {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
         raise SystemExit(f"Could not reach ESP32 at {base_url.rstrip('/') + path}: {exc}") from exc
+
+
+def query_path(path: str, params: dict[str, str | None]) -> str:
+    filtered = {key: value for key, value in params.items() if value}
+    if not filtered:
+        return path
+    return f"{path}?{urllib.parse.urlencode(filtered)}"
 
 
 def build_receipt_payload(args: argparse.Namespace) -> dict[str, Any]:
