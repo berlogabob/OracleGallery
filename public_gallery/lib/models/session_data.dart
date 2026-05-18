@@ -15,6 +15,7 @@ class SessionData {
     required this.qrUrl,
     required this.sessionUrl,
     required this.qrImageUrl,
+    required this.tarotUrl,
     required this.origin,
     required this.tags,
     required this.visibleInLibrary,
@@ -33,6 +34,7 @@ class SessionData {
   final String qrUrl;
   final String sessionUrl;
   final String qrImageUrl;
+  final String tarotUrl;
   final String origin;
   final List<String> tags;
   final bool visibleInLibrary;
@@ -75,6 +77,7 @@ class SessionData {
       qrUrl: _string(data['qrUrl']).isNotEmpty ? _string(data['qrUrl']) : sessionUrl,
       sessionUrl: sessionUrl,
       qrImageUrl: qrImageUrl,
+      tarotUrl: _firstNonEmpty([_string(assetUrls['tarot']), _string(data['tarotUrl'])]),
       origin: _string(data['origin']),
       tags: _stringList(data['tags']),
       visibleInLibrary: data['visibleInLibrary'] is bool ? data['visibleInLibrary'] as bool : true,

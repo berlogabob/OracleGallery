@@ -18,9 +18,11 @@ from .origin_markers import (
     DEFAULT_MARKER_DIAMETER_MM,
     ORIGIN_FILLER_MACBOOK,
     ORIGIN_PREVIEW_COLORS,
+    ORIGIN_REAL_MACMINI,
     ORIGIN_TEST_MACBOOK,
     marker_center_for_position,
     marker_position_for_origin,
+    normalize_origin,
     normalize_tags,
 )
 from .session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
@@ -30,6 +32,15 @@ from .transport import FluidNCTransport
 
 
 _QUEUE_STATUS_CACHE: tuple[datetime, dict[str, Any]] | None = None
+
+
+@dataclass(frozen=True)
+class LivePreviewItem:
+    sheet_index: int
+    source_kind: str
+    origin: str
+    state: str
+    svg_path: Path | None = None
 
 
 GUI_DEFAULTS = {
@@ -325,6 +336,26 @@ def build_preview_svg(
     )
 
 
+def build_realtime_preview_svg(
+    settings: GuiSettings,
+    status: dict[str, Any],
+    queue: dict[str, Any],
+    *,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+) -> str:
+    items = _live_preview_items(settings, status, queue)
+    if not items:
+        pending_users = _pending_user_queue_count(queue)
+        return build_preview_svg(
+            settings,
+            user_count=min(pending_users, layout_capacity(settings)),
+            symbol_root=symbol_root,
+            scale_path=scale_path,
+        )
+    return _build_live_preview_svg(settings, items)
+
+
 def build_symbol_preview_svg(
     symbol_path: Path,
     *,
@@ -371,6 +402,205 @@ def _preview_symbol_images(
     return images
 
 
+def _build_live_preview_svg(settings: GuiSettings, items: list[LivePreviewItem]) -> str:
+    capacity = layout_capacity(settings)
+    if capacity <= 0:
+        return _empty_preview_svg(settings, "No printable cells")
+    placements = build_sheet_layout(
+        capacity,
+        mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        margin_mm=settings.sheet_margin_mm,
+        diameter_mm=max(settings.cell_diameter_mm, 1.0),
+        gap_mm=max(settings.gap_mm, 0.0),
+    )
+    scale = _preview_scale(settings)
+    width = settings.sheet_width_mm * scale
+    height = settings.sheet_height_mm * scale
+    mark_size = symbol_diameter_for_cell(settings.cell_diameter_mm) * scale
+    item_by_index = {item.sheet_index: item for item in items}
+    elements: list[str] = []
+    for placement in placements:
+        item = item_by_index.get(placement.index)
+        cx = placement.center_x_mm * scale
+        cy = placement.center_y_mm * scale
+        cell_radius = placement.diameter_mm * scale / 2.0
+        state = item.state if item else "empty"
+        fill = {
+            "drawn": "#fffdf8",
+            "drawing": "#fff0d4",
+            "next": "#e1ded8",
+            "empty": "#f3eadb",
+        }.get(state, "#f3eadb")
+        stroke = {
+            "drawn": "#1f1a17",
+            "drawing": "#c7472f",
+            "next": "#8f8980",
+            "empty": "#d8c7aa",
+        }.get(state, "#d8c7aa")
+        stroke_width = {"drawing": "3.2", "next": "2.2"}.get(state, "1.0")
+        dash = ' stroke-dasharray="5 4"' if state == "next" else ""
+        elements.append(
+            f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{cell_radius:.2f}" fill="{fill}" '
+            f'stroke="{stroke}" stroke-width="{stroke_width}" data-preview-state="{state}"{dash}/>'
+        )
+        if not item:
+            continue
+        if item.origin not in settings.show_origins:
+            continue
+        if settings.include_rings:
+            ring_opacity = "0.35" if state == "next" else "0.9"
+            elements.append(
+                f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" '
+                f'stroke="{stroke}" stroke-width="1.2" opacity="{ring_opacity}" data-ring="outer"/>'
+            )
+            if item.source_kind != "user":
+                elements.append(
+                    f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" '
+                    f'stroke="{stroke}" stroke-width="0.8" opacity="{ring_opacity}" data-ring="inner"/>'
+                )
+        if settings.include_markers:
+            marker_x, marker_y = marker_center_for_position(
+                placement,
+                marker_position_for_origin(item.origin),
+                marker_diameter_mm=settings.marker_diameter_mm,
+            )
+            marker_color = ORIGIN_PREVIEW_COLORS.get(item.origin, "#1f1a17")
+            marker_opacity = "0.35" if state == "next" else "1.0"
+            elements.append(
+                f'<circle cx="{marker_x * scale:.2f}" cy="{marker_y * scale:.2f}" '
+                f'r="{settings.marker_diameter_mm * scale / 2.0:.2f}" fill="none" '
+                f'stroke="{marker_color}" stroke-width="1.6" opacity="{marker_opacity}" '
+                f'data-origin-marker="{item.origin}"/>'
+            )
+        href = _svg_file_data_uri(item.svg_path)
+        if href:
+            opacity = "0.35" if state == "next" else "1.0"
+            grayscale = ' filter="grayscale(1)"' if state == "next" else ""
+            elements.append(
+                f'<image href="{href}" x="{cx - mark_size / 2.0:.2f}" y="{cy - mark_size / 2.0:.2f}" '
+                f'width="{mark_size:.2f}" height="{mark_size:.2f}" opacity="{opacity}"{grayscale} '
+                f'preserveAspectRatio="xMidYMid meet" data-preview-state="{state}"/>'
+            )
+        elif state == "next":
+            elements.append(
+                f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.22:.2f}" '
+                f'fill="none" stroke="{stroke}" stroke-width="1.4" opacity="0.45" data-preview-state="next-placeholder"/>'
+            )
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width:.2f} {height:.2f}" '
+        f'width="{width:.0f}" height="{height:.0f}">'
+        '<rect width="100%" height="100%" fill="#fbf7ef"/>'
+        f'<rect x="{settings.sheet_margin_mm * scale:.2f}" y="{settings.sheet_margin_mm * scale:.2f}" '
+        f'width="{(settings.sheet_width_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
+        f'height="{(settings.sheet_height_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
+        'fill="none" stroke="#d4c3a5" stroke-width="1"/>'
+        + "".join(elements)
+        + "</svg>"
+    )
+
+
+def _live_preview_items(settings: GuiSettings, status: dict[str, Any], queue: dict[str, Any]) -> list[LivePreviewItem]:
+    manifest_path = Path(str(status.get("latest_manifest") or ""))
+    manifest_items = _manifest_preview_items(manifest_path)
+    if not manifest_items:
+        return []
+    status_name = str(status.get("status") or "")
+    cells_completed = max(0, int(status.get("cells_completed", 0) or 0))
+    current_cell_in_row = int(status.get("current_cell_in_row", 0) or 0)
+    is_drawing = status_name == RuntimeStatus.PRINTING.value and current_cell_in_row > 0
+    current_ordinal = cells_completed if is_drawing else None
+    next_ordinal = (current_ordinal + 1) if current_ordinal is not None else cells_completed
+    if status_name == RuntimeStatus.PAUSED.value and float(status.get("sheet_progress_percent", 0.0) or 0.0) >= 100.0:
+        current_ordinal = None
+        next_ordinal = len(manifest_items)
+
+    live_items: list[LivePreviewItem] = []
+    for ordinal, item in enumerate(manifest_items):
+        if ordinal < cells_completed or current_ordinal is None and ordinal < next_ordinal:
+            state = "drawn"
+        elif current_ordinal is not None and ordinal == current_ordinal:
+            state = "drawing"
+        elif ordinal == next_ordinal:
+            state = "next"
+        else:
+            continue
+        live_items.append(_manifest_live_preview_item(item, state=state))
+
+    if not any(item.state == "next" for item in live_items):
+        ghost = _next_preview_ghost(settings, len(manifest_items), queue)
+        if ghost is not None:
+            live_items.append(ghost)
+    return live_items
+
+
+def _manifest_preview_items(manifest_path: Path) -> list[dict[str, Any]]:
+    if not manifest_path.exists() or not manifest_path.is_file():
+        return []
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    items = payload.get("items", [])
+    if not items and isinstance(payload.get("rows"), list):
+        items = [
+            item
+            for row in payload["rows"]
+            if isinstance(row, dict)
+            for item in row.get("items", [])
+            if isinstance(item, dict)
+        ]
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _manifest_live_preview_item(item: dict[str, Any], *, state: str) -> LivePreviewItem:
+    raw_svg_path = str(item.get("svg_path") or "")
+    return LivePreviewItem(
+        sheet_index=int(item.get("sheet_index", 0) or 0),
+        source_kind=str(item.get("source_kind") or "placeholder"),
+        origin=normalize_origin(item.get("origin") or ORIGIN_FILLER_MACBOOK),
+        state=state,
+        svg_path=Path(raw_svg_path) if raw_svg_path else None,
+    )
+
+
+def _next_preview_ghost(settings: GuiSettings, next_sheet_index: int, queue: dict[str, Any]) -> LivePreviewItem | None:
+    capacity = layout_capacity(settings)
+    if next_sheet_index < 0 or next_sheet_index >= capacity:
+        return None
+    pending_users = _pending_user_queue_count(queue)
+    if pending_users > 0:
+        return LivePreviewItem(
+            sheet_index=next_sheet_index,
+            source_kind="user",
+            origin=ORIGIN_REAL_MACMINI,
+            state="next",
+        )
+    return LivePreviewItem(
+        sheet_index=next_sheet_index,
+        source_kind="placeholder",
+        origin=ORIGIN_FILLER_MACBOOK,
+        state="next",
+    )
+
+
+def _svg_file_data_uri(path: Path | None) -> str:
+    if path is None or not path.exists() or not path.is_file():
+        return ""
+    try:
+        encoded = b64encode(path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+def _pending_user_queue_count(queue: dict[str, Any]) -> int:
+    if "pendingUserAfterBaseline" in queue:
+        return int(queue.get("pendingUserAfterBaseline", 0) or 0)
+    return int(queue.get("pendingAfterBaseline", 0) or 0)
+
+
 def _placement_row_lookup(placements) -> dict[int, int]:
     rows: dict[float, int] = {}
     lookup: dict[int, int] = {}
@@ -402,6 +632,30 @@ def create_user_sessions_from_gui(
         global_scale=settings.global_scale,
         include_rings=False,
         start_index=start_index,
+    )
+    return [session.session_dir for session in generated]
+
+
+def create_next_filler_upload_from_gui(
+    settings: GuiSettings,
+    *,
+    output_root: Path | None = None,
+    symbol_root: Path | None = None,
+    scale_path: Path | None = None,
+    start_index: int = 0,
+) -> list[Path]:
+    destination = output_root or UploaderSettings().session_root
+    generated = generate_filler_session_packages(
+        source_root=symbol_root or default_symbol_root(),
+        output_root=destination,
+        scale_config=scale_path or default_scale_config_path(),
+        count=1,
+        jitter_px=effective_randomness(settings) / 100.0 * 6.0,
+        symbol_name=settings.selected_symbol,
+        global_scale=settings.global_scale,
+        include_rings=False,
+        start_index=start_index,
+        upload_to_firebase=True,
     )
     return [session.session_dir for session in generated]
 
@@ -562,6 +816,8 @@ def _queue_status_offline(message: str) -> dict[str, Any]:
         "limitedTo": 0,
         "pending": 0,
         "pendingAfterBaseline": 0,
+        "pendingUserAfterBaseline": 0,
+        "pendingFillerAfterBaseline": 0,
         "pendingBeforeBaseline": 0,
         "leased": 0,
         "plotting": 0,

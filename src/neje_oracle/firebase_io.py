@@ -45,17 +45,22 @@ class FirebaseRemoteRepository:
         manifest_blob = self._bucket.blob(f"{remote_root}/manifest.json")
         raw_svg_path = public_dir / "artwork_raw.svg"
         raw_svg_storage_path = f"{remote_root}/artwork_raw.svg"
+        tarot_path = public_dir / "tarot.jpg"
+        tarot_storage_path = f"{remote_root}/tarot.jpg"
 
         svg_blob.upload_from_filename(str(public_dir / "artwork.svg"), content_type="image/svg+xml")
         receipt_blob.upload_from_filename(str(public_dir / "receipt.txt"), content_type="text/plain; charset=utf-8")
         qr_blob.upload_from_filename(str(public_dir / "qr.png"), content_type="image/png")
         if raw_svg_path.exists():
             self._bucket.blob(raw_svg_storage_path).upload_from_filename(str(raw_svg_path), content_type="image/svg+xml")
+        if tarot_path.exists():
+            self._bucket.blob(tarot_storage_path).upload_from_filename(str(tarot_path), content_type="image/jpeg")
 
         svg_version = _file_hash(public_dir / "artwork.svg")
         svg_url = self._public_storage_url(f"{remote_root}/artwork.svg", version=svg_version)
         receipt_url = self._public_storage_url(f"{remote_root}/receipt.txt")
         qr_image_url = self._public_storage_url(f"{remote_root}/qr.png")
+        tarot_url = self._public_storage_url(tarot_storage_path) if tarot_path.exists() else ""
 
         record.public_status = PublicStatus.PUBLISHED
         record.plot_status = PlotStatus.PENDING
@@ -72,12 +77,19 @@ class FirebaseRemoteRepository:
         origin = classification.origin
         tags = classification.tags
         visible_in_library = classification.visible_in_library
+        queue = _queue_for_record(record)
+        priority = _priority_for_record(record, queue)
+        visible_in_queue = record.extra_metadata.get("visibleInQueue") is not False
         record.extra_metadata = {
             **record.extra_metadata,
             "origin": origin,
             "tags": tags,
             "visibleInLibrary": visible_in_library,
+            "queue": queue,
+            "priority": priority,
+            "visibleInQueue": visible_in_queue,
         }
+        record.priority = priority
 
         manifest_blob.upload_from_string(
             record_to_json(record),
@@ -93,10 +105,11 @@ class FirebaseRemoteRepository:
                 "summary": record.summary,
                 "status": PublicStatus.PUBLISHED.value,
                 "plotStatus": PlotStatus.PENDING.value,
-                "priority": record.priority,
+                "priority": priority,
                 "sessionUrl": record.qr_url,
                 "qrUrl": record.qr_url,
                 "qrImageUrl": qr_image_url,
+                "tarotUrl": tarot_url,
                 "svgUrl": svg_url,
                 "receiptUrl": receipt_url,
                 "markName": record.mark_name,
@@ -107,6 +120,7 @@ class FirebaseRemoteRepository:
                     "svg": svg_url,
                     "qr": qr_image_url,
                     "receipt": receipt_url,
+                    "tarot": tarot_url,
                 },
                 "assetPaths": {
                     "svg": f"{remote_root}/artwork.svg",
@@ -114,12 +128,14 @@ class FirebaseRemoteRepository:
                     "receipt": f"{remote_root}/receipt.txt",
                     "manifest": f"{remote_root}/manifest.json",
                     "rawSvg": raw_svg_storage_path if raw_svg_path.exists() else "",
+                    "tarot": tarot_storage_path if tarot_path.exists() else "",
                 },
                 "svgVersion": svg_version,
                 "metadata": record.extra_metadata,
                 "origin": origin,
                 "tags": tags,
                 "visibleInLibrary": visible_in_library,
+                "visibleInQueue": visible_in_queue,
             },
             merge=True,
         )
@@ -138,8 +154,8 @@ class FirebaseRemoteRepository:
                 "summary": record.summary,
                 "createdAt": record.created_at.isoformat(),
                 "status": PlotStatus.PENDING.value,
-                "priority": record.priority,
-                "queue": "user",
+                "priority": priority,
+                "queue": queue,
                 "consumerId": "",
                 "sheetId": "",
                 "sheetIndex": -1,
@@ -148,7 +164,7 @@ class FirebaseRemoteRepository:
                 "svgUrl": svg_url,
                 "origin": origin,
                 "tags": tags,
-                "visibleInQueue": True,
+                "visibleInQueue": visible_in_queue,
             },
             merge=True,
         )
@@ -176,13 +192,12 @@ class FirebaseRemoteRepository:
             self._db.collection("plot_jobs")
             .where("status", "==", PlotStatus.PENDING.value)
             .order_by("createdAt")
-            .limit(25)
+            .limit(500)
         )
         docs = list(query.stream())
         if not docs:
             return None
-        doc = None
-        payload = None
+        candidates = []
         for candidate in docs:
             candidate_payload = candidate.to_dict()
             if candidate_payload.get("visibleInQueue") is False:
@@ -193,11 +208,10 @@ class FirebaseRemoteRepository:
             candidate_origin = normalize_origin(candidate_payload.get("origin"))
             if not origin_allowed(candidate_origin, allowed_origins):
                 continue
-            doc = candidate
-            payload = candidate_payload
-            break
-        if doc is None or payload is None:
+            candidates.append((candidate, candidate_payload))
+        if not candidates:
             return None
+        doc, payload = min(candidates, key=lambda item: _plot_job_claim_sort_key(item[1]))
         doc.reference.update(
             {
                 "status": PlotStatus.LEASED.value,
@@ -388,6 +402,26 @@ def recorded_datetime(value):
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
+def _queue_for_record(record: SessionRecord) -> str:
+    raw = str(record.extra_metadata.get("queue") or "").strip().lower()
+    return raw if raw in {"user", "filler"} else "user"
+
+
+def _priority_for_record(record: SessionRecord, queue: str) -> str:
+    raw = str(record.extra_metadata.get("priority") or record.priority or "").strip().lower()
+    if raw:
+        return raw
+    return "filler" if queue == "filler" else "user"
+
+
+def _plot_job_claim_sort_key(payload: dict) -> tuple[int, datetime]:
+    queue = str(payload.get("queue") or "user").lower()
+    priority = str(payload.get("priority") or "user").lower()
+    origin = normalize_origin(payload.get("origin"))
+    is_filler = queue == "filler" or priority == "filler" or origin == "filler_macbook"
+    return (1 if is_filler else 0, recorded_datetime(payload.get("createdAt")))
+
+
 def summarize_plot_job_counts(
     payloads: list[dict],
     *,
@@ -400,6 +434,8 @@ def summarize_plot_job_counts(
         "limitedTo": limited_to or 0,
         "pending": 0,
         "pendingAfterBaseline": 0,
+        "pendingUserAfterBaseline": 0,
+        "pendingFillerAfterBaseline": 0,
         "pendingBeforeBaseline": 0,
         "leased": 0,
         "plotting": 0,
@@ -425,6 +461,10 @@ def summarize_plot_job_counts(
                 counts["pendingBeforeBaseline"] = int(counts["pendingBeforeBaseline"]) + 1
             elif visible:
                 counts["pendingAfterBaseline"] = int(counts["pendingAfterBaseline"]) + 1
+                if _plot_job_claim_sort_key(payload)[0] == 1:
+                    counts["pendingFillerAfterBaseline"] = int(counts["pendingFillerAfterBaseline"]) + 1
+                else:
+                    counts["pendingUserAfterBaseline"] = int(counts["pendingUserAfterBaseline"]) + 1
     return counts
 
 

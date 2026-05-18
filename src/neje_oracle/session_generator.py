@@ -237,6 +237,8 @@ def generate_filler_session_packages(
     global_scale: float = 1.0,
     include_rings: bool = False,
     start_index: int = 0,
+    symbol_name: str | None = None,
+    upload_to_firebase: bool = False,
 ) -> list[GeneratedSession]:
     ensure_dir(output_root)
     symbols = _load_source_symbols(source_root)
@@ -245,7 +247,7 @@ def generate_filler_session_packages(
     generated: list[GeneratedSession] = []
     for index in range(count):
         symbol_index = start_index + index
-        base_symbol = symbols[symbol_index % len(symbols)]
+        base_symbol = _select_symbol(symbols, symbol_name, symbol_index)
         now = datetime.now(tz=UTC)
         session_id = _unique_session_id(output_root, now, index, prefix="filler")
         session_dir = output_root / session_id
@@ -282,7 +284,9 @@ def generate_filler_session_packages(
                     "symbolScale": scale,
                     "kind": "filler",
                     "visibleInLibrary": False,
-                    "uploadToFirebase": False,
+                    "uploadToFirebase": upload_to_firebase,
+                    "queue": "filler" if upload_to_firebase else "local",
+                    "priority": "filler" if upload_to_firebase else "local",
                 },
                 indent=2,
             ),

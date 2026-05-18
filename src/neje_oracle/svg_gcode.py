@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from svgpathtools import svg2paths2
@@ -184,11 +186,13 @@ def _svg_to_polylines(
                 path_points.append(
                     (
                         placement.center_x_mm + ((point.real - mid_x) * scale),
-                        placement.center_y_mm - ((point.imag - mid_y) * scale),
+                        placement.center_y_mm + ((point.imag - mid_y) * scale),
                     )
                 )
         if len(path_points) >= 2:
             polylines.append(_dedupe_points(path_points))
+    if _single_stroke_requested(svg_path):
+        return _join_polylines_single_stroke(polylines)
     return polylines
 
 
@@ -198,3 +202,52 @@ def _dedupe_points(points: list[tuple[float, float]]) -> list[tuple[float, float
         if point != deduped[-1]:
             deduped.append(point)
     return deduped
+
+
+def _single_stroke_requested(svg_path: Path) -> bool:
+    try:
+        root = ET.parse(svg_path).getroot()
+    except ET.ParseError:
+        return False
+    truthy = {"1", "true", "yes", "on", "single-stroke"}
+    for element in root.iter():
+        if str(element.get("data-neje-single-stroke", "")).strip().lower() in truthy:
+            return True
+        if str(element.get("data-neje-pen-mode", "")).strip().lower() == "single-stroke":
+            return True
+    return False
+
+
+def _join_polylines_single_stroke(polylines: list[list[tuple[float, float]]]) -> list[list[tuple[float, float]]]:
+    if not polylines:
+        return []
+    joined = list(polylines[0])
+    remaining = [list(polyline) for polyline in polylines[1:] if len(polyline) >= 2]
+    while remaining:
+        current = joined[-1]
+        best_index = 0
+        best_reverse = False
+        best_distance = math.inf
+        for index, polyline in enumerate(remaining):
+            start_distance = _distance(current, polyline[0])
+            end_distance = _distance(current, polyline[-1])
+            if start_distance < best_distance:
+                best_index = index
+                best_reverse = False
+                best_distance = start_distance
+            if end_distance < best_distance:
+                best_index = index
+                best_reverse = True
+                best_distance = end_distance
+        next_polyline = remaining.pop(best_index)
+        if best_reverse:
+            next_polyline.reverse()
+        if joined[-1] == next_polyline[0]:
+            joined.extend(next_polyline[1:])
+        else:
+            joined.extend(next_polyline)
+    return [_dedupe_points(joined)]
+
+
+def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return math.hypot(a[0] - b[0], a[1] - b[1])

@@ -22,8 +22,10 @@ When the Mac mini user double-clicks the file, it:
 2. Creates `macmini_uploader.env`.
 3. Creates `.macmini_uploader_runtime/`.
 4. Starts the standalone uploader agent on port `8790`.
-5. Watches the same folder where the command file is located.
-6. Uploads new TouchDesigner session folders to Firebase.
+5. Creates a launch baseline immediately.
+6. Watches the same folder where the command file is located.
+7. Uploads new TouchDesigner session folders to Firebase.
+8. Downloads the uploaded Firebase QR image back into the session folder.
 
 The user does not need the project source folder.
 
@@ -37,7 +39,10 @@ TouchDesignerOutput/
   20260518_143000/
     20260518_143000_plotter.svg
     20260518_143000_receipt.txt
-    READY
+    20260518_143000_receipt.csv
+    20260518_143000_tarot.jpg
+    20260518_143000_tarot_ready.txt
+    20260518_143000_qr.png          <- created by uploader after Firebase upload
 ```
 
 TouchDesigner must create one folder per session.
@@ -47,7 +52,9 @@ Each session folder must contain:
 ```text
 <session_id>_plotter.svg
 <session_id>_receipt.txt
-READY
+<session_id>_receipt.csv
+<session_id>_tarot.jpg
+<session_id>_tarot_ready.txt
 ```
 
 ## Mac Mini User Steps
@@ -80,10 +87,13 @@ NEJE_MACMINI_AGENT_URL=http://<mac-mini-ip>:8790
 Then in `neje-gui`:
 
 1. Press `NEW RUN`.
-2. Press `Start` in the Mac mini uploader panel.
-3. Create a new TouchDesigner session after pressing `Start`.
+2. Press `Find/Scan` in the Mac mini uploader panel.
+3. Confirm the Mac mini uploader becomes reachable.
+4. Press `Start` in the Mac mini uploader panel.
+5. Create a new TouchDesigner session after pressing `Start`.
 
 Important: only sessions created after `Start` are uploaded. Old folders already in the output folder are skipped.
+If the uploader is already running, pressing `Start` again does not reset the baseline.
 
 ## Upload Result
 
@@ -94,8 +104,17 @@ sessions/<session_id>/artwork.svg
 sessions/<session_id>/artwork_raw.svg
 sessions/<session_id>/receipt.txt
 sessions/<session_id>/qr.png
+sessions/<session_id>/tarot.jpg
 sessions/<session_id>/manifest.json
 ```
+
+The original TouchDesigner session folder gets:
+
+```text
+<session_id>_qr.png
+```
+
+This QR PNG is downloaded back from Firebase Storage. TouchDesigner can watch for this file and show it on the monitor at the end of the user experience.
 
 Firestore gets:
 
@@ -133,8 +152,8 @@ Uploader Terminal is open and shows Agent: http://0.0.0.0:8790/
 ### 2. Connect NEJE GUI
 
 1. Start `neje-gui` on the MacBook.
-2. Confirm `NEJE_MACMINI_AGENT_URL` points to the Mac mini IP.
-3. Press `NEW RUN`.
+2. Press `NEW RUN`.
+3. Press `Find/Scan` in the Mac mini uploader panel.
 4. Press `Start` in the Mac mini uploader panel.
 
 Pass:
@@ -152,13 +171,16 @@ The new folder must contain:
 ```text
 <session_id>_plotter.svg
 <session_id>_receipt.txt
-READY
+<session_id>_receipt.csv
+<session_id>_tarot.jpg
+<session_id>_tarot_ready.txt
 ```
 
 Pass:
 
 ```text
 The uploader imports the new session within 5-15 seconds.
+The session folder receives <session_id>_qr.png.
 ```
 
 ### 4. Check Firebase
@@ -169,6 +191,7 @@ Check Firebase Storage:
 sessions/<session_id>/artwork.svg
 sessions/<session_id>/receipt.txt
 sessions/<session_id>/qr.png
+sessions/<session_id>/tarot.jpg
 ```
 
 Check Firestore:
@@ -182,6 +205,7 @@ Pass:
 
 ```text
 Session exists in Firebase Storage and Firestore.
+The local <session_id>_qr.png matches the uploaded Firebase QR asset.
 ```
 
 ### 5. Check Print Queue
@@ -240,7 +264,9 @@ NEJE GUI pressed Start after NEW RUN.
 Session folder was created after Start.
 Session folder has <session_id>_plotter.svg.
 Session folder has <session_id>_receipt.txt.
-Session folder has READY.
+Session folder has <session_id>_receipt.csv.
+Session folder has <session_id>_tarot.jpg.
+Session folder has <session_id>_tarot_ready.txt.
 Mac mini has internet.
 ```
 
@@ -248,7 +274,7 @@ If NEJE GUI cannot connect:
 
 ```text
 MacBook and Mac mini are on the same Wi-Fi/LAN.
-NEJE_MACMINI_AGENT_URL uses the Mac mini IP.
+Press Find/Scan in the Mac mini uploader panel.
 Port 8790 is not blocked.
 ```
 

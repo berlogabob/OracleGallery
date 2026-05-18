@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import ipaddress
+import re
+import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 import httpx
 
@@ -452,12 +457,14 @@ class SupervisorService:
         return self._record_fluidnc_command(result, "Soft reset/abort")
 
     def check_macmini_agent(self) -> ComponentState:
-        if not self.settings.macmini_agent_url:
+        agent_url = self._macmini_agent_url()
+        if not agent_url:
             return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set")
         try:
             payload = httpx.get(
-                f"{self.settings.macmini_agent_url.rstrip('/')}/status",
+                f"{agent_url.rstrip('/')}/status",
                 timeout=self.settings.macmini_agent_timeout_seconds,
+                trust_env=False,
             ).json()
         except Exception as exc:  # noqa: BLE001
             append_log("uploader", f"Mac mini uploader offline: {exc}", level="warning", settings=self.settings)
@@ -477,21 +484,66 @@ class SupervisorService:
         return self._post_macmini_control("restart")
 
     def scan_macmini_once(self) -> ComponentState:
-        if not self.settings.macmini_agent_url:
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set")
+        agent_url = self._macmini_agent_url()
+        if not agent_url:
+            discovered = self.discover_macmini_uploader()
+            if discovered.status == ComponentStatus.OFFLINE:
+                return discovered
+            agent_url = self._macmini_agent_url()
+        if not agent_url:
+            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini uploader was not found")
         try:
             payload = httpx.post(
-                f"{self.settings.macmini_agent_url.rstrip('/')}/scan-once",
+                f"{agent_url.rstrip('/')}/scan-once",
                 timeout=self.settings.macmini_agent_timeout_seconds,
+                trust_env=False,
             ).json()
         except Exception as exc:  # noqa: BLE001
-            append_log("uploader", f"Mac mini scan failed: {exc}", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini scan failed", last_error=str(exc))
+            append_log("uploader", f"Mac mini scan failed: {exc}; trying LAN discovery", level="warning", settings=self.settings)
+            discovered = self.discover_macmini_uploader()
+            agent_url = self._macmini_agent_url()
+            if discovered.status == ComponentStatus.OFFLINE or not agent_url:
+                return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini scan failed and discovery found no uploader", last_error=str(exc))
+            try:
+                payload = httpx.post(
+                    f"{agent_url.rstrip('/')}/scan-once",
+                    timeout=self.settings.macmini_agent_timeout_seconds,
+                    trust_env=False,
+                ).json()
+            except Exception as retry_exc:  # noqa: BLE001
+                append_log("uploader", f"Mac mini scan retry failed: {retry_exc}", level="warning", settings=self.settings)
+                return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini scan failed", last_error=str(retry_exc))
         append_log("uploader", f"Mac mini scan imported {len(payload.get('imported', []))} session(s)", settings=self.settings)
         return self.runtime_store.set_component(
             "macmini_uploader",
             ComponentStatus.RUNNING,
             message=f"Scan imported {len(payload.get('imported', []))} session(s)",
+            heartbeat=True,
+        )
+
+    def discover_macmini_uploader(self) -> ComponentState:
+        candidates = _candidate_macmini_agent_urls(self._macmini_agent_url())
+        append_log("uploader", f"Scanning LAN for Mac mini uploader across {len(candidates)} candidate host(s)", settings=self.settings)
+        discovered_url = _discover_uploader_url(candidates, timeout_seconds=0.25)
+        if not discovered_url:
+            return self.runtime_store.set_component(
+                "macmini_uploader",
+                ComponentStatus.OFFLINE,
+                message="No Mac mini uploader found on this LAN",
+                last_error="No /health response on port 8790",
+            )
+        self.runtime_store.save_json(
+            "macmini_agent",
+            {
+                "url": discovered_url,
+                "updated_at": datetime.now(tz=UTC).isoformat(),
+            },
+        )
+        append_log("uploader", f"Discovered Mac mini uploader: {discovered_url}", settings=self.settings)
+        return self.runtime_store.set_component(
+            "macmini_uploader",
+            ComponentStatus.STOPPED,
+            message=f"Discovered uploader at {discovered_url}",
             heartbeat=True,
         )
 
@@ -571,12 +623,19 @@ class SupervisorService:
         return {name: state.to_dict() for name, state in self.refresh_all_status().items()}
 
     def _post_macmini_control(self, action: str) -> ComponentState:
-        if not self.settings.macmini_agent_url:
+        agent_url = self._macmini_agent_url()
+        if not agent_url:
+            if action in {"start", "restart"}:
+                discovered = self.discover_macmini_uploader()
+                agent_url = self._macmini_agent_url()
+                if discovered.status != ComponentStatus.OFFLINE and agent_url:
+                    return self._post_macmini_control(action)
             return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set")
         try:
             payload = httpx.post(
-                f"{self.settings.macmini_agent_url.rstrip('/')}/control/{action}",
+                f"{agent_url.rstrip('/')}/control/{action}",
                 timeout=self.settings.macmini_agent_timeout_seconds,
+                trust_env=False,
             ).json()
         except Exception as exc:  # noqa: BLE001
             append_log("uploader", f"Mac mini uploader {action} failed: {exc}", level="warning", settings=self.settings)
@@ -589,6 +648,10 @@ class SupervisorService:
             message=str(payload.get("message") or f"Mac mini uploader {action}"),
             heartbeat=True,
         )
+
+    def _macmini_agent_url(self) -> str:
+        saved = str(self.runtime_store.load_json("macmini_agent", {}).get("url") or "").strip()
+        return saved or self.settings.macmini_agent_url
 
 
 def plotter_config_from_values(
@@ -613,3 +676,67 @@ def plotter_config_from_values(
         dry_run=dry_run,
         updated_at=datetime.now(tz=UTC),
     )
+
+
+def _candidate_macmini_agent_urls(configured_url: str = "") -> list[str]:
+    urls: list[str] = []
+    if configured_url:
+        urls.append(configured_url.rstrip("/"))
+    for host in _candidate_lan_hosts():
+        urls.append(f"http://{host}:8790")
+    seen: set[str] = set()
+    unique: list[str] = []
+    for url in urls:
+        if url not in seen:
+            unique.append(url)
+            seen.add(url)
+    return unique
+
+
+def _candidate_lan_hosts() -> list[str]:
+    hosts: set[str] = set()
+    for address in _local_ipv4_addresses():
+        network = ipaddress.ip_network(f"{address}/24", strict=False)
+        hosts.update(str(host) for host in network.hosts())
+    hosts.discard("127.0.0.1")
+    return sorted(hosts, key=lambda value: tuple(int(part) for part in value.split(".")))
+
+
+def _local_ipv4_addresses() -> list[str]:
+    try:
+        output = subprocess.run(["ifconfig"], capture_output=True, text=True, check=False).stdout
+    except OSError:
+        output = ""
+    addresses: list[str] = []
+    for match in re.finditer(r"\binet\s+(\d+\.\d+\.\d+\.\d+)\b", output):
+        address = match.group(1)
+        if address.startswith(("127.", "169.254.")):
+            continue
+        addresses.append(address)
+    return sorted(set(addresses), key=lambda value: tuple(int(part) for part in value.split(".")))
+
+
+def _discover_uploader_url(candidate_urls: list[str], *, timeout_seconds: float) -> str:
+    if not candidate_urls:
+        return ""
+    with ThreadPoolExecutor(max_workers=min(64, len(candidate_urls))) as executor:
+        futures = {
+            executor.submit(_probe_uploader_url, url, timeout_seconds=timeout_seconds): url
+            for url in candidate_urls
+        }
+        for future in as_completed(futures):
+            if future.result():
+                return futures[future]
+    return ""
+
+
+def _probe_uploader_url(url: str, *, timeout_seconds: float) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return False
+    try:
+        payload = httpx.get(f"{url.rstrip('/')}/health", timeout=timeout_seconds, trust_env=False).json()
+    except Exception:  # noqa: BLE001
+        return False
+    service = str(payload.get("service", ""))
+    return service in {"standalone-macmini-uploader", "neje-uploader-agent"}

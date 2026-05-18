@@ -62,6 +62,7 @@ class SessionUploader:
             staged_record.public_svg_url = publication.public_svg_url
             staged_record.public_receipt_url = publication.public_receipt_url
             staged_record.public_qr_url = publication.public_qr_url
+            self._download_published_qr(publication, session_dir)
             staged_record.plot_status = PlotStatus.PENDING
             staged_record.last_error = ""
         except Exception as exc:  # noqa: BLE001
@@ -71,9 +72,21 @@ class SessionUploader:
         self.store.upsert_session(staged_record)
         return session_id
 
+    def _download_published_qr(self, publication: Any, session_dir: Path) -> Path:
+        storage_path = str(publication.public_qr_path or "")
+        if not storage_path:
+            raise RuntimeError("Published QR storage path is empty; cannot download monitor QR")
+        destination = session_dir / f"{session_dir.name}_qr.png"
+        temporary = destination.with_name(f".{destination.name}.tmp")
+        try:
+            self.remote.download_asset(storage_path, temporary)
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return destination
+
     def _is_ready(self, session_dir: Path) -> bool:
-        ready_marker = session_dir / self.settings.ready_marker_name
-        if ready_marker.exists():
+        if self._has_ready_marker(session_dir):
             return self._has_required_assets(session_dir)
         if self.settings.require_ready_marker:
             return False
@@ -84,6 +97,14 @@ class SessionUploader:
 
     def _has_required_assets(self, session_dir: Path) -> bool:
         return self._resolve_svg_source(session_dir) is not None and self._resolve_receipt_source(session_dir) is not None
+
+    def _has_ready_marker(self, session_dir: Path) -> bool:
+        candidates = [
+            session_dir / self.settings.ready_marker_name,
+            session_dir / f"{session_dir.name}_tarot_ready.txt",
+        ]
+        candidates.extend(sorted(session_dir.glob("*_ready.txt")))
+        return any(path.exists() for path in candidates)
 
     def _session_folder_timestamp(self, session_dir: Path) -> datetime:
         mtimes = [session_dir.stat().st_mtime]
@@ -104,6 +125,7 @@ class SessionUploader:
 
         svg_source = self._resolve_svg_source(session_dir)
         receipt_source = self._resolve_receipt_source(session_dir)
+        tarot_source = self._resolve_tarot_source(session_dir)
         if svg_source is None or receipt_source is None:
             raise FileNotFoundError(f"Missing SVG or receipt TXT asset in {session_dir}")
 
@@ -119,6 +141,7 @@ class SessionUploader:
         raw_svg_target = public_dir / "artwork_raw.svg"
         svg_target = public_dir / "artwork.svg"
         receipt_target = public_dir / "receipt.txt"
+        tarot_target = public_dir / "tarot.jpg"
         shutil.copy2(svg_source, raw_svg_target)
         svg_scale = scale_for_mark_name(
             mark_name,
@@ -130,11 +153,14 @@ class SessionUploader:
             encoding="utf-8",
         )
         shutil.copy2(receipt_source, receipt_target)
+        if tarot_source is not None:
+            shutil.copy2(tarot_source, tarot_target)
         safe_metadata.update(
             {
                 "svgNormalized": True,
                 "svgScale": svg_scale,
                 "rawSvgFile": raw_svg_target.name,
+                "tarotImageFile": tarot_target.name if tarot_source is not None else "",
             }
         )
 
@@ -157,6 +183,7 @@ class SessionUploader:
             oracle_text=oracle_text,
             themes=themes,
             measures=measures,
+            priority=str(safe_metadata.get("priority") or "user"),
             extra_metadata=safe_metadata,
         )
         self._write_manifest(record)
@@ -174,6 +201,13 @@ class SessionUploader:
             session_dir / f"{session_dir.name}_receipt.txt",
         ]
         candidates.extend(sorted(session_dir.glob("*_receipt.txt")))
+        return next((path for path in candidates if path.exists()), None)
+
+    def _resolve_tarot_source(self, session_dir: Path) -> Path | None:
+        candidates = [
+            session_dir / f"{session_dir.name}_tarot.jpg",
+        ]
+        candidates.extend(sorted(session_dir.glob("*_tarot.jpg")))
         return next((path for path in candidates if path.exists()), None)
 
     def _resolve_created_at(self, session_dir: Path, metadata: dict[str, Any]) -> datetime:
@@ -208,22 +242,33 @@ class SessionUploader:
         return data
 
     def _load_csv_metadata(self, session_id: str) -> dict[str, Any]:
+        session_dir = self.settings.session_root / session_id
+        session_csv_path = session_dir / f"{session_id}_receipt.csv"
+        if session_csv_path.exists():
+            with session_csv_path.open(newline="", encoding="utf-8") as handle:
+                row = next(csv.DictReader(handle), None)
+                if row:
+                    return self._csv_row_metadata(row, timestamp_key="date")
         csv_path = self.settings.session_root / "session_log.csv"
         if not csv_path.exists():
             return {}
         with csv_path.open(newline="", encoding="utf-8") as handle:
             for row in csv.DictReader(handle):
                 if row.get("session_id") == session_id:
-                    return {
-                        "timestamp": row.get("timestamp", ""),
-                        "mark_name": (row.get("symbol") or "").strip().upper(),
-                        "oracle_text": (row.get("reply_text") or "").strip(),
-                        "themes": self._parse_themes(row.get("keywords", "")),
-                        "intensity": row.get("intensity", ""),
-                        "instability": row.get("instability", ""),
-                        "confidence": row.get("confidence", ""),
-                    }
+                    return self._csv_row_metadata(row, timestamp_key="timestamp")
         return {}
+
+    def _csv_row_metadata(self, row: dict[str, str | None], *, timestamp_key: str) -> dict[str, Any]:
+        return {
+            "timestamp": row.get(timestamp_key, ""),
+            "mark_name": (row.get("symbol") or "").strip().upper(),
+            "oracle_text": (row.get("reply_text") or "").strip(),
+            "themes": self._parse_themes(row.get("keywords", "")),
+            "intensity": row.get("intensity") or row.get("voice_intensity") or "",
+            "instability": row.get("instability", ""),
+            "confidence": row.get("confidence", ""),
+            "mark_type": row.get("mark_type", ""),
+        }
 
     def _safe_metadata(
         self,

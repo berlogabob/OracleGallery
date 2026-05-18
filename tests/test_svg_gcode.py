@@ -98,6 +98,61 @@ def test_z_servo_gcode_uses_z_commands_instead_of_spindle(tmp_path: Path) -> Non
     assert "G0 Z-25.000" in gcode
 
 
+def test_svg_y_axis_is_not_mirrored_for_upper_left_work_zero(tmp_path: Path) -> None:
+    svg_path = tmp_path / "mark.svg"
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<path d='M50,10 L50,90' stroke='black' fill='none'/>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    gcode = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="a", title="A", svg_path=svg_path)],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)],
+        sample_step_mm=100,
+        cell_diameter_mm=40,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+    )
+
+    move_lines = [line for line in gcode.splitlines() if line.startswith(("G0 X", "G1 X"))]
+    start_y = float(move_lines[0].split("Y", 1)[1])
+    end_y = float(move_lines[1].split("Y", 1)[1])
+
+    assert start_y < end_y
+
+
+def test_single_stroke_symbol_metadata_keeps_pen_down_across_paths(tmp_path: Path) -> None:
+    svg_path = tmp_path / "spiral.svg"
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<g data-neje-single-stroke='true'>"
+        "<path d='M10,50 L50,50' stroke='black' fill='none'/>"
+        "<path d='M50,50 L90,50' stroke='black' fill='none'/>"
+        "</g>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    gcode = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="a", title="A", svg_path=svg_path)],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)],
+        sample_step_mm=100,
+        cell_diameter_mm=40,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+    )
+
+    assert gcode.count("M3 S15") == 1
+
+
 def test_rings_are_generated_at_print_time(tmp_path: Path) -> None:
     svg_path = tmp_path / "mark.svg"
     svg_path.write_text(

@@ -112,6 +112,10 @@ class _Receipt extends StatelessWidget {
               const SizedBox(height: 34),
               _Rule(label: 'THE MARK'),
               const SizedBox(height: 18),
+              if (session.tarotUrl.isNotEmpty) ...[
+                _TarotImage(tarotUrl: session.tarotUrl),
+                const SizedBox(height: 22),
+              ],
               Center(child: SymbolNetworkView(svgUrl: session.svgUrl, size: 160)),
               const SizedBox(height: 26),
               Text(
@@ -244,6 +248,27 @@ class _QrImage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TarotImage extends StatelessWidget {
+  const _TarotImage({required this.tarotUrl});
+
+  final String tarotUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: Image.network(
+          tarotUrl,
+          width: 220,
+          fit: BoxFit.contain,
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+        ),
       ),
     );
   }

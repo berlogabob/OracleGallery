@@ -8,9 +8,11 @@ from neje_oracle.gui_support import (
     GUI_DEFAULTS,
     GuiSettings,
     build_preview_svg,
+    build_realtime_preview_svg,
     confirm_plotter_reload,
     create_idle_bank_from_gui,
     create_filler_packages_from_gui,
+    create_next_filler_upload_from_gui,
     create_user_sessions_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
@@ -142,6 +144,98 @@ def test_preview_origin_markers_toggle_and_filter() -> None:
     assert 'data-origin-marker="filler_macbook"' not in user_only
 
 
+def test_realtime_preview_shows_drawn_current_and_next_from_manifest(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    manifest = tmp_path / "spool" / "sheet.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "session_id": "done",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_0.svg"),
+                        "sheet_index": 0,
+                    },
+                    {
+                        "session_id": "drawing",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_1.svg"),
+                        "sheet_index": 1,
+                    },
+                    {
+                        "session_id": "next",
+                        "source_kind": "placeholder",
+                        "origin": "filler_macbook",
+                        "svg_path": str(root / "symbol_0.svg"),
+                        "sheet_index": 2,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80)
+    status = {
+        "latest_manifest": str(manifest),
+        "status": RuntimeStatus.PRINTING.value,
+        "cells_completed": 1,
+        "current_cell_in_row": 2,
+    }
+
+    preview = build_realtime_preview_svg(settings, status, {"pendingAfterBaseline": 0})
+
+    assert 'data-preview-state="drawn"' in preview
+    assert 'data-preview-state="drawing"' in preview
+    assert 'data-preview-state="next"' in preview
+    assert preview.count("data:image/svg+xml;base64") == 3
+
+
+def test_realtime_preview_uses_queue_before_filler_for_unmaterialized_next(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    manifest = tmp_path / "spool" / "sheet.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "session_id": "drawing",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_0.svg"),
+                        "sheet_index": 0,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80)
+    status = {
+        "latest_manifest": str(manifest),
+        "status": RuntimeStatus.PRINTING.value,
+        "cells_completed": 0,
+        "current_cell_in_row": 1,
+    }
+
+    queued_preview = build_realtime_preview_svg(settings, status, {"pendingAfterBaseline": 1})
+    filler_queue_preview = build_realtime_preview_svg(
+        settings,
+        status,
+        {"pendingAfterBaseline": 1, "pendingUserAfterBaseline": 0, "pendingFillerAfterBaseline": 1},
+    )
+    filler_preview = build_realtime_preview_svg(settings, status, {"pendingAfterBaseline": 0})
+
+    assert 'data-preview-state="next"' in queued_preview
+    assert 'data-origin-marker="real_macmini"' in queued_preview
+    assert 'data-origin-marker="filler_macbook"' in filler_queue_preview
+    assert 'data-origin-marker="filler_macbook"' in filler_preview
+
+
 def test_symbol_preview_randomness_visibly_changes_svg(tmp_path: Path) -> None:
     from neje_oracle.gui_support import build_symbol_preview_svg
 
@@ -264,6 +358,29 @@ def test_filler_package_generation_uses_session_folder_shape(tmp_path: Path) -> 
     assert (first / f"{first.name}_receipt.txt").exists()
     assert (first / "metadata.json").exists()
     assert (first / "READY").exists()
+
+
+def test_next_filler_upload_uses_uploader_session_shape_and_tags(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    output_root = tmp_path / "sessions"
+    settings = GuiSettings(idle_count=1, idle_variations_per_symbol=1, randomness=0)
+
+    filler_dirs = create_next_filler_upload_from_gui(settings, output_root=output_root, symbol_root=root)
+
+    assert len(filler_dirs) == 1
+    first = filler_dirs[0]
+    metadata = json.loads((first / "metadata.json").read_text(encoding="utf-8"))
+    assert first.parent == output_root
+    assert first.name.startswith("filler_")
+    assert (first / f"{first.name}_plotter.svg").exists()
+    assert (first / f"{first.name}_receipt.txt").exists()
+    assert (first / "READY").exists()
+    assert metadata["origin"] == "filler_macbook"
+    assert metadata["tags"] == ["filler", "local", "macbook"]
+    assert metadata["visibleInLibrary"] is False
+    assert metadata["uploadToFirebase"] is True
+    assert metadata["queue"] == "filler"
+    assert metadata["priority"] == "filler"
 
 
 def test_dry_run_sheet_and_status_helpers(tmp_path: Path) -> None:

@@ -21,7 +21,9 @@ from .models import ComponentStatus, PreflightLevel, SystemMode
 from .gui_support import (
     GUI_DEFAULTS,
     build_preview_svg,
+    build_realtime_preview_svg,
     confirm_plotter_reload,
+    create_next_filler_upload_from_gui,
     create_user_sessions_from_gui,
     effective_randomness,
     generate_dry_run_sheet,
@@ -37,7 +39,7 @@ from .gui_support import (
     save_symbol_scales,
 )
 from .oracle_logging import read_logs
-from .origin_markers import ALL_ORIGINS, ORIGIN_LABELS
+from .origin_markers import ALL_ORIGINS, ORIGIN_LABELS, ORIGIN_MARKER_POSITIONS, ORIGIN_PREVIEW_COLORS
 from .supervisor import SupervisorService
 
 
@@ -111,6 +113,11 @@ def build_page() -> None:
           .mini-metric .label { font-size: 9px; letter-spacing: 0.16em; color: #8f4f2b; text-transform: uppercase; }
           .mini-metric .value { font-size: 12px; font-weight: 700; color: #1f1a17; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .jog-pad .q-btn { width: 54px; }
+          .preview-legend { border-top: 1px solid #e1d3ba; padding-top: 6px; }
+          .legend-chip { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #1f1a17; white-space: nowrap; }
+          .legend-dot { width: 9px; height: 9px; border-radius: 999px; border: 1px solid #1f1a17; display: inline-block; flex: 0 0 auto; }
+          .legend-ring { width: 15px; height: 15px; border-radius: 999px; border: 1.5px solid #1f1a17; display: inline-block; flex: 0 0 auto; }
+          .legend-double-ring { box-shadow: inset 0 0 0 3px #fbf7ef, inset 0 0 0 4.4px #1f1a17; }
         </style>
         """
     )
@@ -193,6 +200,13 @@ def build_page() -> None:
         ui.notify("Generated 1 test session", color="positive")
         last_user_output.set_text(str(paths[-1]) if paths else "-")
 
+    def generate_next_filler_upload() -> None:
+        pull_settings_from_fields()
+        paths = create_next_filler_upload_from_gui(settings, start_index=cycle_state["index"])
+        cycle_state["index"] += len(paths)
+        ui.notify("Generated 1 filler upload session", color="positive")
+        last_user_output.set_text(str(paths[-1]) if paths else "-")
+
     def generate_dry_run() -> None:
         pull_settings_from_fields()
         try:
@@ -205,18 +219,14 @@ def build_page() -> None:
 
     def refresh_status() -> None:
         status = read_plotter_status()
-        queue = read_queue_status()
+        queue = read_queue_status(ttl_seconds=2.0)
         total = int(status.get("processed_symbols", 0) or 0)
+        pending_users = int(queue.get("pendingUserAfterBaseline", queue.get("pendingAfterBaseline", 0)) or 0)
         progress_percent = float(status.get("sheet_progress_percent", status.get("gcode_progress_percent", 0.0)) or 0.0)
         current_row = int(status.get("current_row_index", 0) or 0)
-        current_cell = int(status.get("current_cell_index", 0) or 0)
         current_cell_in_row = int(status.get("current_cell_in_row", 0) or 0)
         row_cell_count = int(status.get("row_cell_count", 0) or 0)
-        preview.content = build_preview_svg(
-            settings,
-            highlighted_row_index=current_row if current_row > 0 else None,
-            highlighted_cell_index=current_cell if current_cell > 0 else None,
-        )
+        preview.content = build_realtime_preview_svg(settings, status, queue)
         preview.update()
         progress.value = min(max(progress_percent / 100.0, 0.0), 1.0)
         print_enabled = bool(status.get("print_enabled"))
@@ -244,7 +254,7 @@ def build_page() -> None:
         if queue_labels:
             active = int(queue.get("leased", 0) or 0) + int(queue.get("plotting", 0) or 0)
             queue_labels["state"].set_text("ONLINE" if queue.get("online") else "OFFLINE")
-            queue_labels["pending"].set_text(str(queue.get("pendingAfterBaseline", 0)))
+            queue_labels["pending"].set_text(str(pending_users))
             queue_labels["active"].set_text(str(active))
             queue_labels["failed"].set_text(f"{queue.get('failed', 0)} / {queue.get('skipped', 0)}")
             queue_labels["message"].set_text(str(queue.get("message", "-") or "-"))
@@ -255,6 +265,7 @@ def build_page() -> None:
             ready_labels["message"].set_text(readiness.message)
         preview_progress_label.set_text(
             f"{status.get('status', '-')} | {progress_percent:.1f}% | "
+            f"pending real {pending_users} | "
             f"row {current_row}/{status.get('row_count', 0)} | cell {current_cell_in_row}/{row_cell_count} | "
             f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
             f"{total}/{layout_capacity(settings)} cells in last sheet"
@@ -531,6 +542,26 @@ def build_page() -> None:
         logs_view.value = "\n".join(log_lines)
         logs_view.update()
 
+    def preview_legend() -> None:
+        with ui.column().classes("preview-legend w-full gap-1"):
+            with ui.row().classes("items-center gap-3 flex-wrap"):
+                with ui.element("div").classes("legend-chip"):
+                    ui.element("span").classes("legend-ring")
+                    ui.label("outer ring: real/user cell").classes("text-[10px]")
+                with ui.element("div").classes("legend-chip"):
+                    ui.element("span").classes("legend-ring legend-double-ring")
+                    ui.label("double ring: filler/local cell").classes("text-[10px]")
+                with ui.element("div").classes("legend-chip"):
+                    ui.element("span").classes("legend-dot").style("background:#8f8980; border-color:#8f8980; opacity:0.45;")
+                    ui.label("gray: next in line").classes("text-[10px]")
+            with ui.row().classes("items-center gap-3 flex-wrap"):
+                for origin in ALL_ORIGINS:
+                    position = ORIGIN_MARKER_POSITIONS.get(origin, "right").replace("-", " ")
+                    color = ORIGIN_PREVIEW_COLORS.get(origin, "#77706a")
+                    with ui.element("div").classes("legend-chip"):
+                        ui.element("span").classes("legend-dot").style(f"background:{color}; border-color:{color};")
+                        ui.label(f"{ORIGIN_LABELS[origin]} dot: {position}").classes("text-[10px]")
+
     def open_logs() -> None:
         subprocess.run(["open", str(supervisor.settings.logs_root)], check=False)
 
@@ -703,6 +734,7 @@ def build_page() -> None:
                                 ).props("dense outlined").classes("w-32").on_value_change(live_interval_changed)
                             with ui.row().classes("items-center gap-2"):
                                 live_toggle = ui.switch("START GENERATOR", value=False, on_change=toggle_live)
+                                ui.button("Generate next filler", on_click=generate_next_filler_upload).props("dense")
                                 ui.button("Generate G-code only", on_click=generate_dry_run).props("dense")
                                 ui.button("START TEST PRINT", on_click=start_test_print).props("dense color=positive")
                             last_user_output = ui.label("-").classes("path-label text-xs")
@@ -721,7 +753,7 @@ def build_page() -> None:
                             with ui.row().classes("gap-2"):
                                 ui.button("Start", on_click=start_macmini).props("dense")
                                 ui.button("Stop", on_click=stop_macmini).props("dense")
-                                ui.button("Scan", on_click=scan_macmini).props("dense")
+                                ui.button("Find/Scan", on_click=scan_macmini).props("dense")
                                 ui.button("Restart", on_click=restart_macmini).props("dense")
                             ui.label("Controlled through NEJE_MACMINI_AGENT_URL").classes("text-xs text-[#8f4f2b]")
                         with ui.card().classes("oracle-card compact-card w-full"):
@@ -761,6 +793,7 @@ def build_page() -> None:
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label("Sheet Preview").classes("text-sm font-bold")
                 preview_progress_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                preview_legend()
                 preview = ui.html().classes("preview-frame w-full")
 
             with ui.tab_panels(workspace_tabs, value=active_workspace["value"]).classes("w-full h-full"):

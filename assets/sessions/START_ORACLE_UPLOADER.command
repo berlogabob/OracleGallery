@@ -117,9 +117,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import csv
 import hashlib
 import json
-import mimetypes
 import os
 import shutil
 import threading
@@ -176,6 +176,7 @@ class Publication:
     svg_url: str = ""
     receipt_url: str = ""
     qr_image_url: str = ""
+    tarot_url: str = ""
     public_dir: Path | None = None
 
 
@@ -250,18 +251,22 @@ class FirebasePublisher:
         raw_svg_path = f"{remote_root}/artwork_raw.svg"
         receipt_path = f"{remote_root}/receipt.txt"
         qr_path = f"{remote_root}/qr.png"
+        tarot_path = f"{remote_root}/tarot.jpg"
         manifest_path = f"{remote_root}/manifest.json"
 
         self._upload(publication.public_dir / "artwork.svg", svg_path, "image/svg+xml")
         self._upload(publication.public_dir / "artwork_raw.svg", raw_svg_path, "image/svg+xml")
         self._upload(publication.public_dir / "receipt.txt", receipt_path, "text/plain; charset=utf-8")
         self._upload(publication.public_dir / "qr.png", qr_path, "image/png")
+        if (publication.public_dir / "tarot.jpg").exists():
+            self._upload(publication.public_dir / "tarot.jpg", tarot_path, "image/jpeg")
 
         publication.svg_url = self.public_storage_url(svg_path, version=file_hash(publication.public_dir / "artwork.svg"))
         publication.receipt_url = self.public_storage_url(receipt_path)
         publication.qr_image_url = self.public_storage_url(qr_path)
+        publication.tarot_url = self.public_storage_url(tarot_path) if (publication.public_dir / "tarot.jpg").exists() else ""
 
-        manifest = self._manifest_payload(publication, svg_path, raw_svg_path, receipt_path, qr_path, manifest_path)
+        manifest = self._manifest_payload(publication, svg_path, raw_svg_path, receipt_path, qr_path, tarot_path, manifest_path)
         self.bucket.blob(manifest_path).upload_from_string(
             json.dumps(manifest, indent=2, sort_keys=True),
             content_type="application/json",
@@ -278,6 +283,7 @@ class FirebasePublisher:
             "sessionUrl": publication.qr_url,
             "qrUrl": publication.qr_url,
             "qrImageUrl": publication.qr_image_url,
+            "tarotUrl": publication.tarot_url,
             "svgUrl": publication.svg_url,
             "receiptUrl": publication.receipt_url,
             "markName": publication.mark_name,
@@ -288,12 +294,14 @@ class FirebasePublisher:
                 "svg": publication.svg_url,
                 "qr": publication.qr_image_url,
                 "receipt": publication.receipt_url,
+                "tarot": publication.tarot_url,
             },
             "assetPaths": {
                 "svg": svg_path,
                 "rawSvg": raw_svg_path,
                 "qr": qr_path,
                 "receipt": receipt_path,
+                "tarot": tarot_path if publication.tarot_url else "",
                 "manifest": manifest_path,
             },
             "metadata": {
@@ -346,6 +354,7 @@ class FirebasePublisher:
         raw_svg_path: str,
         receipt_path: str,
         qr_path: str,
+        tarot_path: str,
         manifest_path: str,
     ) -> dict[str, Any]:
         return {
@@ -361,6 +370,7 @@ class FirebasePublisher:
             "plot_status": "pending",
             "sessionUrl": publication.qr_url,
             "qrImageUrl": publication.qr_image_url,
+            "tarotUrl": publication.tarot_url,
             "public_svg_path": svg_path,
             "public_receipt_path": receipt_path,
             "public_qr_path": qr_path,
@@ -370,6 +380,7 @@ class FirebasePublisher:
                 "rawSvg": raw_svg_path,
                 "qr": qr_path,
                 "receipt": receipt_path,
+                "tarot": tarot_path if publication.tarot_url else "",
                 "manifest": manifest_path,
             },
             "origin": "real_macmini",
@@ -379,6 +390,10 @@ class FirebasePublisher:
 
     def _upload(self, source: Path, storage_path: str, content_type: str) -> None:
         self.bucket.blob(storage_path).upload_from_filename(str(source), content_type=content_type)
+
+    def download(self, storage_path: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        self.bucket.blob(storage_path).download_to_filename(str(destination))
 
     def public_storage_url(self, storage_path: str, *, version: str | None = None) -> str:
         url = (
@@ -416,7 +431,7 @@ class Uploader:
         return imported
 
     def is_ready(self, session_dir: Path) -> bool:
-        if (session_dir / self.settings.ready_marker_name).exists():
+        if self.has_ready_marker(session_dir):
             return self.resolve_svg(session_dir) is not None and self.resolve_receipt(session_dir) is not None
         if self.settings.require_ready_marker:
             return False
@@ -431,6 +446,7 @@ class Uploader:
         session_id = session_dir.name
         svg_source = self.resolve_svg(session_dir)
         receipt_source = self.resolve_receipt(session_dir)
+        tarot_source = self.resolve_tarot(session_dir)
         if svg_source is None or receipt_source is None:
             raise FileNotFoundError(f"Missing plotter SVG or receipt TXT in {session_dir}")
 
@@ -439,11 +455,14 @@ class Uploader:
         shutil.copy2(svg_source, public_dir / "artwork_raw.svg")
         shutil.copy2(svg_source, public_dir / "artwork.svg")
         shutil.copy2(receipt_source, public_dir / "receipt.txt")
+        if tarot_source is not None:
+            shutil.copy2(tarot_source, public_dir / "tarot.jpg")
 
         receipt_data = parse_receipt(receipt_source)
-        created_at = datetime.fromtimestamp(session_dir.stat().st_mtime, tz=UTC)
-        mark_name = receipt_data.get("mark_name", "")
-        oracle_text = receipt_data.get("oracle_text", "")
+        csv_data = parse_session_csv(session_dir)
+        created_at = resolve_created_at(session_dir, csv_data)
+        mark_name = receipt_data.get("mark_name") or csv_data.get("mark_name", "")
+        oracle_text = receipt_data.get("oracle_text") or csv_data.get("oracle_text", "")
         title = mark_name or session_id.replace("_", " ")
         qr_url = f"{self.settings.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
         qrcode.make(qr_url).save(public_dir / "qr.png")
@@ -455,22 +474,45 @@ class Uploader:
             summary=oracle_text,
             mark_name=mark_name,
             oracle_text=oracle_text,
-            themes=receipt_data.get("themes", []),
+            themes=receipt_data.get("themes") or csv_data.get("themes", []),
+            measures=resolve_measures(csv_data),
             qr_url=qr_url,
             public_dir=public_dir,
         )
         self.publisher.publish(publication)
+        local_qr_path = self.download_published_qr(publication, session_dir)
         self.store.mark_published(
             session_id,
             {
                 "published_at": datetime.now(tz=UTC).isoformat(),
                 "source_dir": str(session_dir),
+                "localQrPath": str(local_qr_path),
                 "sessionUrl": publication.qr_url,
                 "svgUrl": publication.svg_url,
                 "receiptUrl": publication.receipt_url,
                 "qrImageUrl": publication.qr_image_url,
+                "tarotUrl": publication.tarot_url,
             },
         )
+
+    def download_published_qr(self, publication: Publication, session_dir: Path) -> Path:
+        qr_path = f"sessions/{publication.session_id}/qr.png"
+        destination = session_dir / f"{publication.session_id}_qr.png"
+        temporary = destination.with_name(f".{destination.name}.tmp")
+        try:
+            self.publisher.download(qr_path, temporary)
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return destination
+
+    def has_ready_marker(self, session_dir: Path) -> bool:
+        candidates = [
+            session_dir / self.settings.ready_marker_name,
+            session_dir / f"{session_dir.name}_tarot_ready.txt",
+        ]
+        candidates.extend(sorted(session_dir.glob("*_ready.txt")))
+        return any(path.exists() for path in candidates)
 
     def resolve_svg(self, session_dir: Path) -> Path | None:
         candidates = [session_dir / f"{session_dir.name}_plotter.svg"]
@@ -480,6 +522,11 @@ class Uploader:
     def resolve_receipt(self, session_dir: Path) -> Path | None:
         candidates = [session_dir / f"{session_dir.name}_receipt.txt"]
         candidates.extend(sorted(session_dir.glob("*_receipt.txt")))
+        return next((path for path in candidates if path.exists()), None)
+
+    def resolve_tarot(self, session_dir: Path) -> Path | None:
+        candidates = [session_dir / f"{session_dir.name}_tarot.jpg"]
+        candidates.extend(sorted(session_dir.glob("*_tarot.jpg")))
         return next((path for path in candidates if path.exists()), None)
 
     def session_timestamp(self, session_dir: Path) -> datetime:
@@ -504,9 +551,7 @@ class Controller:
     def start(self) -> dict[str, Any]:
         with self.lock:
             if self.thread and self.thread.is_alive():
-                self.started_at = datetime.now(tz=UTC)
-                self.uploader.store.set_run_started_at(self.started_at)
-                return self.status("baseline reset; already running")
+                return self.status("already running")
             self.stop_event.clear()
             self.started_at = datetime.now(tz=UTC)
             self.uploader.store.set_run_started_at(self.started_at)
@@ -594,6 +639,50 @@ def parse_themes(raw: Any) -> list[str]:
     return [str(parsed).strip()]
 
 
+def parse_session_csv(session_dir: Path) -> dict[str, Any]:
+    csv_path = session_dir / f"{session_dir.name}_receipt.csv"
+    if not csv_path.exists():
+        return {}
+    with csv_path.open(newline="", encoding="utf-8") as handle:
+        row = next(csv.DictReader(handle), None)
+    if not row:
+        return {}
+    return {
+        "timestamp": row.get("date", ""),
+        "mark_name": (row.get("symbol") or "").strip().upper(),
+        "mark_type": row.get("mark_type", ""),
+        "oracle_text": (row.get("reply_text") or "").strip(),
+        "themes": parse_themes(row.get("keywords", "")),
+        "intensity": row.get("intensity") or row.get("voice_intensity") or "",
+        "instability": row.get("instability", ""),
+        "confidence": row.get("confidence", ""),
+    }
+
+
+def resolve_created_at(session_dir: Path, csv_data: dict[str, Any]) -> datetime:
+    raw = csv_data.get("timestamp")
+    if raw:
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            pass
+    return datetime.fromtimestamp(session_dir.stat().st_mtime, tz=UTC)
+
+
+def resolve_measures(csv_data: dict[str, Any]) -> dict[str, float]:
+    measures: dict[str, float] = {}
+    for key in ("intensity", "instability", "confidence"):
+        value = csv_data.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            measures[key] = float(value)
+        except ValueError:
+            continue
+    return measures
+
+
 def file_hash(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -662,11 +751,14 @@ def main() -> None:
         poll_seconds=env_float("NEJE_UPLOADER_POLL_SECONDS", 2.0),
     )
     controller = Controller(Uploader(settings), settings)
+    controller.started_at = datetime.now(tz=UTC)
+    controller.uploader.store.set_run_started_at(controller.started_at)
     Handler.controller = controller
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Standalone Mac mini uploader agent: http://{args.host}:{args.port}/")
     print(f"Watching session folder: {settings.session_root}")
     print(f"Firebase project: {settings.project_id}")
+    print(f"Launch baseline: {controller.started_at.isoformat()}")
     print("Waiting for NEJE GUI /control/start or manual /scan-once.")
     server.serve_forever()
 

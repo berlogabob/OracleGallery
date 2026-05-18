@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import threading
 import time
 from datetime import UTC, datetime
@@ -364,9 +365,10 @@ class PlotterDaemon:
         for job in user_jobs:
             local_svg = cache_dir / f"{job.session_id}.svg"
             self.remote.download_asset(job.svg_storage_path, local_svg)
+            source_kind = "placeholder" if job.queue == "filler" or job.priority == "filler" or job.origin == ORIGIN_FILLER_MACBOOK else "user"
             items.append(
                 SheetItem(
-                    source_kind="user",
+                    source_kind=source_kind,
                     session_id=job.session_id,
                     title=job.title,
                     svg_path=local_svg,
@@ -385,6 +387,8 @@ class PlotterDaemon:
             return items
 
         start_index = self.runtime_state.placeholder_index
+        placeholders = list(placeholders)
+        random.Random(time.time_ns() + start_index).shuffle(placeholders)
         for offset in range(remaining):
             svg_path = placeholders[(start_index + offset) % len(placeholders)]
             items.append(

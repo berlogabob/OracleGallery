@@ -443,6 +443,45 @@ def test_plotter_can_use_filler_session_package_folders(tmp_path: Path) -> None:
     assert '"origin": "filler_macbook"' in manifest
 
 
+def test_plotter_materializes_remote_filler_queue_job_as_placeholder(tmp_path: Path) -> None:
+    settings = replace(
+        _settings(tmp_path),
+        sheet_width_mm=100,
+        sheet_height_mm=100,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="grid",
+    )
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository(
+        [
+            PlotJobLease(
+                session_id="filler_cloud",
+                title="filler",
+                summary="",
+                created_at=datetime.now(tz=UTC),
+                priority="filler",
+                queue="filler",
+                svg_storage_path="sessions/filler_cloud/artwork.svg",
+                svg_url="",
+                origin="filler_macbook",
+                tags=["filler", "local", "macbook"],
+            )
+        ]
+    )
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport)
+
+    daemon.run_cycle()
+
+    manifest = next((tmp_path / "spool").glob("sheet_*.json")).read_text(encoding="utf-8")
+    assert '"session_id": "filler_cloud"' in manifest
+    assert '"source_kind": "placeholder"' in manifest
+    assert '"origin": "filler_macbook"' in manifest
+    assert ("filler_cloud", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
+
+
 def _command_threshold_for_cell_start(gcode: str, *, cell_offset: int) -> int:
     command_count = 0
     target = f"; cell-start {cell_offset}/"

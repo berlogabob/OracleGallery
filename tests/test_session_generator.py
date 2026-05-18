@@ -123,8 +123,31 @@ def test_filler_generator_writes_session_like_package_without_private_media(tmp_
     assert (session.session_dir / "READY").exists()
     assert metadata["origin"] == "filler_macbook"
     assert metadata["uploadToFirebase"] is False
+    assert metadata["queue"] == "local"
+    assert metadata["priority"] == "local"
     assert not list(session.session_dir.glob("*.wav"))
     assert not list(session.session_dir.glob("*visitor*"))
+
+
+def test_filler_generator_can_mark_package_for_firebase_upload(tmp_path: Path) -> None:
+    source_root = _write_symbol_bank(tmp_path)
+    generated = generate_filler_session_packages(
+        source_root=source_root,
+        output_root=tmp_path / "filler",
+        scale_config=tmp_path / "missing_scales.json",
+        count=1,
+        seed=1,
+        jitter_px=0,
+        upload_to_firebase=True,
+    )
+
+    metadata = json.loads((generated[0].session_dir / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["origin"] == "filler_macbook"
+    assert metadata["tags"] == ["filler", "local", "macbook"]
+    assert metadata["visibleInLibrary"] is False
+    assert metadata["uploadToFirebase"] is True
+    assert metadata["queue"] == "filler"
+    assert metadata["priority"] == "filler"
 
 
 def test_symbol_scale_changes_inner_mark_transform(tmp_path: Path) -> None:
