@@ -50,7 +50,7 @@ class SteppedClothSurface extends StatelessWidget {
                       ),
                     ),
                   ),
-                  for (final placement in layout.filledPlacements)
+                  for (final placement in layout.placements)
                     _ClothHitTarget(
                       geometry: geometry,
                       placement: placement,
@@ -136,8 +136,7 @@ class _SteppedClothPainter extends CustomPainter {
       return;
     }
 
-    _paintFutureCells(canvas, geometry);
-    for (final placement in layout.filledPlacements) {
+    for (final placement in layout.placements) {
       final session = sessions[placement.index];
       final highlighted = session.sessionId == highlightSessionId;
       _paintSessionCell(canvas, geometry, placement, session, highlighted);
@@ -169,25 +168,6 @@ class _SteppedClothPainter extends CustomPainter {
         Offset(size.width, y - size.width * 0.02),
         weft,
       );
-    }
-  }
-
-  void _paintFutureCells(Canvas canvas, _ClothGridGeometry geometry) {
-    final paint = Paint()
-      ..color = OracleColors.rule.withValues(alpha: 0.28)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.7;
-
-    for (final placement in layout.futurePlacements) {
-      final center = geometry.centerFor(placement);
-      final radius = geometry.cell * 0.39;
-      final path = Path()
-        ..moveTo(center.dx, center.dy - radius)
-        ..lineTo(center.dx + radius, center.dy)
-        ..lineTo(center.dx, center.dy + radius)
-        ..lineTo(center.dx - radius, center.dy)
-        ..close();
-      canvas.drawPath(path, paint);
     }
   }
 
