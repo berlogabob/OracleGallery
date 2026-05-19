@@ -25,6 +25,7 @@ from .origin_markers import (
     normalize_origin,
     normalize_tags,
 )
+from .sampling import compute_effective_sample_step
 from .session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode, symbol_diameter_for_cell
@@ -56,6 +57,13 @@ GUI_DEFAULTS = {
     "include_rings": True,
     "include_markers": True,
     "marker_diameter_mm": DEFAULT_MARKER_DIAMETER_MM,
+    # G-code optimisation
+    "sample_step_mm": 1.0,
+    "sample_reference_cell_mm": 80.0,
+    "sample_density_exponent": 1.0,
+    "sample_min_step_mm": 0.25,
+    "sample_max_step_mm": 3.0,
+    "streaming_mode": "cell",
 }
 
 
@@ -76,6 +84,13 @@ class GuiSettings:
     include_rings: bool = GUI_DEFAULTS["include_rings"]
     include_markers: bool = GUI_DEFAULTS["include_markers"]
     marker_diameter_mm: float = GUI_DEFAULTS["marker_diameter_mm"]
+    # G-code optimisation
+    sample_step_mm: float = GUI_DEFAULTS["sample_step_mm"]
+    sample_reference_cell_mm: float = GUI_DEFAULTS["sample_reference_cell_mm"]
+    sample_density_exponent: float = GUI_DEFAULTS["sample_density_exponent"]
+    sample_min_step_mm: float = GUI_DEFAULTS["sample_min_step_mm"]
+    sample_max_step_mm: float = GUI_DEFAULTS["sample_max_step_mm"]
+    streaming_mode: str = GUI_DEFAULTS["streaming_mode"]
     show_origins: list[str] = field(default_factory=lambda: list(ALL_ORIGINS))
     print_origins: list[str] = field(default_factory=lambda: list(ALL_ORIGINS))
     travel_rate: float = 5000.0
@@ -115,6 +130,12 @@ class GuiSettings:
             z_feed_mm_min=settings.z_feed_mm_min,
             include_markers=settings.include_markers,
             marker_diameter_mm=settings.marker_diameter_mm,
+            sample_step_mm=settings.sample_step_mm,
+            sample_reference_cell_mm=settings.sample_reference_cell_mm,
+            sample_density_exponent=settings.sample_density_exponent,
+            sample_min_step_mm=settings.sample_min_step_mm,
+            sample_max_step_mm=settings.sample_max_step_mm,
+            streaming_mode=GUI_DEFAULTS["streaming_mode"],
         )
 
 
@@ -194,6 +215,13 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
         z_up_mm=settings.z_up_mm,
         z_feed_mm_min=settings.z_feed_mm_min,
         work_zero_command=plotter_settings.work_zero_command,
+        # G-code optimisation
+        sample_step_mm=settings.sample_step_mm,
+        sample_reference_cell_mm=settings.sample_reference_cell_mm,
+        sample_density_exponent=settings.sample_density_exponent,
+        sample_min_step_mm=settings.sample_min_step_mm,
+        sample_max_step_mm=settings.sample_max_step_mm,
+        streaming_mode=settings.streaming_mode,
     ), settings.mode)
 
 
@@ -919,10 +947,18 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
         for index in range(len(placements))
     ]
     sheet_id = datetime.now(tz=UTC).strftime("gui_sheet_%Y%m%d_%H%M%S")
+    effective_step = compute_effective_sample_step(
+        sample_step_mm=settings.sample_step_mm,
+        cell_diameter_mm=settings.cell_diameter_mm,
+        sample_reference_cell_mm=settings.sample_reference_cell_mm,
+        sample_density_exponent=settings.sample_density_exponent,
+        sample_min_step_mm=settings.sample_min_step_mm,
+        sample_max_step_mm=settings.sample_max_step_mm,
+    )
     gcode = generate_sheet_gcode(
         items,
         placements,
-        sample_step_mm=PlotterSettings().sample_step_mm,
+        sample_step_mm=effective_step,
         cell_diameter_mm=settings.cell_diameter_mm,
         travel_rate=settings.travel_rate,
         draw_rate=settings.draw_rate,
@@ -950,6 +986,14 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
                 "symbol_fit_ratio": SYMBOL_FIT_RATIO,
                 "include_markers": settings.include_markers,
                 "marker_diameter_mm": settings.marker_diameter_mm,
+                # G-code optimisation
+                "sample_step_mm": settings.sample_step_mm,
+                "sample_reference_cell_mm": settings.sample_reference_cell_mm,
+                "sample_density_exponent": settings.sample_density_exponent,
+                "sample_min_step_mm": settings.sample_min_step_mm,
+                "sample_max_step_mm": settings.sample_max_step_mm,
+                "effective_sample_step_mm": effective_step,
+                "streaming_mode": settings.streaming_mode,
                 "items": [
                     {
                         "session_id": item.session_id,

@@ -12,6 +12,7 @@ from .firebase_io import FirebaseRemoteRepository
 from .layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
 from .models import ComponentStatus, PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, PlotterRuntimeState, RuntimeStatus, SheetItem, SheetPlacement
 from .origin_markers import ALL_ORIGINS, DEFAULT_MARKER_DIAMETER_MM, ORIGIN_FILLER_MACBOOK, marker_position_for_origin, normalize_tags
+from .sampling import compute_effective_sample_step
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode
 from .transport import FluidNCTransport
@@ -129,6 +130,14 @@ class PlotterDaemon:
             self._set_state(RuntimeStatus.ERROR, "Sheet layout has no printable rows")
             return
 
+        effective_step = compute_effective_sample_step(
+            sample_step_mm=config.sample_step_mm,
+            cell_diameter_mm=config.cell_diameter_mm,
+            sample_reference_cell_mm=config.sample_reference_cell_mm,
+            sample_density_exponent=config.sample_density_exponent,
+            sample_min_step_mm=config.sample_min_step_mm,
+            sample_max_step_mm=config.sample_max_step_mm,
+        )
         manifest_path = self.settings.spool_root / f"{sheet_id}.json"
         manifest: dict[str, object] = {
             "sheet_id": sheet_id,
@@ -147,126 +156,147 @@ class PlotterDaemon:
             "z_up_mm": config.z_up_mm,
             "z_down_mm": config.z_down_mm,
             "row_count": len(layout_rows),
+            "sample_step_mm": config.sample_step_mm,
+            "sample_reference_cell_mm": config.sample_reference_cell_mm,
+            "sample_density_exponent": config.sample_density_exponent,
+            "sample_min_step_mm": config.sample_min_step_mm,
+            "sample_max_step_mm": config.sample_max_step_mm,
+            "effective_sample_step_mm": effective_step,
+            "streaming_mode": config.streaming_mode,
         }
         self._write_manifest(manifest_path, manifest)
 
         rows_printed = 0
         cells_completed = 0
         last_gcode_path: Path | None = None
-        for row_index, row_placements in enumerate(layout_rows, start=1):
-            if self.stop_event.is_set():
-                return
-            row_limit = len(row_placements)
-            try:
-                user_jobs = self._claim_user_jobs(row_limit)
-            except Exception as exc:  # noqa: BLE001
-                user_jobs = []
-                if self.oracle_store is not None:
-                    self.oracle_store.set_component("queue", ComponentStatus.WARNING, message=f"Remote queue unavailable; using idle symbols: {exc}", heartbeat=True)
-
-            items = self._materialize_sheet_items(user_jobs, row_limit)
-            if not items:
-                continue
-            active_placements = row_placements[: len(items)]
-            for offset, job in enumerate(user_jobs):
-                sheet_index = active_placements[offset].index
-                self.remote.update_plot_job(
-                    job.session_id,
-                    PlotStatus.PLOTTING,
-                    sheet_id=sheet_id,
-                    sheet_index=sheet_index,
-                )
-                self.store.record_job_status(job.session_id, PlotStatus.PLOTTING, sheet_id=sheet_id)
-
-            row_gcode = generate_sheet_gcode(
-                items,
-                active_placements,
-                sample_step_mm=self.settings.sample_step_mm,
-                cell_diameter_mm=config.cell_diameter_mm,
-                travel_rate=config.travel_rate,
-                draw_rate=config.draw_rate,
-                pen_up_command=self.settings.pen_up_command,
-                pen_down_command=self.settings.pen_down_command,
-                title=f"{sheet_id} row {row_index}/{len(layout_rows)}",
-                return_home=row_index == len(layout_rows),
-                include_rings=config.include_rings,
-                include_markers=config.include_markers,
-                marker_diameter_mm=config.marker_diameter_mm,
-                use_z_servo=config.use_z_servo,
-                z_down_mm=config.z_down_mm,
-                z_up_mm=config.z_up_mm,
-                z_feed_mm_min=config.z_feed_mm_min,
-            )
-            total_gcode_lines = len(row_gcode.splitlines())
-            row_id = f"{sheet_id}_row_{row_index:02d}"
-            self._current_row_sheet_indexes = [placement.index for placement in active_placements]
-            self._current_row_cell_count = len(active_placements)
-            self._current_row_cell_markers = self._build_cell_progress_markers(row_gcode, active_placements)
-            self._cells_completed_before_row = cells_completed
-            self._set_state(
-                RuntimeStatus.PRINTING,
-                f"Streaming row {row_index}/{len(layout_rows)} of {sheet_id}",
+        if str(config.streaming_mode).lower() == "cell":
+            stream_result = self._stream_sheet_cells(
+                config=config,
+                control=control,
                 sheet_id=sheet_id,
-                gcode_lines_sent=0,
-                gcode_lines_total=total_gcode_lines,
-                gcode_progress_percent=0.0,
-                current_row_index=row_index,
-                row_count=len(layout_rows),
-                current_cell_index=active_placements[0].index if active_placements else 0,
-                current_cell_in_row=1 if active_placements else 0,
-                row_cell_count=len(active_placements),
-                cells_completed=cells_completed,
-                rows_completed=rows_printed,
-                sheet_progress_percent=(rows_printed / len(layout_rows)) * 100.0,
+                layout_rows=layout_rows,
+                manifest_path=manifest_path,
+                manifest=manifest,
+                effective_step=effective_step,
             )
-            row_payload = self._manifest_row_payload(
-                row_index=row_index,
-                row_id=row_id,
-                items=items,
-                placements=active_placements,
-                status="streaming",
-                marker_diameter_mm=config.marker_diameter_mm,
-            )
-            self._append_manifest_row(manifest_path, manifest, row_payload)
-            try:
-                gcode_path = self.transport.send(
-                    gcode=row_gcode,
-                    sheet_id=row_id,
-                    dry_run=control.dry_run,
-                    progress_callback=self._record_gcode_progress,
-                )
-            except Exception as exc:  # noqa: BLE001
-                for job in user_jobs:
-                    self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
-                    self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
-                row_payload["status"] = "failed"
-                row_payload["error"] = str(exc)
-                self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
-                if self.oracle_store is not None:
-                    control = self.oracle_store.load_print_control()
-                    control.print_enabled = False
-                    control.operator_paused = True
-                    self.oracle_store.save_print_control(control)
-                    self.oracle_store.save_real_fluidnc_armed(False)
-                    self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
-                self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on row {row_index}: {exc}", sheet_id=sheet_id)
+            if stream_result is None:
                 return
+            rows_printed, cells_completed, last_gcode_path = stream_result
+        else:
+            for row_index, row_placements in enumerate(layout_rows, start=1):
+                if self.stop_event.is_set():
+                    return
+                row_limit = len(row_placements)
+                try:
+                    user_jobs = self._claim_user_jobs(row_limit)
+                except Exception as exc:  # noqa: BLE001
+                    user_jobs = []
+                    if self.oracle_store is not None:
+                        self.oracle_store.set_component("queue", ComponentStatus.WARNING, message=f"Remote queue unavailable; using idle symbols: {exc}", heartbeat=True)
 
-            last_gcode_path = gcode_path
-            rows_printed += 1
-            cells_completed += len(items)
-            row_payload["status"] = "printed"
-            row_payload["gcode_path"] = str(gcode_path)
-            self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
-            for offset, job in enumerate(user_jobs):
-                sheet_index = active_placements[offset].index
-                self.remote.update_plot_job(
-                    job.session_id,
-                    PlotStatus.PRINTED,
-                    sheet_id=sheet_id,
-                    sheet_index=sheet_index,
+                items = self._materialize_sheet_items(user_jobs, row_limit)
+                if not items:
+                    continue
+                active_placements = row_placements[: len(items)]
+                for offset, job in enumerate(user_jobs):
+                    sheet_index = active_placements[offset].index
+                    self.remote.update_plot_job(
+                        job.session_id,
+                        PlotStatus.PLOTTING,
+                        sheet_id=sheet_id,
+                        sheet_index=sheet_index,
+                    )
+                    self.store.record_job_status(job.session_id, PlotStatus.PLOTTING, sheet_id=sheet_id)
+
+                row_gcode = generate_sheet_gcode(
+                    items,
+                    active_placements,
+                    sample_step_mm=effective_step,
+                    cell_diameter_mm=config.cell_diameter_mm,
+                    travel_rate=config.travel_rate,
+                    draw_rate=config.draw_rate,
+                    pen_up_command=self.settings.pen_up_command,
+                    pen_down_command=self.settings.pen_down_command,
+                    title=f"{sheet_id} row {row_index}/{len(layout_rows)}",
+                    return_home=row_index == len(layout_rows),
+                    include_rings=config.include_rings,
+                    include_markers=config.include_markers,
+                    marker_diameter_mm=config.marker_diameter_mm,
+                    use_z_servo=config.use_z_servo,
+                    z_down_mm=config.z_down_mm,
+                    z_up_mm=config.z_up_mm,
+                    z_feed_mm_min=config.z_feed_mm_min,
                 )
-                self.store.record_job_status(job.session_id, PlotStatus.PRINTED, sheet_id=sheet_id)
+                total_gcode_lines = len(row_gcode.splitlines())
+                row_id = f"{sheet_id}_row_{row_index:02d}"
+                self._current_row_sheet_indexes = [placement.index for placement in active_placements]
+                self._current_row_cell_count = len(active_placements)
+                self._current_row_cell_markers = self._build_cell_progress_markers(row_gcode, active_placements)
+                self._cells_completed_before_row = cells_completed
+                self._set_state(
+                    RuntimeStatus.PRINTING,
+                    f"Streaming row {row_index}/{len(layout_rows)} of {sheet_id}",
+                    sheet_id=sheet_id,
+                    gcode_lines_sent=0,
+                    gcode_lines_total=total_gcode_lines,
+                    gcode_progress_percent=0.0,
+                    current_row_index=row_index,
+                    row_count=len(layout_rows),
+                    current_cell_index=active_placements[0].index if active_placements else 0,
+                    current_cell_in_row=1 if active_placements else 0,
+                    row_cell_count=len(active_placements),
+                    cells_completed=cells_completed,
+                    rows_completed=rows_printed,
+                    sheet_progress_percent=(rows_printed / len(layout_rows)) * 100.0,
+                )
+                row_payload = self._manifest_row_payload(
+                    row_index=row_index,
+                    row_id=row_id,
+                    items=items,
+                    placements=active_placements,
+                    status="streaming",
+                    marker_diameter_mm=config.marker_diameter_mm,
+                )
+                self._append_manifest_row(manifest_path, manifest, row_payload)
+                try:
+                    gcode_path = self.transport.send(
+                        gcode=row_gcode,
+                        sheet_id=row_id,
+                        dry_run=control.dry_run,
+                        progress_callback=self._record_gcode_progress,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    for job in user_jobs:
+                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+                        self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+                    row_payload["status"] = "failed"
+                    row_payload["error"] = str(exc)
+                    self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
+                    if self.oracle_store is not None:
+                        control = self.oracle_store.load_print_control()
+                        control.print_enabled = False
+                        control.operator_paused = True
+                        self.oracle_store.save_print_control(control)
+                        self.oracle_store.save_real_fluidnc_armed(False)
+                        self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
+                    self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on row {row_index}: {exc}", sheet_id=sheet_id)
+                    return
+
+                last_gcode_path = gcode_path
+                rows_printed += 1
+                cells_completed += len(items)
+                row_payload["status"] = "printed"
+                row_payload["gcode_path"] = str(gcode_path)
+                self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
+                for offset, job in enumerate(user_jobs):
+                    sheet_index = active_placements[offset].index
+                    self.remote.update_plot_job(
+                        job.session_id,
+                        PlotStatus.PRINTED,
+                        sheet_id=sheet_id,
+                        sheet_index=sheet_index,
+                    )
+                    self.store.record_job_status(job.session_id, PlotStatus.PRINTED, sheet_id=sheet_id)
 
         if rows_printed <= 0:
             self._set_state(RuntimeStatus.IDLE, "No user jobs or placeholders available", sheet_id=sheet_id)
@@ -330,6 +360,157 @@ class PlotterDaemon:
                 "",
             ]
         )
+
+    def _stream_sheet_cells(
+        self,
+        *,
+        config: PlotterRuntimeConfig,
+        control: PlotterControlState,
+        sheet_id: str,
+        layout_rows: list[list[SheetPlacement]],
+        manifest_path: Path,
+        manifest: dict[str, object],
+        effective_step: float,
+    ) -> tuple[int, int, Path | None] | None:
+        rows_printed = 0
+        cells_completed = 0
+        last_gcode_path: Path | None = None
+        total_cells = sum(len(row) for row in layout_rows)
+        for row_index, row_placements in enumerate(layout_rows, start=1):
+            row_had_printed_cell = False
+            for cell_offset, placement in enumerate(row_placements):
+                if self.stop_event.is_set():
+                    return None
+                try:
+                    user_jobs = self._claim_user_jobs(1)
+                except Exception as exc:  # noqa: BLE001
+                    user_jobs = []
+                    if self.oracle_store is not None:
+                        self.oracle_store.set_component("queue", ComponentStatus.WARNING, message=f"Remote queue unavailable; using idle symbols: {exc}", heartbeat=True)
+
+                items = self._materialize_sheet_items(user_jobs, 1)
+                if not items:
+                    continue
+                item = items[0]
+                if user_jobs:
+                    job = user_jobs[0]
+                    self.remote.update_plot_job(
+                        job.session_id,
+                        PlotStatus.PLOTTING,
+                        sheet_id=sheet_id,
+                        sheet_index=placement.index,
+                    )
+                    self.store.record_job_status(job.session_id, PlotStatus.PLOTTING, sheet_id=sheet_id)
+
+                cell_id = f"{sheet_id}_cell_{placement.index:03d}"
+                cell_gcode = generate_sheet_gcode(
+                    [item],
+                    [placement],
+                    sample_step_mm=effective_step,
+                    cell_diameter_mm=config.cell_diameter_mm,
+                    travel_rate=config.travel_rate,
+                    draw_rate=config.draw_rate,
+                    pen_up_command=self.settings.pen_up_command,
+                    pen_down_command=self.settings.pen_down_command,
+                    title=f"{sheet_id} cell {placement.index + 1}/{total_cells}",
+                    return_home=False,
+                    include_rings=config.include_rings,
+                    include_markers=config.include_markers,
+                    marker_diameter_mm=config.marker_diameter_mm,
+                    use_z_servo=config.use_z_servo,
+                    z_down_mm=config.z_down_mm,
+                    z_up_mm=config.z_up_mm,
+                    z_feed_mm_min=config.z_feed_mm_min,
+                )
+                total_gcode_lines = len(cell_gcode.splitlines())
+                self._current_row_sheet_indexes = [placement.index]
+                self._current_row_cell_count = 1
+                self._current_row_cell_markers = self._build_cell_progress_markers(cell_gcode, [placement])
+                self._cells_completed_before_row = cells_completed
+                self._set_state(
+                    RuntimeStatus.PRINTING,
+                    f"Streaming cell {placement.index + 1}/{total_cells} of {sheet_id}",
+                    sheet_id=sheet_id,
+                    gcode_lines_sent=0,
+                    gcode_lines_total=total_gcode_lines,
+                    gcode_progress_percent=0.0,
+                    current_row_index=row_index,
+                    row_count=len(layout_rows),
+                    current_cell_index=placement.index,
+                    current_cell_in_row=cell_offset + 1,
+                    row_cell_count=len(row_placements),
+                    cells_completed=cells_completed,
+                    rows_completed=rows_printed,
+                    sheet_progress_percent=(cells_completed / total_cells) * 100.0 if total_cells else 0.0,
+                )
+                cell_payload = self._manifest_cell_payload(
+                    row_index=row_index,
+                    cell_id=cell_id,
+                    item=item,
+                    placement=placement,
+                    status="streaming",
+                    marker_diameter_mm=config.marker_diameter_mm,
+                )
+                self._append_manifest_cell(manifest_path, manifest, cell_payload)
+                try:
+                    gcode_path = self.transport.send(
+                        gcode=cell_gcode,
+                        sheet_id=cell_id,
+                        dry_run=control.dry_run,
+                        progress_callback=self._record_gcode_progress,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    for job in user_jobs:
+                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+                        self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+                    cell_payload["status"] = "failed"
+                    cell_payload["error"] = str(exc)
+                    self._replace_manifest_cell(manifest_path, manifest, cell_id, cell_payload)
+                    if self.oracle_store is not None:
+                        failed_control = self.oracle_store.load_print_control()
+                        failed_control.print_enabled = False
+                        failed_control.operator_paused = True
+                        self.oracle_store.save_print_control(failed_control)
+                        self.oracle_store.save_real_fluidnc_armed(False)
+                        self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
+                    self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on cell {placement.index + 1}: {exc}", sheet_id=sheet_id)
+                    return None
+
+                last_gcode_path = gcode_path
+                cells_completed += 1
+                row_had_printed_cell = True
+                if user_jobs:
+                    job = user_jobs[0]
+                    self.remote.update_plot_job(
+                        job.session_id,
+                        PlotStatus.PRINTED,
+                        sheet_id=sheet_id,
+                        sheet_index=placement.index,
+                    )
+                    self.store.record_job_status(job.session_id, PlotStatus.PRINTED, sheet_id=sheet_id)
+                cell_payload["status"] = "printed"
+                cell_payload["gcode_path"] = str(gcode_path)
+                self._replace_manifest_cell(manifest_path, manifest, cell_id, cell_payload)
+                completed_rows = rows_printed + (1 if cell_offset == len(row_placements) - 1 else 0)
+                self._set_state(
+                    RuntimeStatus.PRINTING,
+                    f"Printed cell {placement.index + 1}/{total_cells} of {sheet_id}",
+                    sheet_id=sheet_id,
+                    gcode_lines_sent=total_gcode_lines,
+                    gcode_lines_total=total_gcode_lines,
+                    gcode_progress_percent=100.0,
+                    current_row_index=row_index,
+                    row_count=len(layout_rows),
+                    current_cell_index=placement.index,
+                    current_cell_in_row=cell_offset + 1,
+                    row_cell_count=len(row_placements),
+                    cells_completed=cells_completed,
+                    rows_completed=completed_rows,
+                    sheet_progress_percent=(cells_completed / total_cells) * 100.0 if total_cells else 100.0,
+                )
+            if row_had_printed_cell:
+                rows_printed += 1
+        return rows_printed, cells_completed, last_gcode_path
 
     def _claim_user_jobs(self, limit: int) -> list[PlotJobLease]:
         jobs: list[PlotJobLease] = []
@@ -440,6 +621,44 @@ class PlotterDaemon:
             ],
         }
 
+    def _manifest_cell_payload(
+        self,
+        *,
+        row_index: int,
+        cell_id: str,
+        item: SheetItem,
+        placement: SheetPlacement,
+        status: str,
+        marker_diameter_mm: float = DEFAULT_MARKER_DIAMETER_MM,
+    ) -> dict[str, object]:
+        return {
+            "row_index": row_index,
+            "cell_id": cell_id,
+            "status": status,
+            "item": self._manifest_item_payload(item, placement, marker_diameter_mm=marker_diameter_mm),
+        }
+
+    def _manifest_item_payload(
+        self,
+        item: SheetItem,
+        placement: SheetPlacement,
+        *,
+        marker_diameter_mm: float = DEFAULT_MARKER_DIAMETER_MM,
+    ) -> dict[str, object]:
+        return {
+            "session_id": item.session_id,
+            "source_kind": item.source_kind,
+            "origin": item.origin,
+            "tags": item.tags,
+            "marker_position": item.marker_position or marker_position_for_origin(item.origin),
+            "marker_diameter_mm": marker_diameter_mm,
+            "svg_path": str(item.svg_path),
+            "sheet_index": placement.index,
+            "center_x_mm": placement.center_x_mm,
+            "center_y_mm": placement.center_y_mm,
+            "cell_diameter_mm": placement.diameter_mm,
+        }
+
     def _append_manifest_row(self, path: Path, manifest: dict[str, object], row_payload: dict[str, object]) -> None:
         rows = manifest.setdefault("rows", [])
         items = manifest.setdefault("items", [])
@@ -449,6 +668,17 @@ class PlotterDaemon:
             row_items = row_payload.get("items", [])
             if isinstance(row_items, list):
                 items.extend(row_items)
+        self._write_manifest(path, manifest)
+
+    def _append_manifest_cell(self, path: Path, manifest: dict[str, object], cell_payload: dict[str, object]) -> None:
+        cells = manifest.setdefault("cells", [])
+        items = manifest.setdefault("items", [])
+        if isinstance(cells, list):
+            cells.append(cell_payload)
+        if isinstance(items, list):
+            item = cell_payload.get("item")
+            if isinstance(item, dict):
+                items.append(item)
         self._write_manifest(path, manifest)
 
     def _replace_manifest_row(
@@ -463,6 +693,21 @@ class PlotterDaemon:
             for index, existing_row in enumerate(rows):
                 if isinstance(existing_row, dict) and existing_row.get("row_index") == row_index:
                     rows[index] = row_payload
+                    break
+        self._write_manifest(path, manifest)
+
+    def _replace_manifest_cell(
+        self,
+        path: Path,
+        manifest: dict[str, object],
+        cell_id: str,
+        cell_payload: dict[str, object],
+    ) -> None:
+        cells = manifest.get("cells", [])
+        if isinstance(cells, list):
+            for index, existing_cell in enumerate(cells):
+                if isinstance(existing_cell, dict) and existing_cell.get("cell_id") == cell_id:
+                    cells[index] = cell_payload
                     break
         self._write_manifest(path, manifest)
 
@@ -510,6 +755,12 @@ class PlotterDaemon:
             z_up_mm=self.settings.z_up_mm,
             z_feed_mm_min=self.settings.z_feed_mm_min,
             work_zero_command=self.settings.work_zero_command,
+            sample_step_mm=self.settings.sample_step_mm,
+            sample_reference_cell_mm=self.settings.sample_reference_cell_mm,
+            sample_density_exponent=self.settings.sample_density_exponent,
+            sample_min_step_mm=self.settings.sample_min_step_mm,
+            sample_max_step_mm=self.settings.sample_max_step_mm,
+            streaming_mode=self.settings.streaming_mode,
         )
         if self.oracle_store is None:
             return default

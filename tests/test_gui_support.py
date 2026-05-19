@@ -468,3 +468,150 @@ def test_confirm_reload_keeps_real_print_enabled_for_next_sheet(tmp_path: Path) 
 
     assert store.load_control_state().print_enabled is True
     assert oracle_store.load_print_control().print_enabled is True
+
+
+def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter():
+    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    result = fn(
+        sample_step_mm=1.0,
+        cell_diameter_mm=80.0,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.0,
+        sample_min_step_mm=0.25,
+        sample_max_step_mm=3.0,
+    )
+    assert result == 1.0
+
+
+def test_compute_effective_sample_step_bigger_cell_denser_gcode():
+    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    ref_result = fn(
+        sample_step_mm=1.0,
+        cell_diameter_mm=80.0,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.0,
+        sample_min_step_mm=0.25,
+        sample_max_step_mm=3.0,
+    )
+    big_result = fn(
+        sample_step_mm=1.0,
+        cell_diameter_mm=160.0,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.0,
+        sample_min_step_mm=0.25,
+        sample_max_step_mm=3.0,
+    )
+    assert big_result < ref_result  # 160 mm cell → denser (smaller spacing)
+    assert abs(big_result - 0.5) < 1e-9  # exactly half
+
+
+def test_compute_effective_sample_step_clamps_to_min():
+    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    result = fn(
+        sample_step_mm=0.1,
+        cell_diameter_mm=200.0,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.0,
+        sample_min_step_mm=0.25,
+        sample_max_step_mm=3.0,
+    )
+    assert result == 0.25  # 0.1 * (80/200) = 0.04, clamped to 0.25
+
+
+def test_compute_effective_sample_step_clamps_to_max():
+    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    result = fn(
+        sample_step_mm=5.0,
+        cell_diameter_mm=20.0,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.0,
+        sample_min_step_mm=0.25,
+        sample_max_step_mm=3.0,
+    )
+    assert result == 3.0  # 5 * (80/20) = 20, clamped to 3.0
+
+
+def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
+    from neje_oracle.gui_support import GuiSettings, load_gui_settings, save_gui_settings
+    settings_path = tmp_path / "gui_settings.json"
+    settings = GuiSettings(
+        cell_diameter_mm=160.0,
+        sample_step_mm=0.5,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.5,
+        sample_min_step_mm=0.1,
+        sample_max_step_mm=5.0,
+        streaming_mode="row",
+    )
+    save_gui_settings(settings, settings_path)
+    loaded = load_gui_settings(settings_path)
+    assert loaded.sample_step_mm == 0.5
+    assert loaded.sample_reference_cell_mm == 80.0
+    assert loaded.sample_density_exponent == 1.5
+    assert loaded.sample_min_step_mm == 0.1
+    assert loaded.sample_max_step_mm == 5.0
+    assert loaded.streaming_mode == "row"
+
+
+def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
+    from neje_oracle.gui_support import GuiSettings, gui_settings_to_plotter_config
+    from neje_oracle.models import PlotterRuntimeConfig
+    settings = GuiSettings(
+        cell_diameter_mm=160.0,
+        sample_step_mm=0.5,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.5,
+        sample_min_step_mm=0.1,
+        sample_max_step_mm=5.0,
+        streaming_mode="cell",
+    )
+    config = gui_settings_to_plotter_config(settings)
+    assert isinstance(config, PlotterRuntimeConfig)
+    assert config.sample_step_mm == 0.5
+    assert config.sample_reference_cell_mm == 80.0
+    assert config.sample_density_exponent == 1.5
+    assert config.sample_min_step_mm == 0.1
+    assert config.sample_max_step_mm == 5.0
+    assert config.streaming_mode == "cell"
+
+
+def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
+    from neje_oracle.gui_support import (
+        GuiSettings, generate_dry_run_sheet, latest_spool_manifest,
+        compute_effective_sample_step,
+    )
+    symbol_root = tmp_path / "symbols"
+    symbol_root.mkdir()
+    (symbol_root / "s.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<path d='M10,10 L90,10 L90,90 Z' stroke='black' fill='none'/></svg>",
+        encoding="utf-8",
+    )
+    settings = GuiSettings(
+        sheet_width_mm=120.0, sheet_height_mm=120.0, cell_diameter_mm=40.0,
+        sample_step_mm=2.0, sample_density_exponent=2.0,
+    )
+    spool_root = tmp_path / "spool"
+    result = generate_dry_run_sheet(settings, spool_root=spool_root, symbol_root=symbol_root)
+    manifest_path = result["manifest"]
+    payload = json.loads(manifest_path.read_text())
+    assert "sample_step_mm" in payload
+    assert payload["sample_step_mm"] == 2.0
+    assert "sample_reference_cell_mm" in payload
+    assert "sample_density_exponent" in payload
+    assert "sample_min_step_mm" in payload
+    assert "sample_max_step_mm" in payload
+    assert "effective_sample_step_mm" in payload
+    assert payload["streaming_mode"] == settings.streaming_mode
+    # 40mm cell < 80mm ref: effective = 2 * (80/40)^2 = 8.0, clamped to max 3.0
+    assert payload["effective_sample_step_mm"] > 2.0  # smaller cell → lighter = more spacing
+
+
+def test_batch_generation_controls_are_not_operator_facing() -> None:
+    source = Path("src/neje_oracle/gui_service.py").read_text(encoding="utf-8")
+    work_panel = source.split("with ui.tab_panel(work_tab)", 1)[1].split("with ui.tab_panel(exhibition_tab)", 1)[0]
+    exhibition_panel = source.split("with ui.tab_panel(exhibition_tab)", 1)[1]
+    assert "Generate next filler" not in work_panel
+    assert "Generate next filler" not in exhibition_panel
+    assert "START GENERATOR" not in work_panel
+    assert "START GENERATOR" not in exhibition_panel

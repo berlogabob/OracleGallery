@@ -62,8 +62,8 @@ class PreflightService:
         idle_root = default_idle_root()
         idle_count = len(list(idle_root.glob("*.svg"))) if idle_root.exists() else 0
         if idle_count <= 0:
-            return PreflightCheck("idle bank", PreflightLevel.WARNING, "Generated idle bank is empty; plotter can fall back to base symbols")
-        return PreflightCheck("idle bank", PreflightLevel.OK, f"{idle_count} generated idle SVG(s) available")
+            return PreflightCheck("local filler fallback", PreflightLevel.WARNING, "No legacy local filler SVGs found; production uses queue jobs or Generate next filler")
+        return PreflightCheck("local filler fallback", PreflightLevel.OK, f"{idle_count} legacy local filler SVG(s) available as fallback")
 
     def _check_uploader_folder(self) -> PreflightCheck:
         root = self.uploader_settings.session_root

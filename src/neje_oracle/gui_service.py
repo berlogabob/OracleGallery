@@ -134,6 +134,11 @@ def build_page() -> None:
         settings.include_rings = bool(fields["include_rings"].value)
         settings.include_markers = bool(fields["include_markers"].value)
         settings.marker_diameter_mm = float(fields["marker_diameter_mm"].value or 1.5)
+        settings.sample_step_mm = float(fields["sample_step_mm"].value or GUI_DEFAULTS["sample_step_mm"])
+        settings.sample_density_exponent = float(fields["sample_density_exponent"].value or GUI_DEFAULTS["sample_density_exponent"])
+        settings.sample_min_step_mm = float(fields["sample_min_step_mm"].value or GUI_DEFAULTS["sample_min_step_mm"])
+        settings.sample_max_step_mm = float(fields["sample_max_step_mm"].value or GUI_DEFAULTS["sample_max_step_mm"])
+        settings.streaming_mode = str(fields["streaming_mode"].value or GUI_DEFAULTS["streaming_mode"])
         settings.show_origins = [
             origin for origin in ALL_ORIGINS if bool(fields.get(f"show_origin:{origin}") and fields[f"show_origin:{origin}"].value)
         ] or list(ALL_ORIGINS)
@@ -821,6 +826,18 @@ def build_page() -> None:
                                 number_control(fields, "gap_mm", label="Gap", value=settings.gap_mm, default=GUI_DEFAULTS["gap_mm"], min_value=0, width_class="w-full", tooltip="Distance between neighboring cell diameters.", on_change=persist_and_refresh)
                                 number_control(fields, "sheet_margin_mm", label="Margin", value=settings.sheet_margin_mm, default=GUI_DEFAULTS["sheet_margin_mm"], min_value=0, width_class="w-full", tooltip="Safe border inside printable field.", on_change=persist_and_refresh)
                                 number_control(fields, "marker_diameter_mm", label="Dot mm", value=settings.marker_diameter_mm, default=GUI_DEFAULTS["marker_diameter_mm"], min_value=0.5, width_class="w-full", tooltip="Printed origin-dot diameter.", on_change=persist_and_refresh)
+                        with ui.card().classes("oracle-card compact-card w-full"):
+                            ui.label("G-code optimisation").classes("text-sm font-bold")
+                            with ui.grid(columns=2).classes("w-full gap-2"):
+                                number_control(fields, "sample_step_mm", label="Point spacing @ 80mm", value=settings.sample_step_mm, default=GUI_DEFAULTS["sample_step_mm"], min_value=0.05, width_class="w-full", tooltip="Base SVG point spacing at the reference cell diameter.", on_change=persist_and_refresh)
+                                number_control(fields, "sample_density_exponent", label="Cell density link", value=settings.sample_density_exponent, default=GUI_DEFAULTS["sample_density_exponent"], min_value=0.0, width_class="w-full", tooltip="How strongly larger cells reduce point spacing.", on_change=persist_and_refresh)
+                                number_control(fields, "sample_min_step_mm", label="Min point spacing", value=settings.sample_min_step_mm, default=GUI_DEFAULTS["sample_min_step_mm"], min_value=0.01, width_class="w-full", tooltip="Smallest allowed generated point spacing.", on_change=persist_and_refresh)
+                                number_control(fields, "sample_max_step_mm", label="Max point spacing", value=settings.sample_max_step_mm, default=GUI_DEFAULTS["sample_max_step_mm"], min_value=0.05, width_class="w-full", tooltip="Largest allowed generated point spacing.", on_change=persist_and_refresh)
+                            fields["streaming_mode"] = ui.select(
+                                {"cell": "cell", "row": "row"},
+                                value=settings.streaming_mode,
+                                label="Streaming",
+                            ).props("dense outlined").classes("w-full").on_value_change(persist_and_refresh)
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Filters / markers").classes("text-sm font-bold")
                             ui.label("Display filters affect preview immediately. Print filters apply from the next row, never mid-row.").classes("text-xs text-[#8f4f2b]")

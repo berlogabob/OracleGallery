@@ -390,6 +390,13 @@ class PlotterRuntimeConfig:
     z_up_mm: float = 0.0
     z_feed_mm_min: float = 1000.0
     work_zero_command: str = "G10 L20 P1 X0 Y0"
+    # G-code optimisation
+    sample_step_mm: float = 1.0
+    sample_reference_cell_mm: float = 80.0
+    sample_density_exponent: float = 1.0
+    sample_min_step_mm: float = 0.25
+    sample_max_step_mm: float = 3.0
+    streaming_mode: str = "row"
     updated_at: datetime = field(default_factory=utcnow)
 
     def to_dict(self) -> dict[str, Any]:
@@ -412,6 +419,12 @@ class PlotterRuntimeConfig:
             "z_up_mm": self.z_up_mm,
             "z_feed_mm_min": self.z_feed_mm_min,
             "work_zero_command": self.work_zero_command,
+            "sample_step_mm": self.sample_step_mm,
+            "sample_reference_cell_mm": self.sample_reference_cell_mm,
+            "sample_density_exponent": self.sample_density_exponent,
+            "sample_min_step_mm": self.sample_min_step_mm,
+            "sample_max_step_mm": self.sample_max_step_mm,
+            "streaming_mode": self.streaming_mode,
             "updated_at": self.updated_at.isoformat(),
         }
 
@@ -436,6 +449,12 @@ class PlotterRuntimeConfig:
             z_up_mm=float(payload.get("z_up_mm", 0.0)),
             z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),
             work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0")),
+            sample_step_mm=float(payload.get("sample_step_mm", 1.0)),
+            sample_reference_cell_mm=float(payload.get("sample_reference_cell_mm", 80.0)),
+            sample_density_exponent=float(payload.get("sample_density_exponent", 1.0)),
+            sample_min_step_mm=float(payload.get("sample_min_step_mm", 0.25)),
+            sample_max_step_mm=float(payload.get("sample_max_step_mm", 3.0)),
+            streaming_mode=str(payload.get("streaming_mode", "row")),
             updated_at=datetime.fromisoformat(payload["updated_at"])
             if payload.get("updated_at")
             else utcnow(),

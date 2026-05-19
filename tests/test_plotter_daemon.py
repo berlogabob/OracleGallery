@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,6 +8,7 @@ from pathlib import Path
 from neje_oracle.config import PlotterSettings
 from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
 from neje_oracle.origin_markers import origin_allowed
+from unittest.mock import patch
 from neje_oracle.plotter_daemon import PlotterDaemon
 from neje_oracle.store import OracleRuntimeStore, PlotterStore
 from neje_oracle.transport import FluidNCTransport
@@ -496,3 +498,144 @@ def _command_threshold_for_cell_start(gcode: str, *, cell_offset: int) -> int:
 
 def _sendable_command_count(gcode: str) -> int:
     return sum(1 for line in gcode.splitlines() if line.strip() and not line.strip().startswith(";"))
+
+
+def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        placeholder_root=placeholder_root,
+        sheet_width_mm=200.0,
+        sheet_height_mm=200.0,
+        sheet_margin_mm=0.0,
+        cell_diameter_mm=200.0,
+        sample_step_mm=1.0,
+        sample_reference_cell_mm=80.0,
+        sample_density_exponent=1.0,
+        sample_min_step_mm=0.25,
+        sample_max_step_mm=3.0,
+        streaming_mode="row",
+    )
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository()
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport)
+    sample_steps: list[float] = []
+
+    def fake_generate_sheet_gcode(*args, **kwargs):
+        sample_steps.append(kwargs["sample_step_mm"])
+        return "G21\n; cell-start 0/1\nG0 X0 Y0\n"
+
+    with patch("neje_oracle.plotter_daemon.generate_sheet_gcode", side_effect=fake_generate_sheet_gcode):
+        daemon.run_cycle()
+
+    assert sample_steps
+    assert all(step == 0.4 for step in sample_steps)
+    assert daemon.get_state().status == RuntimeStatus.PAUSED
+
+def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        placeholder_root=placeholder_root,
+        sheet_width_mm=200.0,
+        sheet_height_mm=200.0,
+        sheet_margin_mm=0.0,
+        cell_diameter_mm=200.0,
+        sample_step_mm=1.0,
+        sample_density_exponent=2.0,
+        sample_reference_cell_mm=80.0,
+        sample_min_step_mm=0.1,
+        sample_max_step_mm=10.0,
+        streaming_mode="row",
+    )
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository()
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon.run_cycle()
+
+    manifests = sorted(settings.spool_root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    assert manifests, "No manifest written by daemon"
+    manifest_payload = json.loads(manifests[0].read_text())
+    assert manifest_payload["sample_step_mm"] == 1.0
+    assert manifest_payload["sample_density_exponent"] == 2.0
+    assert manifest_payload["sample_reference_cell_mm"] == 80.0
+    assert manifest_payload["sample_min_step_mm"] == 0.1
+    assert manifest_payload["sample_max_step_mm"] == 10.0
+    assert abs(manifest_payload["effective_sample_step_mm"] - 0.16) < 1e-9
+    assert manifest_payload["streaming_mode"] == "row"
+
+
+def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        placeholder_root=placeholder_root,
+        sheet_width_mm=240,
+        sheet_height_mm=80,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="grid",
+        streaming_mode="cell",
+    )
+    store = PlotterStore(settings.db_path)
+    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository(
+        [
+            PlotJobLease(
+                session_id="real_user",
+                title="real",
+                summary="",
+                created_at=datetime.now(tz=UTC),
+                priority="user",
+                queue="user",
+                svg_storage_path="sessions/real/artwork.svg",
+                svg_url="",
+                origin="real_macmini",
+                tags=["real"],
+            ),
+            PlotJobLease(
+                session_id="filler_cloud",
+                title="filler",
+                summary="",
+                created_at=datetime.now(tz=UTC),
+                priority="filler",
+                queue="filler",
+                svg_storage_path="sessions/filler/artwork.svg",
+                svg_url="",
+                origin="filler_macbook",
+                tags=["filler", "local", "macbook"],
+            ),
+        ]
+    )
+    transport = FluidNCTransport(settings)
+    daemon = PlotterDaemon(settings, store, remote, transport)
+
+    daemon.run_cycle()
+
+    cell_files = sorted(settings.spool_root.glob("*_cell_*.gcode"))
+    assert len(cell_files) == 3
+    manifest_payload = json.loads(next(settings.spool_root.glob("sheet_*.json")).read_text(encoding="utf-8"))
+    assert manifest_payload["streaming_mode"] == "cell"
+    assert len(manifest_payload["cells"]) == 3
+    assert [cell["status"] for cell in manifest_payload["cells"]] == ["printed", "printed", "printed"]
+    assert manifest_payload["cells"][0]["item"]["session_id"] == "real_user"
+    assert manifest_payload["cells"][0]["item"]["source_kind"] == "user"
+    assert manifest_payload["cells"][1]["item"]["session_id"] == "filler_cloud"
+    assert manifest_payload["cells"][1]["item"]["source_kind"] == "placeholder"
+    assert manifest_payload["cells"][2]["item"]["origin"] == "filler_macbook"
+    assert ("real_user", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
+    assert ("filler_cloud", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
+    assert daemon.get_state().status == RuntimeStatus.PAUSED
