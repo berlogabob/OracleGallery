@@ -26,18 +26,15 @@ void main() {
     }
   });
 
-  test(
-    'oldest placement sits at the square center when there is one center cell',
-    () {
-      final one = buildClothGridLayout(1);
-      expect(one.placements.first.row, 0);
-      expect(one.placements.first.column, 0);
-
-      final threeByThree = buildClothGridLayout(5);
-      expect(threeByThree.placements.first.row, 1);
-      expect(threeByThree.placements.first.column, 1);
-    },
-  );
+  test('cloth fills row by row inside the current square', () {
+    final five = buildClothGridLayout(5);
+    expect(
+      five.filledPlacements.map(
+        (placement) => (placement.row, placement.column),
+      ),
+      [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)],
+    );
+  });
 
   test('partial squares expose faint future cells', () {
     final five = buildClothGridLayout(5);
@@ -55,5 +52,11 @@ void main() {
       7,
       8,
     ]);
+    expect(
+      five.futurePlacements.map(
+        (placement) => (placement.row, placement.column),
+      ),
+      [(1, 2), (2, 0), (2, 1), (2, 2)],
+    );
   });
 }

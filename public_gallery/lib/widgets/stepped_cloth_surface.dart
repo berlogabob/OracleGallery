@@ -85,7 +85,7 @@ class _ClothHitTarget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final center = geometry.centerFor(placement);
-    final targetSize = math.max(36.0, geometry.cell * 0.78);
+    final targetSize = math.max(36.0, geometry.cell * 0.94);
     return Positioned(
       left: center.dx - targetSize / 2,
       top: center.dy - targetSize / 2,
@@ -180,7 +180,7 @@ class _SteppedClothPainter extends CustomPainter {
 
     for (final placement in layout.futurePlacements) {
       final center = geometry.centerFor(placement);
-      final radius = geometry.cell * 0.23;
+      final radius = geometry.cell * 0.39;
       final path = Path()
         ..moveTo(center.dx, center.dy - radius)
         ..lineTo(center.dx + radius, center.dy)
@@ -199,7 +199,7 @@ class _SteppedClothPainter extends CustomPainter {
     bool highlighted,
   ) {
     final center = geometry.centerFor(placement);
-    final radius = geometry.cell * (highlighted ? 0.39 : 0.32);
+    final radius = geometry.cell * (highlighted ? 0.48 : 0.46);
     final hash = _stableHash(
       session.markName.isNotEmpty ? session.markName : session.sessionId,
     );
@@ -227,7 +227,7 @@ class _SteppedClothPainter extends CustomPainter {
       );
     }
 
-    _paintGlyph(canvas, center, radius * 0.72, hash, fiberPaint);
+    _paintGlyph(canvas, center, radius * 0.66, hash, fiberPaint);
   }
 
   void _paintGlyph(
