@@ -4,12 +4,14 @@ import '../models/session_data.dart';
 
 class SessionRepository {
   SessionRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
   Stream<SessionData?> watchSession(String sessionId) {
-    return _firestore.collection('sessions').doc(sessionId).snapshots().map((doc) {
+    return _firestore.collection('sessions').doc(sessionId).snapshots().map((
+      doc,
+    ) {
       if (!doc.exists) {
         return null;
       }
@@ -25,12 +27,10 @@ class SessionRepository {
     return SessionData.fromDoc(doc);
   }
 
-  Stream<List<SessionData>> watchVisibleSessions({int limit = 150}) {
-    return _firestore
-        .collection('sessions')
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
+  Stream<List<SessionData>> watchVisibleSessions({int limit = 500}) {
+    return _firestore.collection('sessions').limit(limit).snapshots().map((
+      snapshot,
+    ) {
       final sessions = snapshot.docs
           .map(SessionData.fromDoc)
           .where((session) => session.isPublished && session.isPublicInLibrary)
@@ -41,11 +41,9 @@ class SessionRepository {
   }
 
   Stream<List<SessionData>> watchAllSessions({int limit = 300}) {
-    return _firestore
-        .collection('sessions')
-        .limit(limit)
-        .snapshots()
-        .map((snapshot) {
+    return _firestore.collection('sessions').limit(limit).snapshots().map((
+      snapshot,
+    ) {
       final sessions = snapshot.docs.map(SessionData.fromDoc).toList();
       sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return sessions;
