@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Any, Callable, Iterator
+from typing import Any, Callable
 
 from nicegui import ui
 
@@ -16,16 +15,6 @@ STATUS_COLORS = {
     ComponentStatus.OFFLINE: "#7a6f66",
     ComponentStatus.STOPPED: "#7a6f66",
 }
-
-
-@contextmanager
-def oracle_card(title: str, icon: str = "") -> Iterator[Any]:
-    with ui.card().classes("oracle-card compact-card w-full"):
-        with ui.row().classes("items-center gap-2"):
-            if icon:
-                ui.icon(icon).classes("text-[#8f4f2b]")
-            ui.label(title).classes("text-sm font-bold")
-        yield
 
 
 def status_pill(label: str) -> Any:
@@ -54,10 +43,6 @@ def safe_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     return ui.button(label, on_click=on_click).props("dense flat")
 
 
-def mode_badge() -> Any:
-    return ui.label("-").classes("mode-badge")
-
-
 def warning_banner(text: str) -> Any:
     return ui.label(text).classes("warning-banner")
 
@@ -80,26 +65,6 @@ def number_control(
     control.on("dblclick", lambda _: _reset_control(control, default, on_change))
     if tooltip:
         control.tooltip(tooltip)
-    fields[key] = control
-    return control
-
-
-def slider_control(
-    fields: dict[str, Any],
-    key: str,
-    *,
-    label: str,
-    value: float,
-    default: float,
-    min_value: float,
-    max_value: float,
-    step: float,
-    on_change: Callable[[], Any],
-) -> Any:
-    ui.label(label).classes("text-xs text-[#8f4f2b]")
-    control = ui.slider(min=min_value, max=max_value, step=step, value=value).props("dense").classes("w-full tight-slider")
-    control.on_value_change(on_change)
-    control.on("dblclick", lambda _: _reset_control(control, default, on_change))
     fields[key] = control
     return control
 

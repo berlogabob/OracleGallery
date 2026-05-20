@@ -49,12 +49,40 @@
 #define ILABEL_PRINT_WIDTH_DOTS 576
 #endif
 
+#ifndef ILABEL_MARGIN_ROWS
+#define ILABEL_MARGIN_ROWS 40
+#endif
+
+#ifndef ILABEL_TRAILING_MARGIN_ROWS
+#define ILABEL_TRAILING_MARGIN_ROWS (ILABEL_MARGIN_ROWS * 2)
+#endif
+
 #ifndef ILABEL_BLE_MTU
 #define ILABEL_BLE_MTU ((ILABEL_PRINT_WIDTH_DOTS / 8) + 34)
 #endif
 
 #ifndef ILABEL_FLOW_TIMEOUT_MS
 #define ILABEL_FLOW_TIMEOUT_MS 2500
+#endif
+
+#ifndef BOOT_TEST_PRINT_ENABLED
+#define BOOT_TEST_PRINT_ENABLED 1
+#endif
+
+#ifndef BOOT_TEST_PRINT_DELAY_MS
+#define BOOT_TEST_PRINT_DELAY_MS 5000
+#endif
+
+#ifndef BOOT_TEST_PRINT_RETRY_MS
+#define BOOT_TEST_PRINT_RETRY_MS 10000
+#endif
+
+#ifndef BOOT_TEST_PRINT_MAX_ATTEMPTS
+#define BOOT_TEST_PRINT_MAX_ATTEMPTS 6
+#endif
+
+#ifndef BOOT_TEST_PRINT_MESSAGE
+#define BOOT_TEST_PRINT_MESSAGE "ORACLE PRINTER READY"
 #endif
 
 WebServer server(HTTP_PORT);
@@ -69,10 +97,19 @@ String bleNotifyHex;
 uint32_t bleNotifyPackets = 0;
 #endif
 
+String pendingIlabelRasterRle;
+uint16_t pendingIlabelRasterWidth = 0;
+uint16_t pendingIlabelRasterHeight = 0;
 uint32_t lastWifiCheckMs = 0;
+uint32_t nextBootTestPrintMs = 0;
+uint8_t bootTestPrintAttempts = 0;
+bool bootTestPrinted = false;
+bool bootTestPrintExhausted = false;
 
 void connectWiFi();
 void setupHttpServer();
+void scheduleBootTestPrint();
+void handleBootTestPrint();
 void handleRoot();
 void handleStatus();
 void handleConnect();
@@ -80,6 +117,9 @@ void handleWake();
 void handleTestPrint();
 void handleRaw();
 void handleIlabelTest();
+void handleIlabelRasterBegin();
+void handleIlabelRasterChunk();
+void handleIlabelRasterPrint();
 void handleProbePrint();
 void handlePrint();
 void handleNotFound();
@@ -105,6 +145,7 @@ String buildCatProbePayload(const String& protocol);
 uint8_t catCrc8(const uint8_t* data, size_t len);
 bool sendIlabelProbe(const String& protocol, String& error, String& notifyHex, uint32_t& notifyPackets);
 bool sendIlabelText(const String& text, String& error);
+bool sendIlabelRasterRle(const char* encoded, uint16_t sourceWidth, uint16_t height, String& error);
 bool writeIlabelByte(uint8_t value, bool withResponse = false);
 bool writeIlabelHeader(uint16_t height, uint16_t offset, uint8_t state, uint8_t paperType, uint8_t density, bool withResponse = false);
 bool writeIlabelRow(uint16_t offset, const uint8_t* row, size_t rowLen, bool withResponse = false);
@@ -117,6 +158,7 @@ bool waitForBleNotification(const char* prefix, uint32_t timeoutMs);
 #endif
 String buildReceiptText(JsonDocument& doc);
 bool printReceipt(JsonDocument& doc, const String& protocol, String& error);
+bool printIlabelReceipt(JsonDocument& doc, String& error);
 bool printEscposReceipt(JsonDocument& doc, String& error);
 void printLine(const String& line);
 void printWrapped(const String& text, uint8_t width = 32);
@@ -128,6 +170,7 @@ String escapeLabelText(const String& input);
 String themesToText(JsonVariant themes);
 String measureToText(JsonVariant measures, const char* key);
 bool decodeBase64ToPrinter(const char* encoded, String& error);
+bool decodeBase64Alloc(const char* encoded, uint8_t*& decoded, size_t& decodedLen, String& error, const char* label);
 bool decodeHexToBytes(const String& hex, uint8_t*& bytes, size_t& len, String& error);
 int hexValue(char c);
 void setStatusLed(bool on);
@@ -159,10 +202,12 @@ void setup() {
 
   setupHttpServer();
   Serial.printf("HTTP server ready on port %d\n", HTTP_PORT);
+  scheduleBootTestPrint();
 }
 
 void loop() {
   server.handleClient();
+  handleBootTestPrint();
 
   const uint32_t now = millis();
   if (now - lastWifiCheckMs > 5000) {
@@ -175,6 +220,58 @@ void loop() {
       setStatusLed(true);
     }
   }
+}
+
+void scheduleBootTestPrint() {
+#if BOOT_TEST_PRINT_ENABLED
+  nextBootTestPrintMs = millis() + BOOT_TEST_PRINT_DELAY_MS;
+  bootTestPrintAttempts = 0;
+  bootTestPrinted = false;
+  bootTestPrintExhausted = false;
+  Serial.printf("Boot test print scheduled in %lu ms\n", static_cast<unsigned long>(BOOT_TEST_PRINT_DELAY_MS));
+#else
+  nextBootTestPrintMs = 0;
+  bootTestPrintAttempts = 0;
+  bootTestPrinted = false;
+  bootTestPrintExhausted = true;
+  Serial.println("Boot test print disabled");
+#endif
+}
+
+void handleBootTestPrint() {
+#if BOOT_TEST_PRINT_ENABLED
+  if (bootTestPrinted || bootTestPrintExhausted) {
+    return;
+  }
+
+  const uint32_t now = millis();
+  if (static_cast<int32_t>(now - nextBootTestPrintMs) < 0) {
+    return;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    nextBootTestPrintMs = now + BOOT_TEST_PRINT_RETRY_MS;
+    Serial.println("Boot test print waiting for Wi-Fi");
+    return;
+  }
+
+  bootTestPrintAttempts++;
+  String error;
+  Serial.printf("Boot test print attempt %u/%u\n", bootTestPrintAttempts, static_cast<unsigned int>(BOOT_TEST_PRINT_MAX_ATTEMPTS));
+  if (sendIlabelText(String(BOOT_TEST_PRINT_MESSAGE), error)) {
+    bootTestPrinted = true;
+    Serial.println("Boot test print complete");
+    return;
+  }
+
+  Serial.printf("Boot test print failed: %s\n", error.c_str());
+  if (bootTestPrintAttempts >= BOOT_TEST_PRINT_MAX_ATTEMPTS) {
+    bootTestPrintExhausted = true;
+    Serial.println("Boot test print attempts exhausted");
+    return;
+  }
+  nextBootTestPrintMs = now + BOOT_TEST_PRINT_RETRY_MS;
+#endif
 }
 
 void connectWiFi() {
@@ -206,6 +303,9 @@ void setupHttpServer() {
   server.on("/test-print", HTTP_POST, handleTestPrint);
   server.on("/raw", HTTP_POST, handleRaw);
   server.on("/ilabel-test", HTTP_POST, handleIlabelTest);
+  server.on("/ilabel-raster-begin", HTTP_POST, handleIlabelRasterBegin);
+  server.on("/ilabel-raster-chunk", HTTP_POST, handleIlabelRasterChunk);
+  server.on("/ilabel-raster-print", HTTP_POST, handleIlabelRasterPrint);
   server.on("/probe-print", HTTP_POST, handleProbePrint);
   server.on("/print", HTTP_POST, handlePrint);
   server.onNotFound(handleNotFound);
@@ -223,6 +323,9 @@ void handleRoot() {
     "POST /test-print?protocol=escpos\n"
     "POST /raw JSON {\"hex\":\"...\"}\n"
     "POST /ilabel-test?protocol=ilabel-status\n"
+    "POST /ilabel-raster-begin?width=576&height=1000\n"
+    "POST /ilabel-raster-chunk?data=...\n"
+    "POST /ilabel-raster-print\n"
     "POST /probe-print\n"
     "POST /print JSON receipt\n"
   );
@@ -244,7 +347,21 @@ void handleStatus() {
   body += USE_CLASSIC_SPP ? "classic" : "ble";
   body += "\",\"default_protocol\":\"";
   body += PRINTER_DEFAULT_PROTOCOL;
-  body += "\",\"write_char\":\"";
+  body += "\",\"boot_test\":\"";
+#if BOOT_TEST_PRINT_ENABLED
+  if (bootTestPrinted) {
+    body += "printed";
+  } else if (bootTestPrintExhausted) {
+    body += "exhausted";
+  } else {
+    body += "pending";
+  }
+#else
+  body += "disabled";
+#endif
+  body += "\",\"boot_test_attempts\":";
+  body += String(bootTestPrintAttempts);
+  body += ",\"write_char\":\"";
 #if USE_CLASSIC_SPP
   body += "classic";
 #else
@@ -466,6 +583,64 @@ void handleIlabelTest() {
   server.send(200, "application/json", response);
 }
 
+void handleIlabelRasterBegin() {
+  pendingIlabelRasterRle = "";
+  pendingIlabelRasterWidth = static_cast<uint16_t>(server.hasArg("width") ? server.arg("width").toInt() : ILABEL_PRINT_WIDTH_DOTS);
+  pendingIlabelRasterHeight = static_cast<uint16_t>(server.hasArg("height") ? server.arg("height").toInt() : 0);
+  const uint32_t expected = server.hasArg("length") ? static_cast<uint32_t>(server.arg("length").toInt()) : 0;
+  if (pendingIlabelRasterWidth == 0 || pendingIlabelRasterWidth > ILABEL_PRINT_WIDTH_DOTS || pendingIlabelRasterWidth % 8 != 0 || pendingIlabelRasterHeight == 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"invalid raster dimensions\"}");
+    return;
+  }
+  if (expected > 0) {
+    pendingIlabelRasterRle.reserve(expected + 8);
+  }
+  String response = "{\"ok\":true,\"width\":";
+  response += String(pendingIlabelRasterWidth);
+  response += ",\"height\":";
+  response += String(pendingIlabelRasterHeight);
+  response += "}";
+  server.send(200, "application/json", response);
+}
+
+void handleIlabelRasterChunk() {
+  if (pendingIlabelRasterWidth == 0 || pendingIlabelRasterHeight == 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"call /ilabel-raster-begin first\"}");
+    return;
+  }
+  if (!server.hasArg("data")) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"missing data chunk\"}");
+    return;
+  }
+  pendingIlabelRasterRle += server.arg("data");
+  String response = "{\"ok\":true,\"received\":";
+  response += String(static_cast<unsigned long>(pendingIlabelRasterRle.length()));
+  response += "}";
+  server.send(200, "application/json", response);
+}
+
+void handleIlabelRasterPrint() {
+  if (pendingIlabelRasterWidth == 0 || pendingIlabelRasterHeight == 0 || pendingIlabelRasterRle.length() == 0) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"no pending iLabel raster\"}");
+    return;
+  }
+
+  String error;
+  const bool ok = sendIlabelRasterRle(pendingIlabelRasterRle.c_str(), pendingIlabelRasterWidth, pendingIlabelRasterHeight, error);
+  if (!ok) {
+    String response = "{\"ok\":false,\"error\":\"";
+    response += jsonEscape(error);
+    response += "\"}";
+    server.send(503, "application/json", response);
+    return;
+  }
+
+  pendingIlabelRasterRle = "";
+  pendingIlabelRasterWidth = 0;
+  pendingIlabelRasterHeight = 0;
+  server.send(200, "application/json", "{\"ok\":true,\"printed\":true,\"protocol\":\"ilabel-raster\"}");
+}
+
 void handleProbePrint() {
   struct ProbePayload {
     const char* name;
@@ -611,12 +786,12 @@ void handlePrint() {
   }
 
   String body = server.arg("plain");
-  if (body.length() > 60000) {
+  if (body.length() > 120000) {
     server.send(413, "application/json", "{\"ok\":false,\"error\":\"JSON body too large\"}");
     return;
   }
 
-  DynamicJsonDocument doc(65536);
+  DynamicJsonDocument doc(131072);
   DeserializationError jsonError = deserializeJson(doc, body);
   if (jsonError) {
     String error = "{\"ok\":false,\"error\":\"invalid JSON: ";
@@ -627,6 +802,11 @@ void handlePrint() {
   }
 
   String protocol = cleanProtocolName(server.hasArg("protocol") ? server.arg("protocol") : PRINTER_DEFAULT_PROTOCOL);
+  const String sessionUrl = cleanText(doc["session_url"] | "");
+  if (!sessionUrl.length()) {
+    server.send(400, "application/json", "{\"ok\":false,\"error\":\"missing session_url for mandatory receipt QR\"}");
+    return;
+  }
   String error;
   if (!printReceipt(doc, protocol, error)) {
     String response = "{\"ok\":false,\"error\":\"";
@@ -1024,7 +1204,8 @@ bool sendIlabelText(const String& text, String& error) {
   if (lineCount == 0) {
     lineCount = wrapIlabelText("ESP32 OK", lines, maxLines, charsPerLine);
   }
-  const uint16_t height = topMargin + (lineCount * lineHeight) + bottomMargin;
+  const uint16_t contentHeight = topMargin + (lineCount * lineHeight) + bottomMargin;
+  const uint16_t height = contentHeight + ILABEL_MARGIN_ROWS + ILABEL_TRAILING_MARGIN_ROWS;
   constexpr size_t rowBytes = ILABEL_PRINT_WIDTH_DOTS / 8;
   uint8_t row[rowBytes];
 
@@ -1064,12 +1245,171 @@ bool sendIlabelText(const String& text, String& error) {
 #endif
 
   for (uint16_t y = 0; y < height; y++) {
-    buildIlabelTextRow(lines, lineCount, y, row, rowBytes, scale);
+    if (y < ILABEL_MARGIN_ROWS || y >= ILABEL_MARGIN_ROWS + contentHeight) {
+      memset(row, 0x00, rowBytes);
+    } else {
+      buildIlabelTextRow(lines, lineCount, y - ILABEL_MARGIN_ROWS, row, rowBytes, scale);
+    }
     if (!writeIlabelRow(y, row, rowBytes)) {
       error = "failed to write iLabel text row";
       return false;
     }
     delay(20);
+  }
+
+  delay(400);
+  writeIlabelByte(0x01);
+  delay(800);
+  return true;
+}
+
+bool sendIlabelRasterRle(const char* encoded, uint16_t sourceWidth, uint16_t height, String& error) {
+  if (!connectPrinter()) {
+    error = "printer not connected";
+    return false;
+  }
+  if (!encoded || !strlen(encoded)) {
+    error = "missing receipt_raster_rle_base64 for iLabel receipt";
+    return false;
+  }
+  if (sourceWidth == 0 || sourceWidth > ILABEL_PRINT_WIDTH_DOTS || sourceWidth % 8 != 0 || height == 0) {
+    error = "invalid iLabel raster dimensions";
+    return false;
+  }
+
+  uint8_t* rle = nullptr;
+  size_t rleLen = 0;
+  if (!decodeBase64Alloc(encoded, rle, rleLen, error, "receipt_raster_rle_base64")) {
+    return false;
+  }
+  if (rleLen == 0 || rleLen % 2 != 0) {
+    free(rle);
+    error = "invalid iLabel RLE raster";
+    return false;
+  }
+
+  const uint8_t paperType = 1;
+  const uint8_t density = 39;
+  constexpr size_t targetRowBytes = ILABEL_PRINT_WIDTH_DOTS / 8;
+  const size_t sourceRowBytes = sourceWidth / 8;
+  const size_t byteOffset = (targetRowBytes - sourceRowBytes) / 2;
+  uint8_t row[targetRowBytes];
+  memset(row, 0x00, sizeof(row));
+
+#if !USE_CLASSIC_SPP
+  if (!ensureBleMtu(targetRowBytes + 4 + 3)) {
+    free(rle);
+    error = "failed to negotiate iLabel BLE MTU";
+    return false;
+  }
+#endif
+
+  if (!writeIlabelByte(0x04)) {
+    free(rle);
+    error = "failed to write iLabel cancel before raster";
+    return false;
+  }
+  delay(300);
+
+  if (!writeIlabelByte(0x01)) {
+    free(rle);
+    error = "failed to write iLabel status before raster";
+    return false;
+  }
+  delay(500);
+
+#if !USE_CLASSIC_SPP
+  clearBleNotifications();
+#endif
+  const uint16_t totalHeight = height + ILABEL_MARGIN_ROWS + ILABEL_TRAILING_MARGIN_ROWS;
+  if (!writeIlabelHeader(totalHeight, 0, 0, paperType, density)) {
+    free(rle);
+    error = "failed to write iLabel raster header";
+    return false;
+  }
+#if !USE_CLASSIC_SPP
+  if (!waitForBleNotification("A5", ILABEL_FLOW_TIMEOUT_MS)) {
+    free(rle);
+    error = "printer did not acknowledge iLabel raster header";
+    return false;
+  }
+#else
+  delay(250);
+#endif
+
+  uint16_t y = 0;
+  for (; y < ILABEL_MARGIN_ROWS; y++) {
+    bool rowOk = false;
+    memset(row, 0x00, sizeof(row));
+    for (uint8_t attempt = 0; attempt < 3 && !rowOk; attempt++) {
+      rowOk = writeIlabelRow(y, row, sizeof(row));
+      if (!rowOk) {
+        delay(60);
+      }
+    }
+    if (!rowOk) {
+      free(rle);
+      error = "failed to write iLabel leading margin row ";
+      error += String(y);
+      return false;
+    }
+    delay(22);
+  }
+
+  uint16_t contentRows = 0;
+  size_t sourceByte = 0;
+  for (size_t i = 0; i < rleLen && contentRows < height; i += 2) {
+    uint8_t count = rle[i];
+    const uint8_t value = rle[i + 1];
+    while (count-- && contentRows < height) {
+      if (sourceByte < sourceRowBytes) {
+        row[byteOffset + sourceByte] = value;
+      }
+      sourceByte++;
+      if (sourceByte >= sourceRowBytes) {
+        bool rowOk = false;
+        for (uint8_t attempt = 0; attempt < 3 && !rowOk; attempt++) {
+          rowOk = writeIlabelRow(y, row, sizeof(row));
+          if (!rowOk) {
+            delay(60);
+          }
+        }
+        if (!rowOk) {
+          free(rle);
+          error = "failed to write iLabel raster row ";
+          error += String(contentRows);
+          return false;
+        }
+        delay(22);
+        y++;
+        contentRows++;
+        sourceByte = 0;
+        memset(row, 0x00, sizeof(row));
+      }
+    }
+  }
+  free(rle);
+
+  if (contentRows != height || sourceByte != 0) {
+    error = "iLabel RLE raster ended before expected height";
+    return false;
+  }
+
+  for (uint16_t tail = 0; tail < ILABEL_TRAILING_MARGIN_ROWS; tail++, y++) {
+    bool rowOk = false;
+    memset(row, 0x00, sizeof(row));
+    for (uint8_t attempt = 0; attempt < 3 && !rowOk; attempt++) {
+      rowOk = writeIlabelRow(y, row, sizeof(row));
+      if (!rowOk) {
+        delay(60);
+      }
+    }
+    if (!rowOk) {
+      error = "failed to write iLabel trailing margin row ";
+      error += String(tail);
+      return false;
+    }
+    delay(22);
   }
 
   delay(400);
@@ -1449,9 +1789,20 @@ bool printReceipt(JsonDocument& doc, const String& protocol, String& error) {
     return printEscposReceipt(doc, error);
   }
   if (cleanProtocol == "ilabel" || cleanProtocol == "ilabel-text") {
-    return sendIlabelText(buildReceiptText(doc), error);
+    return printIlabelReceipt(doc, error);
   }
   return sendProtocolText(cleanProtocol, buildReceiptText(doc), error);
+}
+
+bool printIlabelReceipt(JsonDocument& doc, String& error) {
+  const char* raster = doc["receipt_raster_rle_base64"] | "";
+  const uint16_t width = doc["ilabel_width_dots"] | ILABEL_PRINT_WIDTH_DOTS;
+  const uint16_t height = doc["ilabel_height_dots"] | 0;
+  if (!strlen(raster)) {
+    error = "missing receipt_raster_rle_base64; iLabel receipt requires full raster QR output";
+    return false;
+  }
+  return sendIlabelRasterRle(raster, width, height, error);
 }
 
 bool printEscposReceipt(JsonDocument& doc, String& error) {
@@ -1462,6 +1813,9 @@ bool printEscposReceipt(JsonDocument& doc, String& error) {
 
   const String sessionId = cleanText(doc["session_id"] | "");
   const String markName = cleanText(doc["mark_name"] | "");
+  const String title = cleanText(doc["receipt_title"] | "ORACLE");
+  const String subtitle = cleanText(doc["subtitle"] | "THE ORACLE THAT WEARS US");
+  const String symbolLabel = cleanText(doc["symbol_label"] | markName);
   const String oracleText = cleanText(doc["oracle_text"] | "");
   const String sessionUrl = cleanText(doc["session_url"] | "");
   const String themes = themesToText(doc["themes"]);
@@ -1476,12 +1830,19 @@ bool printEscposReceipt(JsonDocument& doc, String& error) {
   const uint8_t boldOff[] = {0x1B, 0x45, 0x00};
   const uint8_t feed[] = {0x0A};
 
+  const char* fullRasterBytes = doc["receipt_escpos_base64"] | "";
+  if (strlen(fullRasterBytes) > 0) {
+    printerWrite(initCommand, sizeof(initCommand));
+    return decodeBase64ToPrinter(fullRasterBytes, error);
+  }
+
   printerWrite(initCommand, sizeof(initCommand));
   printerWrite(alignCenter, sizeof(alignCenter));
   printerWrite(boldOn, sizeof(boldOn));
-  printLine("THE ORACLE SPEAKS");
+  printLine(title);
   printerWrite(boldOff, sizeof(boldOff));
-  printLine("------------------------------");
+  printLine(subtitle);
+  printLine("SESSION " + sessionId);
 
   const char* symbolBytes = doc["symbol_escpos_base64"] | "";
   if (strlen(symbolBytes) > 0) {
@@ -1494,28 +1855,35 @@ bool printEscposReceipt(JsonDocument& doc, String& error) {
 
   printerWrite(alignLeft, sizeof(alignLeft));
   printLine("");
-  printLine("Session: " + sessionId);
-  printLine("Symbol: " + markName);
+  printLine(symbolLabel.length() ? symbolLabel : markName);
   printLine("");
+  printLine("WHAT THE ORACLE PERCEIVED");
   printWrapped(oracleText);
   printLine("");
-  printWrapped("Themes: " + themes);
-
+  printLine("WHAT THE SYSTEM MEASURED");
   if (intensity.length() || instability.length() || confidence.length()) {
-    printLine("");
-    printLine("Voice measures:");
     if (intensity.length()) printLine("Intensity: " + intensity);
     if (instability.length()) printLine("Instability: " + instability);
     if (confidence.length()) printLine("Confidence: " + confidence);
   }
+  printLine("");
+  printLine("THEMES");
+  printWrapped(themes.length() ? themes : "none");
 
   if (sessionUrl.length()) {
     printLine("");
-    printLine("Open your mark:");
+    printLine("VIEW YOUR MARK ONLINE");
     printerWrite(alignCenter, sizeof(alignCenter));
-    printQr(sessionUrl);
+    const char* qrBytes = doc["qr_escpos_base64"] | "";
+    if (strlen(qrBytes) > 0) {
+      if (!decodeBase64ToPrinter(qrBytes, error)) {
+        return false;
+      }
+    } else {
+      printQr(sessionUrl);
+    }
     printerWrite(alignLeft, sizeof(alignLeft));
-    printWrapped(sessionUrl);
+    printWrapped(sessionId);
   }
 
   printLine("");
@@ -1702,28 +2070,42 @@ String measureToText(JsonVariant measures, const char* key) {
 }
 
 bool decodeBase64ToPrinter(const char* encoded, String& error) {
-  const size_t encodedLen = strlen(encoded);
-  const size_t maxDecodedLen = (encodedLen * 3) / 4 + 4;
-  uint8_t* decoded = static_cast<uint8_t*>(malloc(maxDecodedLen));
-  if (!decoded) {
-    error = "not enough memory for symbol bitmap";
-    return false;
-  }
-
+  uint8_t* decoded = nullptr;
   size_t decodedLen = 0;
-  const int rc = mbedtls_base64_decode(decoded, maxDecodedLen, &decodedLen, reinterpret_cast<const unsigned char*>(encoded), encodedLen);
-  if (rc != 0) {
-    free(decoded);
-    error = "invalid symbol_escpos_base64";
+  if (!decodeBase64Alloc(encoded, decoded, decodedLen, error, "base64 printer bytes")) {
     return false;
   }
 
   const bool ok = printerWrite(decoded, decodedLen);
   free(decoded);
   if (!ok) {
-    error = "failed to write symbol bitmap";
+    error = "failed to write decoded printer bytes";
   }
   return ok;
+}
+
+bool decodeBase64Alloc(const char* encoded, uint8_t*& decoded, size_t& decodedLen, String& error, const char* label) {
+  decoded = nullptr;
+  decodedLen = 0;
+  const size_t encodedLen = strlen(encoded);
+  const size_t maxDecodedLen = (encodedLen * 3) / 4 + 4;
+  decoded = static_cast<uint8_t*>(malloc(maxDecodedLen));
+  if (!decoded) {
+    error = "not enough memory for ";
+    error += label;
+    return false;
+  }
+
+  const int rc = mbedtls_base64_decode(decoded, maxDecodedLen, &decodedLen, reinterpret_cast<const unsigned char*>(encoded), encodedLen);
+  if (rc != 0) {
+    free(decoded);
+    decoded = nullptr;
+    decodedLen = 0;
+    error = "invalid ";
+    error += label;
+    return false;
+  }
+  return true;
 }
 
 bool decodeHexToBytes(const String& hex, uint8_t*& bytes, size_t& len, String& error) {

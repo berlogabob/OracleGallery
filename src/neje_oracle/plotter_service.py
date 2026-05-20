@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from .config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
 from .firebase_io import FirebaseRemoteRepository
-from .models import HealthResponse, ReloadResponse
+from .models import HealthResponse, OperatorResponse
 from .plotter_daemon import PlotterDaemon
 from .store import OracleRuntimeStore, PlotterStore
 from .transport import FluidNCTransport
@@ -49,41 +49,21 @@ def create_app() -> FastAPI:
         state.update(app.state.store.load_control_state().to_dict())
         return HealthResponse(ok=True, status=state["status"], detail=state)
 
-    @app.post("/operator/reload", response_model=ReloadResponse)
-    def reload_sheet() -> ReloadResponse:
-        app.state.daemon.confirm_reload()
-        return ReloadResponse(ok=True, status="reloaded")
-
-    @app.post("/operator/start", response_model=ReloadResponse)
-    def start_print() -> ReloadResponse:
+    @app.post("/operator/start", response_model=OperatorResponse)
+    def start_print() -> OperatorResponse:
         control = app.state.store.load_control_state()
         control.print_enabled = True
         control.operator_paused = False
         app.state.store.save_control_state(control)
-        return ReloadResponse(ok=True, status="print_enabled")
-
-    @app.post("/operator/stop", response_model=ReloadResponse)
-    def stop_print() -> ReloadResponse:
-        control = app.state.store.load_control_state()
-        control.print_enabled = False
-        control.operator_paused = True
-        app.state.store.save_control_state(control)
-        return ReloadResponse(ok=True, status="operator_paused")
+        return OperatorResponse(ok=True, status="print_enabled")
 
     @app.get("/", response_class=HTMLResponse)
     def dashboard() -> str:
         state = app.state.daemon.get_state().to_dict()
         control = app.state.store.load_control_state().to_dict()
-        reload_button = (
-            "<form method='post' action='/operator/reload'><button type='submit'>Confirm reload</button></form>"
-            if state["pending_reload"]
-            else ""
-        )
-        start_stop = (
-            "<form method='post' action='/operator/stop'><button type='submit'>Stop after sheet</button></form>"
-            if control["print_enabled"]
-            else "<form method='post' action='/operator/start'><button type='submit'>Start print</button></form>"
-        )
+        start_button = ""
+        if not control["print_enabled"]:
+            start_button = "<form method='post' action='/operator/start'><button type='submit'>Start print</button></form>"
         return f"""
         <html>
           <head>
@@ -104,8 +84,7 @@ def create_app() -> FastAPI:
               <p>Mode: <code>{control["run_mode"]}</code>, dry-run: <code>{control["dry_run"]}</code></p>
               <p>Current sheet: <code>{state["current_sheet_id"] or "-"}</code></p>
               <p>Last gcode: <code>{state["last_sheet_path"] or "-"}</code></p>
-              {start_stop}
-              {reload_button}
+              {start_button}
             </div>
           </body>
         </html>

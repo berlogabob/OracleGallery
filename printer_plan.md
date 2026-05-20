@@ -1,5 +1,7 @@
 # Hermes Plan: Thermal Printer Receipt
 
+Status: implemented 2026-05-20. See `reports/THERMAL_PRINTER_ACCEPTANCE.md`, `reports/thermal_acceptance_preview.png`, and `reports/thermal_acceptance_payload.json`.
+
 ## Summary
 - Build a simplified physical receipt for the thermal printer based on the current digital receipt design.
 - Do not print the persona image.

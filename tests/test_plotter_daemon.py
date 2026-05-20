@@ -9,8 +9,9 @@ from neje_oracle.config import PlotterSettings
 from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
 from neje_oracle.origin_markers import origin_allowed
 from unittest.mock import patch
-from neje_oracle.plotter_daemon import PlotterDaemon
+from neje_oracle.plotter_daemon import PlotterDaemon, _apply_current_mark_scale, _materialize_scaled_placeholder
 from neje_oracle.store import OracleRuntimeStore, PlotterStore
+from neje_oracle.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
 from neje_oracle.transport import FluidNCTransport
 
 
@@ -19,6 +20,13 @@ SVG = (
     "<path d='M10,10 L90,10 L90,90 L10,90 Z' stroke='black' fill='none'/>"
     "</svg>"
 )
+
+
+def _write_scale_config(symbol_root: Path, payload: dict[str, float]) -> Path:
+    symbol_root.mkdir(parents=True, exist_ok=True)
+    scale_path = symbol_root / "symbol_scales.json"
+    scale_path.write_text(json.dumps(payload), encoding="utf-8")
+    return scale_path
 
 
 class FakeRemoteRepository:
@@ -74,7 +82,44 @@ def _settings(tmp_path: Path) -> PlotterSettings:
     )
 
 
-def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
+def test_materialize_scaled_placeholder_applies_symbol_scale_config(tmp_path: Path) -> None:
+    symbol_root = tmp_path / "symbols"
+    symbol_path = symbol_root / "kind.svg"
+    symbol_root.mkdir(parents=True)
+    symbol_path.write_text(SVG, encoding="utf-8")
+    scale_path = _write_scale_config(symbol_root, {"kind.svg": 1.75})
+
+    with patch("neje_oracle.plotter_daemon._scale_config_path", return_value=scale_path):
+        cached = _materialize_scaled_placeholder(symbol_path, tmp_path / "cache")
+
+    metadata = read_normalized_svg_metadata(cached)
+    assert metadata.normalized is True
+    assert metadata.scale == 1.75
+
+
+def test_apply_current_mark_scale_overrides_downloaded_normalized_svg(tmp_path: Path) -> None:
+    symbol_root = tmp_path / "symbols"
+    symbol_path = symbol_root / "test_the_kind_soul_220047_plotter.svg"
+    symbol_root.mkdir(parents=True)
+    symbol_path.write_text(SVG, encoding="utf-8")
+    scale_path = _write_scale_config(symbol_root, {"test_the_kind_soul_220047_plotter.svg": 1.8})
+    downloaded_svg = tmp_path / "downloaded.svg"
+    downloaded_svg.write_text(normalize_svg_file(symbol_path, scale=1.0), encoding="utf-8")
+
+    with (
+        patch("neje_oracle.plotter_daemon._symbol_root", return_value=symbol_root),
+        patch("neje_oracle.plotter_daemon._scale_config_path", return_value=scale_path),
+    ):
+        _apply_current_mark_scale(downloaded_svg, "THE KIND SOUL")
+
+    metadata = read_normalized_svg_metadata(downloaded_svg)
+    assert metadata.scale == 1.8
+    text = downloaded_svg.read_text(encoding="utf-8")
+    assert 'data-neje-single-stroke="true"' in text
+    assert 'data-neje-simplify-mm="0.02"' in text
+
+
+def test_plotter_finishes_sheet_and_stops_before_next_sheet(tmp_path: Path) -> None:
     placeholder_root = tmp_path / "placeholders"
     placeholder_root.mkdir(parents=True)
     (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
@@ -113,8 +158,10 @@ def test_plotter_finishes_sheet_and_pauses_for_reload(tmp_path: Path) -> None:
     gcode_files = list((tmp_path / "spool").glob("*.gcode"))
     assert len(gcode_files) > 1
     state = daemon.get_state()
-    assert state.status == RuntimeStatus.PAUSED
-    assert state.pending_reload is True
+    assert state.status == RuntimeStatus.OPERATOR_PAUSED
+    control = store.load_control_state()
+    assert control.print_enabled is False
+    assert control.operator_paused is True
     assert state.gcode_progress_percent == 100.0
     assert state.sheet_progress_percent == 100.0
     assert state.rows_completed == state.row_count
@@ -144,7 +191,7 @@ def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Pat
 
     gcode_files = list((tmp_path / "spool").glob("*.gcode"))
     assert gcode_files
-    assert daemon.get_state().status == RuntimeStatus.PAUSED
+    assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
 
 
 def test_plotter_stops_before_next_sheet_when_operator_disabled(tmp_path: Path) -> None:
@@ -200,7 +247,6 @@ def test_plotter_transport_failure_does_not_mark_job_printed(tmp_path: Path) -> 
     assert ("session_fail", PlotStatus.FAILED.value, daemon.get_state().current_sheet_id) in remote.updates
     assert all(update[1] != PlotStatus.PRINTED.value for update in remote.updates)
     assert oracle_store.load_print_control().print_enabled is False
-    assert oracle_store.load_real_fluidnc_armed() is False
 
 
 def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> None:
@@ -220,6 +266,11 @@ def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> No
             sheet_margin_mm=0,
             cell_diameter_mm=80,
             gap_mm=20,
+            organic_enabled=True,
+            organic_cell_size_mm=12,
+            organic_rotation_ramp=1,
+            organic_scale_ramp=0.5,
+            organic_seed=99,
             run_mode="test",
             dry_run=True,
         )
@@ -234,6 +285,13 @@ def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> No
     assert '"layout_mode": "grid"' in manifest
     assert '"cell_diameter_mm": 80' in manifest
     assert '"gap_mm": 20' in manifest
+    assert '"organic_enabled": true' in manifest
+    assert '"organic_cell_size_mm": 12' in manifest
+    assert '"organic_rotation_ramp": 1' in manifest
+    assert '"organic_scale_ramp": 0.5' in manifest
+    assert '"organic_seed": 99' in manifest
+    assert '"rotation_deg":' in manifest
+    assert '"symbol_scale":' in manifest
 
 
 def test_plotter_writes_explicit_post_sheet_safety_gcode(tmp_path: Path) -> None:
@@ -535,7 +593,7 @@ def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
 
     assert sample_steps
     assert all(step == 0.4 for step in sample_steps)
-    assert daemon.get_state().status == RuntimeStatus.PAUSED
+    assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
 
 def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
     placeholder_root = tmp_path / "placeholders"
@@ -554,6 +612,7 @@ def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
         sample_reference_cell_mm=80.0,
         sample_min_step_mm=0.1,
         sample_max_step_mm=10.0,
+        xy_acceleration_mm_s2=75.0,
         streaming_mode="row",
     )
     store = PlotterStore(settings.db_path)
@@ -573,6 +632,7 @@ def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
     assert manifest_payload["sample_max_step_mm"] == 10.0
     assert abs(manifest_payload["effective_sample_step_mm"] - 0.16) < 1e-9
     assert manifest_payload["streaming_mode"] == "row"
+    assert manifest_payload["xy_acceleration_mm_s2"] == 75.0
 
 
 def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: Path) -> None:
@@ -638,4 +698,4 @@ def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: P
     assert manifest_payload["cells"][2]["item"]["origin"] == "filler_macbook"
     assert ("real_user", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
     assert ("filler_cloud", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
-    assert daemon.get_state().status == RuntimeStatus.PAUSED
+    assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED

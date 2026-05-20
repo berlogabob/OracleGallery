@@ -126,7 +126,7 @@ class FluidNCTransport:
         result.controller = controller
         result.last_response = "\n".join(line for line in [status_response, *modal.response_lines] if line)
         result.last_error = "" if modal.ok else modal.message
-        result.ok = result.telnet_online and controller.state != FluidNCState.UNKNOWN and modal.ok
+        result.ok = result.telnet_online and controller.state != FluidNCState.UNKNOWN
         result.message = self._probe_message(result)
         return result
 
@@ -311,7 +311,10 @@ class FluidNCTransport:
         conn.settimeout(timeout_seconds)
         try:
             try:
-                return conn.recv(4096).decode("utf-8", "replace")
+                data = conn.recv(4096)
+                if not data:
+                    raise ConnectionAbortedError("Connection closed by FluidNC")
+                return data.decode("utf-8", "replace")
             except socket.timeout:
                 return ""
         finally:

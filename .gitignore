@@ -15,6 +15,7 @@ firebase/serviceAccountKey.json
 .vscode/
 build/
 coverage/
+dist/
 runtime/
 sessions_raw/*
 !sessions_raw/.gitkeep
@@ -38,4 +39,5 @@ __pycache__/
 *.flac
 *.zip
 hermes_conversation_*.json
+macos_launchers/
 ESP32-BTN_Printer/**/config.local.h

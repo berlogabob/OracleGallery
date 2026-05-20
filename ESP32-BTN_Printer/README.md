@@ -151,6 +151,9 @@ The ESP32 accepts:
 {
   "session_id": "20260505_155503",
   "mark_name": "THE SKY EYE",
+  "receipt_title": "ORACLE",
+  "subtitle": "THE ORACLE THAT WEARS US",
+  "symbol_label": "THE SKY EYE",
   "oracle_text": "You value the journey's end.",
   "themes": ["time", "barrier", "absence"],
   "measures": {
@@ -159,9 +162,17 @@ The ESP32 accepts:
     "confidence": 0.8
   },
   "session_url": "https://berlogabob.github.io/OracleGallery/#/session/20260505_155503",
-  "symbol_escpos_base64": "optional ESC/POS raster bytes"
+  "qr_required": true,
+  "persona_image_allowed": false,
+  "symbol_escpos_base64": "optional ESC/POS symbol raster bytes",
+  "qr_escpos_base64": "ESC/POS QR raster fallback bytes",
+  "receipt_raster_rle_base64": "required compact full-raster receipt for ilabel",
+  "ilabel_width_dots": 576,
+  "ilabel_height_dots": 1000
 }
 ```
+
+`session_url` is required. `/print` rejects receipt payloads without it because the physical receipt must include a QR code to the public session route. Persona images are intentionally excluded from thermal output.
 
 Test with curl:
 
@@ -174,16 +185,20 @@ curl -X POST "http://<esp32-ip>/print" \
 Generate a payload from the reference session:
 
 ```bash
-uv run python ESP32-BTN_Printer/tools/send_receipt.py --dry-run
+uv run python ESP32-BTN_Printer/tools/send_receipt.py assets/sessions/20260518_154452 \
+  --dry-run \
+  --preview-png reports/thermal_preview.png
 ```
 
 Send a real receipt:
 
 ```bash
-uv run python ESP32-BTN_Printer/tools/send_receipt.py assets/sessions/20260505_155503 --esp32 http://<esp32-ip>
+uv run python ESP32-BTN_Printer/tools/send_receipt.py assets/sessions/20260518_154452 \
+  --protocol ilabel \
+  --esp32 http://<esp32-ip>
 ```
 
-The helper reads `*_receipt.txt`, optional `*_receipt.csv`, and the session `*_plotter.svg`. It rasterizes the SVG on the Mac and sends ESC/POS bytes as base64 so the ESP32 does not need SVG support.
+The helper reads `*_receipt.txt`, optional `*_receipt.csv`, and the session `*_plotter.svg`. It renders a black-on-white thermal receipt on the Mac, including symbol and QR, then sends either ESC/POS fallback rasters or the compact iLabel full-raster receipt payload.
 
 When the ESP32 is on a phone hotspot and its IP can change, use the scanner helper:
 
@@ -193,7 +208,8 @@ uv run python ESP32-BTN_Printer/tools/printer_connect.py wake
 uv run python ESP32-BTN_Printer/tools/printer_connect.py test
 uv run python ESP32-BTN_Printer/tools/printer_connect.py probe
 uv run python ESP32-BTN_Printer/tools/printer_connect.py sample
-uv run python ESP32-BTN_Printer/tools/printer_connect.py receipt assets/sessions/20260505_155503
+uv run python ESP32-BTN_Printer/tools/printer_connect.py receipt assets/sessions/20260518_154452 --dry-run
+uv run python ESP32-BTN_Printer/tools/printer_connect.py receipt assets/sessions/20260518_154452 --preview-png reports/thermal_preview.png
 ```
 
 If auto-discovery cannot determine the hotspot subnet, pass it explicitly:
@@ -249,7 +265,7 @@ The cat-printer probes are for app-driven pocket printers that ignore plain ESC/
 
 The iLabel probes come from the official VSON app code path for WP9509:
 
-- `ilabel`: print wrapped raster text on continuous 57 mm roll paper
+- `ilabel`: print full-raster receipt payloads on continuous 57 mm roll paper, or wrapped raster text for `/test-print`
 - `ilabel-status`: write `01` and collect notify bytes
 - `ilabel-info`: write `AC` and collect notify bytes
 - `ilabel-cancel`: write `04`
@@ -280,7 +296,7 @@ POST /test-print?protocol=escpos print a small test using raw/escpos/tspl/cpcl/z
 POST /raw      write raw hex bytes and report notify bytes, for replaying captured app traffic
 POST /ilabel-test?protocol=ilabel-status run one official-app-style iLabel probe
 POST /probe-print try BLE chars/common protocols and report notify bytes
-POST /print?protocol=escpos print receipt JSON
+POST /print?protocol=ilabel print receipt JSON; requires session_url and receipt_raster_rle_base64 for iLabel
 ```
 
 Raw replay helper:

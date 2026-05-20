@@ -27,6 +27,7 @@ neje-generate-sessions = "neje_oracle.session_generator:main"
 neje-gui = "neje_oracle.gui_service:main"
 neje-normalize-firebase-sessions = "neje_oracle.firebase_svg_normalizer:main"
 neje-uploader-agent = "neje_oracle.uploader_agent_service:main"
+neje-thermal-autoprint = "neje_oracle.thermal_autoprint_service:main"
 
 [build-system]
 requires = ["hatchling>=1.27.0"]
@@ -37,3 +38,9 @@ packages = ["src/neje_oracle"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "radon>=6.0.1",
+]

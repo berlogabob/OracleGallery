@@ -7,8 +7,7 @@ from .models import PlotterControlState, PlotterRuntimeConfig, SystemMode
 
 MODE_LABELS = {
     SystemMode.TEST: "TEST",
-    SystemMode.EXHIBITION_DRY: "EXHIBITION DRY",
-    SystemMode.EXHIBITION_REAL: "EXHIBITION REAL",
+    SystemMode.EXHIBITION: "EXHIBITION",
 }
 
 
@@ -19,7 +18,8 @@ class ModePolicy:
     run_mode: str
     dry_run: bool
     test_tools_enabled: bool
-    real_fluidnc_required: bool
+    real_output_required: bool
+    firebase_required: bool
 
 
 def mode_policy(mode: SystemMode | str) -> ModePolicy:
@@ -31,16 +31,8 @@ def mode_policy(mode: SystemMode | str) -> ModePolicy:
             run_mode="test",
             dry_run=False,
             test_tools_enabled=True,
-            real_fluidnc_required=False,
-        )
-    if resolved == SystemMode.EXHIBITION_DRY:
-        return ModePolicy(
-            mode=resolved,
-            label=MODE_LABELS[resolved],
-            run_mode="exhibition",
-            dry_run=True,
-            test_tools_enabled=False,
-            real_fluidnc_required=False,
+            real_output_required=True,
+            firebase_required=False,
         )
     return ModePolicy(
         mode=resolved,
@@ -48,7 +40,8 @@ def mode_policy(mode: SystemMode | str) -> ModePolicy:
         run_mode="exhibition",
         dry_run=False,
         test_tools_enabled=False,
-        real_fluidnc_required=True,
+        real_output_required=True,
+        firebase_required=True,
     )
 
 

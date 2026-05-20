@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
-from nicegui import ui
+from nicegui import run, ui
 
 from .gui_modes import mode_policy
 from .gui_ui import (
@@ -22,9 +24,7 @@ from .gui_support import (
     GUI_DEFAULTS,
     build_preview_svg,
     build_realtime_preview_svg,
-    confirm_plotter_reload,
-    create_next_filler_upload_from_gui,
-    create_user_sessions_from_gui,
+    compute_effective_sample_step,
     effective_randomness,
     generate_dry_run_sheet,
     gui_settings_to_plotter_config,
@@ -34,6 +34,7 @@ from .gui_support import (
     load_symbol_scales,
     read_plotter_status,
     read_queue_status,
+    read_upload_event_payload,
     save_gui_settings,
     save_oracle_plotter_config,
     save_symbol_scales,
@@ -51,25 +52,29 @@ def build_page() -> None:
     fields: dict[str, Any] = {}
     plotter_labels: dict[str, Any] = {}
     queue_labels: dict[str, Any] = {}
+    thermal_printer_labels: dict[str, Any] = {}
     fluidnc_labels: dict[str, Any] = {}
+    gcode_labels: dict[str, Any] = {}
     ready_labels: dict[str, Any] = {}
     node_pills: dict[str, Any] = {}
-    arm_buttons: list[Any] = []
-    real_output_labels: list[Any] = []
-    cycle_state = {"index": 0}
+    uploaded_svg: dict[str, Any] = {"name": "", "bytes": b""}
     supervisor = SupervisorService()
     valid_workspaces = {"connection", "calibration", "tests", "work", "exhibition"}
     saved_workspace = str(supervisor.runtime_store.load_json("gui_workspace", {"tab": "connection"}).get("tab", "connection"))
     active_workspace = {"value": saved_workspace if saved_workspace in valid_workspaces else "connection"}
+    saved_preview_mode = str(supervisor.runtime_store.load_json("gui_preview_mode", {"mode": "preview"}).get("mode", "preview"))
+    preview_mode = {"value": saved_preview_mode if saved_preview_mode in {"preview", "printing"} else "preview"}
+    repo_root = Path(__file__).resolve().parents[2]
+    printer_connect_script = repo_root / "ESP32-BTN_Printer" / "tools" / "printer_connect.py"
 
     ui.colors(primary="#1f1a17", secondary="#9a5b24", accent="#c7a45a")
     ui.add_head_html(
         """
         <style>
-          body { background: #f7f1e7; color: #1f1a17; overflow: hidden; }
+          body { background: #f7f1e7; color: #1f1a17; overflow: auto; }
           .q-field__control { min-height: 40px !important; }
           .q-field__label { font-size: 12px; }
-          .oracle-shell { height: 100vh; max-height: 100vh; overflow: hidden; }
+          .oracle-shell { min-height: 100vh; overflow: visible; }
           .oracle-card {
             background: rgba(255, 252, 245, 0.94);
             border: 1px solid #dac9ad;
@@ -92,7 +97,7 @@ def build_page() -> None:
             font-weight: 700;
           }
           .workspace-tabs .q-tab--active { color: #8f4f2b; }
-          .workspace-panel { height: calc(100vh - 104px); overflow: hidden; }
+          .workspace-panel { min-height: calc(100vh - 104px); }
           .workspace-scroll {
             max-height: calc(100vh - 120px);
             overflow-y: auto;
@@ -118,6 +123,17 @@ def build_page() -> None:
           .legend-dot { width: 9px; height: 9px; border-radius: 999px; border: 1px solid #1f1a17; display: inline-block; flex: 0 0 auto; }
           .legend-ring { width: 15px; height: 15px; border-radius: 999px; border: 1.5px solid #1f1a17; display: inline-block; flex: 0 0 auto; }
           .legend-double-ring { box-shadow: inset 0 0 0 3px #fbf7ef, inset 0 0 0 4.4px #1f1a17; }
+          @media (min-width: 1200px) {
+            body { overflow: hidden; }
+            .oracle-shell { height: 100vh; max-height: 100vh; overflow: hidden; }
+            .workspace-panel { height: calc(100vh - 104px); overflow: hidden; }
+          }
+          @media (max-width: 1199px) {
+            .workspace-grid { grid-template-columns: 1fr !important; height: auto !important; overflow: visible !important; }
+            .workspace-scroll { max-height: none; overflow: visible; padding-right: 0; }
+            .preview-frame svg { max-height: 70vh; }
+            .path-label { max-width: 100%; white-space: normal; }
+          }
         </style>
         """
     )
@@ -127,10 +143,13 @@ def build_page() -> None:
         settings.layout_mode = str(fields["layout_mode"].value)
         settings.cell_diameter_mm = float(fields["cell_diameter_mm"].value or 1)
         settings.gap_mm = float(fields["gap_mm"].value or 0)
+        settings.organic_enabled = bool(fields["organic_enabled"].value)
+        settings.organic_cell_size_mm = float(fields["organic_cell_size_mm"].value or 0)
+        settings.organic_rotation_ramp = float(fields["organic_rotation_ramp"].value or 0)
+        settings.organic_scale_ramp = float(fields["organic_scale_ramp"].value or 0)
+        settings.organic_seed = int(float(fields["organic_seed"].value or GUI_DEFAULTS["organic_seed"]))
         settings.randomness = float(fields["randomness"].value or 0)
         settings.randomness_fine = float(fields["randomness_fine"].value or 0)
-        settings.live_interval_seconds = float(fields["live_interval_seconds"].value or 1)
-        settings.selected_symbol = str(fields["selected_symbol"].value)
         settings.include_rings = bool(fields["include_rings"].value)
         settings.include_markers = bool(fields["include_markers"].value)
         settings.marker_diameter_mm = float(fields["marker_diameter_mm"].value or 1.5)
@@ -151,40 +170,48 @@ def build_page() -> None:
         settings.global_scale = float(fields["global_scale"].value or 1)
         settings.travel_rate = float(fields["travel_rate"].value or 1)
         settings.draw_rate = float(fields["draw_rate"].value or 1)
+        settings.xy_acceleration_mm_s2 = float(fields["xy_acceleration_mm_s2"].value or 0)
         settings.z_down_mm = float(fields["z_down_mm"].value or 0)
         settings.z_up_mm = float(fields["z_up_mm"].value or 0)
         settings.z_feed_mm_min = float(fields["z_feed_mm_min"].value or 1)
+        settings.direct_svg_origin_x_mm = float(fields["direct_svg_origin_x_mm"].value or 0)
+        settings.direct_svg_origin_y_mm = float(fields["direct_svg_origin_y_mm"].value or 0)
 
     def persist_and_refresh() -> None:
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
-        preview.content = build_preview_svg(settings)
-        preview.update()
+        update_preview()
         capacity_label.set_text(f"{layout_capacity(settings)} cells")
-        policy = mode_policy(settings.mode)
-        real_warning.visible = policy.real_fluidnc_required
-        real_warning.update()
-        if not policy.real_fluidnc_required:
-            supervisor.runtime_store.save_real_fluidnc_armed(False)
-        armed = supervisor.runtime_store.load_real_fluidnc_armed()
-        real_output_text = "REAL OUTPUT ARMED" if armed else "DRY RUN - physical FluidNC output is off"
-        if policy.real_fluidnc_required and not armed:
-            real_output_text = "REAL MODE - press ENABLE REAL OUTPUT"
-        for label in real_output_labels:
-            label.set_text(real_output_text)
-        for button in arm_buttons:
-            button.enable()
-        if policy.real_fluidnc_required:
-            if armed:
-                start_print_button.enable()
-            else:
-                start_print_button.disable()
-        else:
-            start_print_button.enable()
-        live_timer.interval = max(settings.live_interval_seconds, 1.0)
+        update_gcode_detail_labels()
+        start_print_button.enable()
         refresh_status()
         refresh_component_status()
+
+    def update_gcode_detail_labels() -> None:
+        if not gcode_labels:
+            return
+        effective_step = compute_effective_sample_step(
+            sample_step_mm=settings.sample_step_mm,
+            cell_diameter_mm=settings.cell_diameter_mm,
+            sample_reference_cell_mm=settings.sample_reference_cell_mm,
+            sample_density_exponent=settings.sample_density_exponent,
+            sample_min_step_mm=settings.sample_min_step_mm,
+            sample_max_step_mm=settings.sample_max_step_mm,
+        )
+        points_per_100mm = 100.0 / max(effective_step, 0.001)
+        if effective_step <= 0.25:
+            load = "VERY FINE"
+        elif effective_step <= 0.75:
+            load = "FINE"
+        elif effective_step <= 1.5:
+            load = "NORMAL"
+        else:
+            load = "LIGHT"
+        gcode_labels["effective"].set_text(f"{effective_step:.2f} mm")
+        gcode_labels["points"].set_text(f"{points_per_100mm:.0f} pts / 100 mm")
+        gcode_labels["load"].set_text(load)
+        gcode_labels["limits"].set_text(f"{settings.sample_min_step_mm:g} to {settings.sample_max_step_mm:g} mm")
 
     def update_scales_from_fields() -> None:
         pull_settings_from_fields()
@@ -193,56 +220,87 @@ def build_page() -> None:
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
         save_symbol_scales(scales)
-        preview.content = build_preview_svg(settings)
-        preview.update()
+        update_preview()
 
-    def generate_user_sessions() -> None:
+    async def handle_svg_upload(event: Any) -> None:
+        try:
+            name, data = await read_upload_event_payload(event)
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(f"SVG upload failed: {exc}", color="negative")
+            return
+        if not data:
+            ui.notify("SVG upload failed: uploaded file is empty", color="negative")
+            return
+        uploaded_svg["name"] = name
+        uploaded_svg["bytes"] = data
+        uploaded_svg_label.set_text(f"Selected: {name}")
+        ui.notify(f"Selected SVG: {name}", color="positive")
+
+    async def print_uploaded_svg() -> None:
+        if not uploaded_svg["bytes"]:
+            ui.notify("Choose an SVG file first", color="warning")
+            return
         pull_settings_from_fields()
-        settings.user_count = 1
-        paths = create_user_sessions_from_gui(settings, start_index=cycle_state["index"])
-        cycle_state["index"] += len(paths)
         save_gui_settings(settings)
-        ui.notify("Generated 1 test session", color="positive")
-        last_user_output.set_text(str(paths[-1]) if paths else "-")
+        save_oracle_plotter_config(settings)
+        ui.notify("Printing SVG...", color="info")
+        state = await run.io_bound(
+            supervisor.print_uploaded_svg,
+            settings,
+            svg_bytes=uploaded_svg["bytes"],
+            original_name=str(uploaded_svg["name"] or "uploaded.svg"),
+        )
+        if state.status == ComponentStatus.STOPPED:
+            uploaded_svg["bytes"] = b""
+            uploaded_svg["name"] = ""
+            uploaded_svg_label.set_text("No SVG selected")
+            ui.notify(state.message, color="positive")
+        else:
+            ui.notify(state.last_error or state.message, color="negative" if state.status == ComponentStatus.ERROR else "warning")
+        refresh_status()
+        refresh_logs()
 
-    def generate_next_filler_upload() -> None:
-        pull_settings_from_fields()
-        paths = create_next_filler_upload_from_gui(settings, start_index=cycle_state["index"])
-        cycle_state["index"] += len(paths)
-        ui.notify("Generated 1 filler upload session", color="positive")
-        last_user_output.set_text(str(paths[-1]) if paths else "-")
-
-    def generate_dry_run() -> None:
+    async def generate_dry_run() -> None:
         pull_settings_from_fields()
         try:
-            output = generate_dry_run_sheet(settings)
+            output = await run.io_bound(generate_dry_run_sheet, settings)
         except Exception as exc:  # noqa: BLE001
             ui.notify(f"G-code generation failed: {exc}", color="negative")
             return
         ui.notify(f"G-code file: {output['gcode']}", color="positive")
         refresh_status()
 
+    def update_preview(status: dict[str, Any] | None = None, queue: dict[str, Any] | None = None) -> None:
+        if preview_mode["value"] == "printing":
+            status = status if status is not None else read_plotter_status()
+            queue = queue if queue is not None else read_queue_status(ttl_seconds=30.0)
+            preview.content = build_realtime_preview_svg(settings, status, queue)
+        else:
+            preview.content = build_preview_svg(
+                settings,
+                user_count=layout_capacity(settings),
+                idle_count=0,
+                randomize_symbols=True,
+            )
+        preview.update()
+
     def refresh_status() -> None:
         status = read_plotter_status()
-        queue = read_queue_status(ttl_seconds=2.0)
+        queue = read_queue_status(ttl_seconds=30.0)
         total = int(status.get("processed_symbols", 0) or 0)
         pending_users = int(queue.get("pendingUserAfterBaseline", queue.get("pendingAfterBaseline", 0)) or 0)
         progress_percent = float(status.get("sheet_progress_percent", status.get("gcode_progress_percent", 0.0)) or 0.0)
         current_row = int(status.get("current_row_index", 0) or 0)
         current_cell_in_row = int(status.get("current_cell_in_row", 0) or 0)
         row_cell_count = int(status.get("row_cell_count", 0) or 0)
-        preview.content = build_realtime_preview_svg(settings, status, queue)
-        preview.update()
+        update_preview(status, queue)
         progress.value = min(max(progress_percent / 100.0, 0.0), 1.0)
         print_enabled = bool(status.get("print_enabled"))
-        pending_reload = bool(status.get("pending_reload"))
         dry_run = bool(status.get("dry_run"))
         run_mode = str(status.get("run_mode", "-") or "-")
         status_text = str(status.get("status", "-") or "-").replace("_", " ")
         transport_text = "G-CODE ONLY" if dry_run else "FLUIDNC MOTION"
         print_text = "READY" if print_enabled else "STOPPED"
-        if pending_reload:
-            print_text = "WAITING FOR RELOAD"
         plotter_labels["state"].set_text(f"{status_text.upper()} · {print_text}")
         plotter_labels["mode"].set_text(f"{run_mode.upper()} · {transport_text}")
         plotter_labels["sheet"].set_text(str(status.get("current_sheet_id") or "no sheet yet"))
@@ -266,19 +324,17 @@ def build_page() -> None:
         readiness = supervisor.runtime_store.load_plotter_readiness()
         if ready_labels:
             ready_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
-            ready_labels["state"].set_text("READY" if readiness.plotter_ready else "NOT READY")
             ready_labels["message"].set_text(readiness.message)
-        preview_progress_label.set_text(
-            f"{status.get('status', '-')} | {progress_percent:.1f}% | "
-            f"pending real {pending_users} | "
-            f"row {current_row}/{status.get('row_count', 0)} | cell {current_cell_in_row}/{row_cell_count} | "
-            f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
-            f"{total}/{layout_capacity(settings)} cells in last sheet"
-        )
-        if status.get("pending_reload"):
-            reload_button.enable()
+        if preview_mode["value"] == "printing":
+            preview_progress_label.set_text(
+                f"{status.get('status', '-')} | {progress_percent:.1f}% | "
+                f"pending real {pending_users} | "
+                f"row {current_row}/{status.get('row_count', 0)} | cell {current_cell_in_row}/{row_cell_count} | "
+                f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
+                f"{total}/{layout_capacity(settings)} cells in last sheet"
+            )
         else:
-            reload_button.disable()
+            preview_progress_label.set_text(f"preview tuning | random symbols | {layout_capacity(settings)} cells")
         refresh_component_status()
 
     def refresh_component_status() -> None:
@@ -290,21 +346,21 @@ def build_page() -> None:
             update_status_pill(node_pills["queue"], states.get("queue"), "Queue")
             update_status_pill(node_pills["print"], states.get("print"), "Print")
 
-    def start_system() -> None:
+    async def start_system() -> None:
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
-        supervisor.start_system(gui_settings_to_plotter_config(settings))
+        await run.io_bound(supervisor.start_system, gui_settings_to_plotter_config(settings))
         ui.notify("System supervisor started in safe mode", color="positive")
         refresh_status()
 
-    def stop_system() -> None:
-        supervisor.stop_system()
+    async def stop_system() -> None:
+        await run.io_bound(supervisor.stop_system)
         ui.notify("System stopped safely", color="warning")
         refresh_status()
 
-    def reset_baseline() -> None:
-        state = supervisor.reset_run_baseline()
+    async def reset_baseline() -> None:
+        state = await run.io_bound(supervisor.reset_run_baseline)
         ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
         refresh_status()
 
@@ -315,7 +371,7 @@ def build_page() -> None:
         save_oracle_plotter_config(settings)
         supervisor.set_system_mode(settings.mode)
         if notify:
-            ui.notify(f"Mode set to {mode_policy(settings.mode).label}. REAL FluidNC disarmed.", color="warning")
+            ui.notify(f"Mode set to {mode_policy(settings.mode).label}.", color="warning")
         refresh_status()
 
     def workspace_changed(value: Any) -> None:
@@ -328,17 +384,23 @@ def build_page() -> None:
                 set_system_mode(SystemMode.TEST, notify=False)
             return
         if settings.mode == SystemMode.TEST:
-            set_system_mode(SystemMode.EXHIBITION_DRY, notify=False)
+            set_system_mode(SystemMode.EXHIBITION, notify=False)
+
+    def preview_mode_changed(value: Any) -> None:
+        mode = str(value or "preview")
+        preview_mode["value"] = mode if mode in {"preview", "printing"} else "preview"
+        supervisor.runtime_store.save_json("gui_preview_mode", {"mode": preview_mode["value"]})
+        update_preview()
 
     def restore_workspace() -> None:
         workspace_tabs.value = active_workspace["value"]
         workspace_tabs.update()
 
-    def run_system_check(*, notify_success: bool = False) -> bool:
+    async def run_system_check(*, notify_success: bool = False) -> bool:
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
-        result = supervisor.run_preflight(settings)
+        result = await run.io_bound(supervisor.run_preflight, settings)
         refresh_system_check_result()
         refresh_component_status()
         refresh_logs()
@@ -361,69 +423,52 @@ def build_page() -> None:
         ok_count = sum(1 for check in result.checks if check.level == PreflightLevel.OK)
         system_check_label.set_text(f"System check: {critical} blocked · {warnings} warnings · {ok_count} ok")
 
-    def arm_real_fluidnc() -> None:
-        settings.system_mode = SystemMode.EXHIBITION_REAL.value
-        settings.apply_system_mode()
-        save_gui_settings(settings)
-        save_oracle_plotter_config(settings)
-        supervisor.set_system_mode(settings.mode)
-        state = supervisor.arm_real_fluidnc(settings.mode)
-        persist_and_refresh()
-        color = "positive" if supervisor.runtime_store.load_real_fluidnc_armed() else "warning"
-        ui.notify(state.message, color=color)
-
-    def confirm_reload() -> None:
-        if confirm_plotter_reload():
-            ui.notify("Reload confirmed", color="positive")
-        else:
-            ui.notify("No reload confirmation is pending")
-        refresh_status()
-
-    def start_print() -> None:
+    async def start_print() -> None:
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
-        if read_plotter_status().get("pending_reload"):
-            ui.notify("Plotter is waiting for reload confirmation. Press RELOAD OK before START PRINT.", color="warning")
+        ui.notify("Checking plotter before START PRINT...", color="info")
+        if not await run_system_check():
             refresh_status()
             return
-        if not run_system_check():
-            refresh_status()
-            return
-        plotter_state = supervisor.start_plotter(gui_settings_to_plotter_config(settings))
+        plotter_state = await run.io_bound(supervisor.start_plotter, gui_settings_to_plotter_config(settings))
         if plotter_state.status == ComponentStatus.ERROR:
             ui.notify(f"Cannot start: {plotter_state.last_error or plotter_state.message}", color="negative")
             refresh_status()
             refresh_logs()
             return
-        state = supervisor.start_print(settings.mode)
+        state = await run.io_bound(supervisor.start_print, settings.mode)
         color = "positive" if state.status == ComponentStatus.RUNNING else "warning"
         ui.notify(state.message, color=color)
         refresh_status()
 
-    def start_test_print() -> None:
+    async def start_test_print() -> None:
         set_system_mode(SystemMode.TEST, notify=False)
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
-        if not run_system_check():
+        ui.notify("Checking FluidNC before TEST PRINT...", color="info")
+        probe = await run.io_bound(supervisor.probe_fluidnc, scan=False)
+        update_fluidnc_labels({**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port})
+        supervisor.check_fluidnc(probe)
+        if not (probe.online and probe.controller.is_idle):
+            ui.notify("FluidNC must be connected and Idle before START TEST PRINT.", color="warning")
+            refresh_status()
+            refresh_logs()
             return
-        plotter_state = supervisor.start_plotter(gui_settings_to_plotter_config(settings))
+        if not await run_system_check():
+            return
+        plotter_state = await run.io_bound(supervisor.start_plotter, gui_settings_to_plotter_config(settings))
         if plotter_state.status == ComponentStatus.ERROR:
             ui.notify(f"Cannot start test print: {plotter_state.last_error or plotter_state.message}", color="negative")
             refresh_status()
             refresh_logs()
             return
-        state = supervisor.start_print(settings.mode)
+        state = await run.io_bound(supervisor.start_print, settings.mode)
         color = "positive" if state.status == ComponentStatus.RUNNING else "warning"
         ui.notify(f"TEST PRINT: {state.message}", color=color)
         refresh_status()
         refresh_logs()
-
-    def stop_print() -> None:
-        state = supervisor.stop_print()
-        ui.notify(state.message, color="warning")
-        refresh_status()
 
     def set_work_zero() -> None:
         confirm_action(
@@ -432,22 +477,25 @@ def build_page() -> None:
             lambda: fluidnc_action("set work zero", supervisor.set_work_zero),
         )
 
-    def ready_check() -> None:
-        confirm_action(
-            "READY CHECK",
-            "Returns to G54 X0 Y0 without homing, then checks FluidNC Idle. Confirm only when the machine is clear.",
-            lambda: fluidnc_action("ready check", supervisor.ready_check, refresh_probe=False),
-        )
-
-    def check_fluidnc() -> None:
-        probe = supervisor.probe_fluidnc()
-        supervisor.check_fluidnc()
+    async def check_fluidnc(*, scan: bool = False) -> None:
+        ui.notify("Checking FluidNC...", color="info")
+        try:
+            probe = await run.io_bound(supervisor.probe_fluidnc, scan=scan)
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(f"FluidNC check failed: {exc}", color="negative")
+            refresh_logs()
+            restore_workspace()
+            return
+        supervisor.check_fluidnc(probe)
         result = {**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port}
         color = "positive" if probe.online else "negative"
         update_fluidnc_labels(result)
         ui.notify(probe.message, color=color)
         refresh_logs()
         restore_workspace()
+
+    async def scan_fluidnc() -> None:
+        await check_fluidnc(scan=True)
 
     def update_fluidnc_labels(result: dict[str, Any]) -> None:
         fluidnc_labels["webui"].set_text("online" if result.get("http_online") else "offline")
@@ -464,42 +512,74 @@ def build_page() -> None:
         with ui.dialog() as dialog, ui.card().classes("oracle-card"):
             ui.label(title).classes("text-sm font-bold")
             ui.label(message).classes("text-xs text-[#8f4f2b]")
+
+            async def confirmed() -> None:
+                dialog.close()
+                try:
+                    result = action()
+                    if hasattr(result, "__await__"):
+                        await result
+                except Exception as exc:  # noqa: BLE001
+                    ui.notify(f"{title} failed: {exc}", color="negative")
+                    refresh_status()
+                    refresh_logs()
+
             with ui.row().classes("gap-2"):
                 ui.button("Cancel", on_click=dialog.close).props("dense flat")
-                ui.button("Confirm", on_click=lambda: (dialog.close(), action())).props("dense color=warning")
+                ui.button("Confirm", on_click=confirmed).props("dense color=warning")
         dialog.open()
 
-    def fluidnc_action(label: str, action: Any, *, refresh_probe: bool = True) -> None:
-        state = action()
+    async def fluidnc_action(label: str, action: Any, *, refresh_probe: bool = True) -> None:
+        ui.notify(f"Sending {label}...", color="info")
+        try:
+            state = await run.io_bound(action)
+        except Exception as exc:  # noqa: BLE001
+            ui.notify(f"{label} failed: {exc}", color="negative")
+            refresh_status()
+            refresh_logs()
+            restore_workspace()
+            return
         ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
         if refresh_probe:
-            check_fluidnc()
+            await check_fluidnc(scan=False)
         refresh_status()
         refresh_logs()
         restore_workspace()
 
-    def home_all() -> None:
-        confirm_action("HOME ALL", "The plotter will run FluidNC homing command $H. Confirm only if the machine is physically clear.", lambda: fluidnc_action("home", lambda: supervisor.home_fluidnc(), refresh_probe=False))
+    def home_xy() -> None:
+        confirm_action("HOME XY", "The plotter will run FluidNC homing command $H=XY. Z/pen homing is separate.", lambda: fluidnc_action("home xy", supervisor.home_xy_fluidnc, refresh_probe=False))
 
     def home_axis(axis: str) -> None:
         confirm_action(f"HOME {axis}", f"Single-axis homing sends $H={axis}. Use only if this FluidNC config supports it.", lambda: fluidnc_action(f"home {axis}", lambda: supervisor.home_fluidnc(axis), refresh_probe=False))
 
-    def jog(axis: str, sign: float) -> None:
+    async def jog(axis: str, sign: float) -> None:
         distance = sign * float(fields["jog_step"].value or 1)
         feed = float(fields["jog_feed"].value or 1000)
-        fluidnc_action(f"jog {axis}", lambda: supervisor.jog_fluidnc(axis, distance, feed), refresh_probe=False)
+        await fluidnc_action(f"jog {axis}", lambda: supervisor.jog_fluidnc(axis, distance, feed), refresh_probe=False)
 
-    def pen_up() -> None:
-        fluidnc_action("pen up", supervisor.pen_up_fluidnc, refresh_probe=False)
+    async def jog_x_negative() -> None:
+        await jog("X", -1)
 
-    def pen_down() -> None:
-        fluidnc_action("pen down", supervisor.pen_down_fluidnc, refresh_probe=False)
+    async def jog_x_positive() -> None:
+        await jog("X", 1)
+
+    async def jog_y_negative() -> None:
+        await jog("Y", -1)
+
+    async def jog_y_positive() -> None:
+        await jog("Y", 1)
+
+    async def pen_up() -> None:
+        await fluidnc_action("pen up", supervisor.pen_up_fluidnc, refresh_probe=False)
+
+    async def pen_down() -> None:
+        await fluidnc_action("pen down", supervisor.pen_down_fluidnc, refresh_probe=False)
 
     def unlock_alarm() -> None:
         confirm_action("UNLOCK ALARM", "This sends $X. It clears FluidNC alarm state without moving the machine.", lambda: fluidnc_action("unlock", supervisor.unlock_fluidnc_alarm))
 
-    def emergency_stop() -> None:
-        state = supervisor.emergency_stop_fluidnc()
+    async def emergency_stop() -> None:
+        state = await run.io_bound(supervisor.emergency_stop_fluidnc)
         ui.notify(state.message, color="negative")
         refresh_status()
         refresh_logs()
@@ -510,36 +590,86 @@ def build_page() -> None:
     def soft_reset() -> None:
         confirm_action("SOFT RESET / ABORT", "This sends Ctrl-X and disables print. Use only to abort/reset FluidNC.", lambda: fluidnc_action("soft reset", supervisor.soft_reset_fluidnc))
 
-    def toggle_live() -> None:
-        pull_settings_from_fields()
-        live_timer.interval = max(settings.live_interval_seconds, 1.0)
-        if live_toggle.value:
-            live_timer.activate()
-            ui.notify(f"Generator started: 1 symbol every {live_timer.interval:g}s", color="positive")
-        else:
-            live_timer.deactivate()
-            ui.notify("Generator stopped")
-
-    def live_interval_changed() -> None:
-        pull_settings_from_fields()
-        live_timer.interval = max(settings.live_interval_seconds, 1.0)
-        save_gui_settings(settings)
-
-    def start_macmini() -> None:
-        supervisor.start_macmini_uploader()
+    async def start_macmini() -> None:
+        await run.io_bound(supervisor.start_macmini_uploader)
         refresh_component_status()
 
-    def stop_macmini() -> None:
-        supervisor.stop_macmini_uploader()
+    async def stop_macmini() -> None:
+        await run.io_bound(supervisor.stop_macmini_uploader)
         refresh_component_status()
 
-    def restart_macmini() -> None:
-        supervisor.restart_macmini_uploader()
+    async def restart_macmini() -> None:
+        await run.io_bound(supervisor.restart_macmini_uploader)
         refresh_component_status()
 
-    def scan_macmini() -> None:
-        supervisor.scan_macmini_once()
+    async def scan_macmini() -> None:
+        await run.io_bound(supervisor.scan_macmini_once)
         refresh_component_status()
+
+    def latest_receipt_session_dir() -> Path | None:
+        session_root = repo_root / "assets" / "sessions"
+        candidates = [
+            path
+            for path in session_root.iterdir()
+            if path.is_dir() and any(path.glob("*_receipt.txt"))
+        ] if session_root.exists() else []
+        return max(candidates, key=lambda path: path.stat().st_mtime) if candidates else None
+
+    def run_thermal_printer_command(args: list[str], *, timeout: float = 90.0) -> tuple[bool, str]:
+        command = [sys.executable, str(printer_connect_script), *args]
+        try:
+            result = subprocess.run(command, cwd=repo_root, text=True, capture_output=True, timeout=timeout, check=False)
+        except Exception as exc:  # noqa: BLE001
+            return False, str(exc)
+        output = (result.stdout + "\n" + result.stderr).strip()
+        return result.returncode == 0, output
+
+    def printer_url_args() -> list[str]:
+        url = str(fields["thermal_printer_url"].value or "").strip()
+        supervisor.runtime_store.save_json("thermal_printer", {"url": url})
+        return ["--esp32", url] if url else []
+
+    def update_thermal_printer_label(message: str) -> None:
+        if thermal_printer_labels:
+            thermal_printer_labels["message"].set_text(message[:220] or "-")
+
+    async def thermal_printer_status() -> None:
+        ok, output = await run.io_bound(run_thermal_printer_command, ["status", *printer_url_args()], timeout=20.0)
+        update_thermal_printer_label(output)
+        ui.notify("Thermal printer status updated" if ok else "Thermal printer offline", color="positive" if ok else "warning")
+
+    async def thermal_printer_connect() -> None:
+        ok, output = await run.io_bound(run_thermal_printer_command, ["connect", *printer_url_args()], timeout=45.0)
+        update_thermal_printer_label(output)
+        ui.notify("Thermal printer connected" if ok else "Thermal printer connection failed", color="positive" if ok else "warning")
+
+    async def thermal_printer_test_receipt() -> None:
+        ok, output = await run.io_bound(run_thermal_printer_command, ["test", "--message", "ORACLE THERMAL TEST", *printer_url_args()], timeout=60.0)
+        update_thermal_printer_label(output)
+        ui.notify("Thermal test sent" if ok else "Thermal test failed", color="positive" if ok else "warning")
+
+    async def thermal_printer_print_session(session_dir: Path | None) -> None:
+        if session_dir is None or not session_dir.exists():
+            ui.notify("No receipt session folder found", color="warning")
+            return
+        preview_path = repo_root / "reports" / f"{session_dir.name}_thermal_preview.png"
+        args = [
+            "receipt",
+            str(session_dir),
+            "--preview-png",
+            str(preview_path),
+            *printer_url_args(),
+        ]
+        ok, output = await run.io_bound(run_thermal_printer_command, args, timeout=120.0)
+        update_thermal_printer_label(output)
+        ui.notify(f"Thermal receipt sent: {session_dir.name}" if ok else "Thermal receipt failed", color="positive" if ok else "warning")
+
+    async def thermal_printer_print_latest() -> None:
+        await thermal_printer_print_session(latest_receipt_session_dir())
+
+    async def thermal_printer_print_selected() -> None:
+        raw = str(fields["thermal_session_dir"].value or "").strip()
+        await thermal_printer_print_session(Path(raw).expanduser() if raw else latest_receipt_session_dir())
 
     def refresh_logs() -> None:
         selected = str(fields["log_filter"].value or "all") if "log_filter" in fields else "all"
@@ -635,9 +765,9 @@ def build_page() -> None:
             with ui.row().classes("items-center gap-2"):
                 ui.button("EMERGENCY STOP", on_click=emergency_stop).props("dense color=negative")
 
-        real_warning = warning_banner("Real plotter output starts only after zero is set, readiness is checked, and real output is enabled.")
+        real_warning = warning_banner("Plotter output starts only after preflight passes, work zero is set, and FluidNC is Idle.")
 
-        with ui.grid(columns="360px minmax(420px, 0.9fr) 460px").classes("w-full gap-2 min-h-0 workspace-panel"):
+        with ui.grid(columns="360px minmax(420px, 0.9fr) 460px").classes("w-full gap-2 min-h-0 workspace-panel workspace-grid"):
             with ui.tab_panels(workspace_tabs, value=active_workspace["value"]).classes("w-full h-full"):
                 with ui.tab_panel(connection_tab).classes("p-0"):
                     with ui.column().classes("workspace-scroll gap-2"):
@@ -646,7 +776,7 @@ def build_page() -> None:
                             ui.label("Network/controller checks only. No motion except emergency, unlock, resume and reset.").classes("text-xs text-[#8f4f2b]")
                             with ui.row().classes("gap-2"):
                                 ui.button("CONNECT", on_click=check_fluidnc).props("dense color=positive")
-                                ui.button("Emergency Stop", on_click=emergency_stop).props("dense color=negative")
+                                ui.button("SCAN LAN", on_click=scan_fluidnc).props("dense flat")
                             with ui.grid(columns=2).classes("w-full gap-1"):
                                 with ui.element("div").classes("mini-metric"):
                                     ui.label("WebUI").classes("label")
@@ -685,25 +815,26 @@ def build_page() -> None:
                                     label="Step mm",
                                 ).props("dense outlined").classes("w-24")
                                 fields["jog_feed"] = ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
-                                ui.button("Home", on_click=home_all).props("dense color=warning")
+                                ui.button("Home XY", on_click=home_xy).props("dense color=warning")
                             with ui.grid(columns=3).classes("w-full gap-1 jog-pad"):
                                 ui.label("")
-                                ui.button("Y+", on_click=lambda: jog("Y", 1)).props("dense")
+                                ui.button("Y+", on_click=jog_y_positive).props("dense")
                                 ui.label("")
-                                ui.button("X-", on_click=lambda: jog("X", -1)).props("dense")
-                                ui.button("Y-", on_click=lambda: jog("Y", -1)).props("dense")
-                                ui.button("X+", on_click=lambda: jog("X", 1)).props("dense")
+                                ui.button("X-", on_click=jog_x_negative).props("dense")
+                                ui.button("Y-", on_click=jog_y_negative).props("dense")
+                                ui.button("X+", on_click=jog_x_positive).props("dense")
                             with ui.row().classes("gap-1"):
                                 ui.button("Z Home / Pen up", on_click=pen_up).props("dense flat")
                                 ui.button("Z- / Pen down", on_click=pen_down).props("dense flat")
                                 ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
                                 ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
                         with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("Motion quality").classes("text-sm font-bold")
-                            ui.label("Speed values are G-code feed rates in mm/min. Pen up uses Z homing; pen down is fixed absolute G0 Z-25.").classes("text-xs text-[#8f4f2b]")
+                            ui.label("Motion speed").classes("text-sm font-bold")
+                            ui.label("XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings.").classes("text-xs text-[#8f4f2b]")
                             with ui.grid(columns=2).classes("w-full gap-2"):
                                 number_control(fields, "travel_rate", label="Travel mm/min", value=settings.travel_rate, default=5000, min_value=1, width_class="w-full", tooltip="Pen-up movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
                                 number_control(fields, "draw_rate", label="Draw mm/min", value=settings.draw_rate, default=1800, min_value=1, width_class="w-full", tooltip="Drawing movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
+                                number_control(fields, "xy_acceleration_mm_s2", label="XY accel mm/s^2", value=settings.xy_acceleration_mm_s2, default=GUI_DEFAULTS["xy_acceleration_mm_s2"], min_value=0, width_class="w-full", tooltip="Recorded in manifests only. Print G-code uses the controller's saved acceleration settings.", on_change=persist_and_refresh)
                                 number_control(fields, "z_up_mm", label="Z up legacy", value=settings.z_up_mm, default=0, min_value=-25, width_class="w-full", tooltip="Legacy absolute Z-up value; current pen-up behavior uses Z homing.", on_change=persist_and_refresh)
                                 number_control(fields, "z_down_mm", label="Z down legacy", value=settings.z_down_mm, default=-25, min_value=-25, width_class="w-full", tooltip="Legacy value; current pen-down behavior is fixed at absolute G0 Z-25.", on_change=persist_and_refresh)
                                 number_control(fields, "z_feed_mm_min", label="Z mm/min", value=settings.z_feed_mm_min, default=1000, min_value=1, width_class="w-full", tooltip="Z servo axis feed rate. FluidNC maps this Z axis to PWM.", on_change=persist_and_refresh)
@@ -719,30 +850,21 @@ def build_page() -> None:
                                 node_pills["queue"] = status_pill("Queue")
                                 node_pills["print"] = status_pill("Print")
                         with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("Test Generator").classes("text-sm font-bold")
-                            ui.label("Creates one fake session at a time. Use it to test uploader, Firebase queue, and plotter flow.").classes("text-xs text-[#8f4f2b]")
-                            symbol_options = {
-                                "__cycle__": "All in order",
-                                "__random__": "All random",
-                            }
-                            symbol_options.update({symbol.name: f"{index + 1}. {symbol.stem}" for index, symbol in enumerate(symbols)})
-                            fields["selected_symbol"] = ui.select(
-                                symbol_options,
-                                value=settings.selected_symbol,
-                                label="Symbol source",
-                            ).props("dense outlined").classes("w-full")
-                            with ui.row().classes("items-end gap-2"):
-                                fields["live_interval_seconds"] = ui.number(
-                                    "Interval sec",
-                                    value=settings.live_interval_seconds,
-                                    min=1,
-                                ).props("dense outlined").classes("w-32").on_value_change(live_interval_changed)
+                            ui.label("G-code test draw").classes("text-sm font-bold")
+                            ui.label("Generates a local sheet from bundled symbols or starts a test print from the current queue/settings.").classes("text-xs text-[#8f4f2b]")
                             with ui.row().classes("items-center gap-2"):
-                                live_toggle = ui.switch("START GENERATOR", value=False, on_change=toggle_live)
-                                ui.button("Generate next filler", on_click=generate_next_filler_upload).props("dense")
                                 ui.button("Generate G-code only", on_click=generate_dry_run).props("dense")
                                 ui.button("START TEST PRINT", on_click=start_test_print).props("dense color=positive")
-                            last_user_output = ui.label("-").classes("path-label text-xs")
+                        with ui.card().classes("oracle-card compact-card w-full"):
+                            ui.label("SVG test draw").classes("text-sm font-bold")
+                            ui.label("Prints the selected Inkscape SVG directly to FluidNC. Requires preflight, work zero, CONNECT and Idle.").classes("text-xs text-[#8f4f2b]")
+                            with ui.row().classes("gap-2 w-full"):
+                                number_control(fields, "direct_svg_origin_x_mm", label="SVG X0", value=settings.direct_svg_origin_x_mm, default=GUI_DEFAULTS["direct_svg_origin_x_mm"], min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work X position for SVG coordinate 0.", on_change=persist_and_refresh)
+                                number_control(fields, "direct_svg_origin_y_mm", label="SVG Y0", value=settings.direct_svg_origin_y_mm, default=GUI_DEFAULTS["direct_svg_origin_y_mm"], min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.", on_change=persist_and_refresh)
+                            ui.upload(on_upload=handle_svg_upload).props("accept=.svg max-files=1 auto-upload").classes("w-full")
+                            with ui.row().classes("items-center gap-2"):
+                                ui.button("PRINT SVG", on_click=print_uploaded_svg).props("dense color=positive")
+                                uploaded_svg_label = ui.label("No SVG selected").classes("path-label text-xs")
 
                 with ui.tab_panel(work_tab).classes("p-0"):
                     with ui.column().classes("workspace-scroll gap-2"):
@@ -762,23 +884,34 @@ def build_page() -> None:
                                 ui.button("Restart", on_click=restart_macmini).props("dense")
                             ui.label("Controlled through NEJE_MACMINI_AGENT_URL").classes("text-xs text-[#8f4f2b]")
                         with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("Ready workflow").classes("text-sm font-bold")
+                            ui.label("Thermal printer").classes("text-sm font-bold")
+                            saved_printer = supervisor.runtime_store.load_json("thermal_printer", {"url": "http://10.28.8.56"})
+                            fields["thermal_printer_url"] = ui.input(
+                                "ESP32 URL",
+                                value=str(saved_printer.get("url") or "http://10.28.8.56"),
+                            ).props("dense outlined").classes("w-full")
+                            fields["thermal_session_dir"] = ui.input(
+                                "Session folder",
+                                value=str(latest_receipt_session_dir() or ""),
+                            ).props("dense outlined").classes("w-full")
+                            with ui.row().classes("gap-2 flex-wrap"):
+                                ui.button("Discover/status", on_click=thermal_printer_status).props("dense")
+                                ui.button("Connect", on_click=thermal_printer_connect).props("dense")
+                                ui.button("Print latest", on_click=thermal_printer_print_latest).props("dense color=positive")
+                                ui.button("Print selected", on_click=thermal_printer_print_selected).props("dense")
+                                ui.button("Test", on_click=thermal_printer_test_receipt).props("dense flat")
+                            thermal_printer_labels["message"] = ui.label("Printer offline is a warning only; plotter and upload workflow continue.").classes("path-label text-xs")
+                        with ui.card().classes("oracle-card compact-card w-full"):
+                            ui.label("Work zero").classes("text-sm font-bold")
                             ui.label("Before Set Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure.").classes("text-xs text-[#8f4f2b]")
                             with ui.row().classes("gap-2"):
                                 ui.button("Set Zero", on_click=set_work_zero).props("dense color=warning")
-                                ui.button("Check Ready", on_click=ready_check).props("dense color=positive")
-                            with ui.grid(columns=2).classes("w-full gap-1"):
+                            with ui.grid(columns=1).classes("w-full gap-1"):
                                 with ui.element("div").classes("mini-metric"):
                                     ui.label("Zero").classes("label")
                                     ready_labels["zero"] = ui.label("-").classes("value")
-                                with ui.element("div").classes("mini-metric"):
-                                    ui.label("Ready").classes("label")
-                                    ready_labels["state"] = ui.label("-").classes("value")
                             ready_labels["message"] = ui.label("-").classes("path-label text-xs")
                             ui.separator()
-                            with ui.row().classes("gap-2"):
-                                arm_buttons.append(danger_action_button("Enable Real Output", arm_real_fluidnc))
-                            real_output_labels.append(ui.label("-").classes("path-label text-xs font-bold"))
                             system_check_label = ui.label("System check runs automatically when print starts.").classes("text-xs text-[#8f4f2b]")
 
                 with ui.tab_panel(exhibition_tab).classes("p-0"):
@@ -787,12 +920,7 @@ def build_page() -> None:
                             ui.label("Exhibition controls").classes("text-sm font-bold")
                             ui.label("Minimal live-print controls. No layout, jog, scale or test generation here.").classes("text-xs text-[#8f4f2b]")
                             with ui.column().classes("gap-2"):
-                                real_output_labels.append(ui.label("-").classes("path-label text-xs font-bold"))
-                                arm_buttons.append(ui.button("ENABLE REAL OUTPUT", on_click=arm_real_fluidnc).props("dense color=warning").classes("w-full"))
                                 start_print_button = ui.button("START PRINT", on_click=start_print).props("dense color=positive").classes("w-full")
-                                ui.button("STOP AFTER SHEET", on_click=stop_print).props("dense color=warning").classes("w-full")
-                                reload_button = ui.button("RELOAD OK", on_click=confirm_reload).props("dense").classes("w-full")
-                                ui.button("EMERGENCY STOP", on_click=emergency_stop).props("dense color=negative").classes("w-full")
 
             with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -815,8 +943,14 @@ def build_page() -> None:
                             with ui.row().classes("w-full items-center justify-between"):
                                 ui.label("Layout").classes("text-sm font-bold")
                                 capacity_label = ui.label("-").classes("status-pill text-xs font-bold")
+                            ui.select(
+                                {"preview": "Preview tuning", "printing": "Printing live"},
+                                value=preview_mode["value"],
+                                label="Preview mode",
+                                on_change=lambda event: preview_mode_changed(event.value),
+                            ).props("dense outlined").classes("w-full")
                             with ui.row().classes("items-end gap-2"):
-                                fields["layout_mode"] = ui.select(["hex", "grid"], value=settings.layout_mode, label="Layout").props("dense outlined").classes("w-28").on_value_change(persist_and_refresh)
+                                fields["layout_mode"] = ui.select({"grid": "Straight", "hex": "Hex"}, value=settings.layout_mode, label="Layout").props("dense outlined").classes("w-32").on_value_change(persist_and_refresh)
                                 fields["include_rings"] = ui.switch("Rings", value=settings.include_rings).on_value_change(persist_and_refresh)
                                 fields["include_markers"] = ui.switch("Origin dots", value=settings.include_markers).on_value_change(persist_and_refresh)
                             with ui.grid(columns=2).classes("w-full gap-2"):
@@ -826,18 +960,42 @@ def build_page() -> None:
                                 number_control(fields, "gap_mm", label="Gap", value=settings.gap_mm, default=GUI_DEFAULTS["gap_mm"], min_value=0, width_class="w-full", tooltip="Distance between neighboring cell diameters.", on_change=persist_and_refresh)
                                 number_control(fields, "sheet_margin_mm", label="Margin", value=settings.sheet_margin_mm, default=GUI_DEFAULTS["sheet_margin_mm"], min_value=0, width_class="w-full", tooltip="Safe border inside printable field.", on_change=persist_and_refresh)
                                 number_control(fields, "marker_diameter_mm", label="Dot mm", value=settings.marker_diameter_mm, default=GUI_DEFAULTS["marker_diameter_mm"], min_value=0.5, width_class="w-full", tooltip="Printed origin-dot diameter.", on_change=persist_and_refresh)
-                        with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("G-code optimisation").classes("text-sm font-bold")
+                            with ui.row().classes("items-center gap-2"):
+                                fields["organic_enabled"] = ui.switch("Organic / Voronoi", value=settings.organic_enabled).on_value_change(persist_and_refresh)
                             with ui.grid(columns=2).classes("w-full gap-2"):
-                                number_control(fields, "sample_step_mm", label="Point spacing @ 80mm", value=settings.sample_step_mm, default=GUI_DEFAULTS["sample_step_mm"], min_value=0.05, width_class="w-full", tooltip="Base SVG point spacing at the reference cell diameter.", on_change=persist_and_refresh)
-                                number_control(fields, "sample_density_exponent", label="Cell density link", value=settings.sample_density_exponent, default=GUI_DEFAULTS["sample_density_exponent"], min_value=0.0, width_class="w-full", tooltip="How strongly larger cells reduce point spacing.", on_change=persist_and_refresh)
-                                number_control(fields, "sample_min_step_mm", label="Min point spacing", value=settings.sample_min_step_mm, default=GUI_DEFAULTS["sample_min_step_mm"], min_value=0.01, width_class="w-full", tooltip="Smallest allowed generated point spacing.", on_change=persist_and_refresh)
-                                number_control(fields, "sample_max_step_mm", label="Max point spacing", value=settings.sample_max_step_mm, default=GUI_DEFAULTS["sample_max_step_mm"], min_value=0.05, width_class="w-full", tooltip="Largest allowed generated point spacing.", on_change=persist_and_refresh)
+                                number_control(fields, "organic_cell_size_mm", label="Voronoi cell", value=settings.organic_cell_size_mm, default=GUI_DEFAULTS["organic_cell_size_mm"], min_value=0, step=1, width_class="w-full", tooltip="Maximum organic position drift in mm.", on_change=persist_and_refresh)
+                                number_control(fields, "organic_seed", label="Seed", value=settings.organic_seed, default=GUI_DEFAULTS["organic_seed"], min_value=0, step=1, width_class="w-full", tooltip="Repeats the same organic layout for preview and print.", on_change=persist_and_refresh)
+                            calibration_slider_row("Rotation ramp", "organic_rotation_ramp", value=settings.organic_rotation_ramp, default=GUI_DEFAULTS["organic_rotation_ramp"], min_value=0, max_value=1, step=0.01, on_change=persist_and_refresh)
+                            calibration_slider_row("Scale ramp", "organic_scale_ramp", value=settings.organic_scale_ramp, default=GUI_DEFAULTS["organic_scale_ramp"], min_value=0, max_value=1, step=0.01, on_change=persist_and_refresh)
+                        with ui.card().classes("oracle-card compact-card w-full"):
+                            ui.label("Drawing detail").classes("text-sm font-bold")
+                            ui.label("Sets how many G-code points are generated from SVG curves. Smaller spacing is smoother and slower; larger spacing is lighter and faster.").classes("text-xs text-[#8f4f2b]")
+                            with ui.grid(columns=3).classes("w-full gap-1"):
+                                with ui.element("div").classes("mini-metric"):
+                                    ui.label("Active spacing").classes("label")
+                                    gcode_labels["effective"] = ui.label("-").classes("value")
+                                with ui.element("div").classes("mini-metric"):
+                                    ui.label("Path density").classes("label")
+                                    gcode_labels["points"] = ui.label("-").classes("value")
+                                with ui.element("div").classes("mini-metric"):
+                                    ui.label("G-code load").classes("label")
+                                    gcode_labels["load"] = ui.label("-").classes("value")
+                            ui.label("Main detail").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+                            number_control(fields, "sample_step_mm", label="Spacing at normal cell size (mm)", value=settings.sample_step_mm, default=GUI_DEFAULTS["sample_step_mm"], min_value=0.05, step=0.05, width_class="w-full", tooltip="Distance between sampled points for an 80 mm reference cell.", on_change=persist_and_refresh)
+                            ui.label("Auto-adjust for cell size").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+                            number_control(fields, "sample_density_exponent", label="Auto density strength", value=settings.sample_density_exponent, default=GUI_DEFAULTS["sample_density_exponent"], min_value=0.0, step=0.1, width_class="w-full", tooltip="0 disables cell-size compensation. 1 is normal. Higher values make large cells denser.", on_change=persist_and_refresh)
+                            with ui.row().classes("items-center gap-2"):
+                                ui.label("Clamp").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+                                gcode_labels["limits"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                            with ui.grid(columns=2).classes("w-full gap-2"):
+                                number_control(fields, "sample_min_step_mm", label="Finest allowed spacing", value=settings.sample_min_step_mm, default=GUI_DEFAULTS["sample_min_step_mm"], min_value=0.01, step=0.01, width_class="w-full", tooltip="Lower safety limit. Prevents extremely dense G-code.", on_change=persist_and_refresh)
+                                number_control(fields, "sample_max_step_mm", label="Coarsest allowed spacing", value=settings.sample_max_step_mm, default=GUI_DEFAULTS["sample_max_step_mm"], min_value=0.05, step=0.05, width_class="w-full", tooltip="Upper safety limit. Prevents overly simplified curves.", on_change=persist_and_refresh)
                             fields["streaming_mode"] = ui.select(
-                                {"cell": "cell", "row": "row"},
+                                {"row": "Row at a time", "cell": "Cell at a time"},
                                 value=settings.streaming_mode,
-                                label="Streaming",
+                                label="Send to FluidNC",
                             ).props("dense outlined").classes("w-full").on_value_change(persist_and_refresh)
+                            update_gcode_detail_labels()
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Filters / markers").classes("text-sm font-bold")
                             ui.label("Display filters affect preview immediately. Print filters apply from the next row, never mid-row.").classes("text-xs text-[#8f4f2b]")
@@ -916,7 +1074,6 @@ def build_page() -> None:
                             plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
                             plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
 
-    live_timer = ui.timer(settings.live_interval_seconds, generate_user_sessions, active=False)
     ui.timer(2.0, refresh_status)
     persist_and_refresh()
 

@@ -76,13 +76,13 @@ class PreflightService:
     def _check_firebase(self, mode: SystemMode) -> PreflightCheck:
         if self.firebase_settings.enabled:
             return PreflightCheck("firebase config", PreflightLevel.OK, f"Firebase configured: {self.firebase_settings.project_id}")
-        level = PreflightLevel.CRITICAL if mode_policy(mode).real_fluidnc_required else PreflightLevel.WARNING
+        level = PreflightLevel.CRITICAL if mode_policy(mode).firebase_required else PreflightLevel.WARNING
         return PreflightCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
 
     def _check_tinybee_hardware(self, mode: SystemMode, gui_settings: GuiSettings) -> PreflightCheck:
         config_path = self.plotter_settings.tinybee_config_path
         if not config_path.exists():
-            level = PreflightLevel.CRITICAL if mode_policy(mode).real_fluidnc_required else PreflightLevel.WARNING
+            level = PreflightLevel.CRITICAL if mode_policy(mode).real_output_required else PreflightLevel.WARNING
             return PreflightCheck("tinybee hardware", level, f"TinyBee config JSON not found: {config_path}")
         try:
             payload = json.loads(config_path.read_text(encoding="utf-8"))
@@ -151,7 +151,7 @@ class PreflightService:
                 message = f"{probe.message}; controller must be Idle for real print"
         if online:
             return PreflightCheck("fluidnc", PreflightLevel.OK, message, detail=detail)
-        level = PreflightLevel.CRITICAL if mode in {SystemMode.TEST, SystemMode.EXHIBITION_REAL} else PreflightLevel.WARNING
+        level = PreflightLevel.CRITICAL if mode_policy(mode).real_output_required else PreflightLevel.WARNING
         return PreflightCheck("fluidnc", level, message, detail=detail)
 
     def _check_spool_write(self) -> PreflightCheck:

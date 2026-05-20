@@ -20,6 +20,13 @@ SAMPLE_PAYLOAD = REPO_ROOT / "ESP32-BTN_Printer" / "examples" / "receipt_payload
 
 def main() -> None:
     args = parse_args()
+    if args.dry_run and args.action in {"sample", "receipt"}:
+        if args.action == "sample":
+            print_json(build_receipt_payload(args))
+            return
+        print_json(build_receipt_payload(args))
+        return
+
     base_url = resolve_base_url(args)
     print(f"ESP32 printer bridge: {base_url}")
 
@@ -60,12 +67,20 @@ def main() -> None:
         return
 
     if args.action == "sample":
-        payload = json.loads(SAMPLE_PAYLOAD.read_text(encoding="utf-8"))
+        payload = build_receipt_payload(args)
+        payload = payload_for_protocol(payload, args.protocol)
+        if args.protocol == "ilabel" and "receipt_raster_rle_base64" in payload:
+            print_json(post_ilabel_raster_chunks(base_url, payload, timeout=args.timeout))
+            return
         print_json(post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout))
         return
 
     if args.action == "receipt":
         payload = build_receipt_payload(args)
+        payload = payload_for_protocol(payload, args.protocol)
+        if args.protocol == "ilabel" and "receipt_raster_rle_base64" in payload:
+            print_json(post_ilabel_raster_chunks(base_url, payload, timeout=args.timeout))
+            return
         print_json(post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout))
         return
 
@@ -121,14 +136,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--write-response", action="store_true", help="Use BLE write-with-response for action=test.")
     parser.add_argument("--characteristic", help="BLE characteristic UUID to use for action=test.")
     parser.add_argument("--hex", help="Hex bytes for action=raw, for example '1b 40 0a'.")
+    parser.add_argument("--dry-run", action="store_true", help="Build sample/receipt JSON without posting to the ESP32.")
+    parser.add_argument("--preview-png", type=Path, help="Write a local thermal preview PNG for action=receipt.")
     parser.add_argument(
         "--session-dir",
         type=Path,
-        default=REPO_ROOT / "assets" / "sessions" / "20260505_155503",
+        default=REPO_ROOT / "assets" / "sessions" / "20260518_154452",
         help="Session folder for action=receipt.",
     )
     parser.add_argument("--no-symbol", action="store_true", help="Do not include symbol bitmap for action=receipt.")
     parser.add_argument("--printer-width", type=int, default=384)
+    parser.add_argument("--ilabel-width", type=int, default=576)
     parser.add_argument("--symbol-size", type=int, default=240)
     return parser
 
@@ -250,6 +268,36 @@ def query_path(path: str, params: dict[str, str | None]) -> str:
     return f"{path}?{urllib.parse.urlencode(filtered)}"
 
 
+def payload_for_protocol(payload: dict[str, Any], protocol: str) -> dict[str, Any]:
+    if protocol != "ilabel":
+        return payload
+    trimmed = dict(payload)
+    trimmed.pop("symbol_escpos_base64", None)
+    trimmed.pop("qr_escpos_base64", None)
+    return trimmed
+
+
+def post_ilabel_raster_chunks(base_url: str, payload: dict[str, Any], *, timeout: float) -> dict[str, Any]:
+    raster = str(payload["receipt_raster_rle_base64"])
+    width = str(int(payload["ilabel_width_dots"]))
+    height = str(int(payload["ilabel_height_dots"]))
+    post_json(
+        base_url,
+        query_path("/ilabel-raster-begin", {"width": width, "height": height, "length": str(len(raster))}),
+        None,
+        timeout=timeout,
+    )
+    chunk_size = 900
+    for offset in range(0, len(raster), chunk_size):
+        post_json(
+            base_url,
+            query_path("/ilabel-raster-chunk", {"data": raster[offset : offset + chunk_size]}),
+            None,
+            timeout=timeout,
+        )
+    return post_json(base_url, "/ilabel-raster-print", None, timeout=timeout)
+
+
 def build_receipt_payload(args: argparse.Namespace) -> dict[str, Any]:
     import send_receipt
 
@@ -258,7 +306,9 @@ def build_receipt_payload(args: argparse.Namespace) -> dict[str, Any]:
         repo_root=REPO_ROOT,
         include_symbol=not args.no_symbol,
         printer_width=args.printer_width,
+        ilabel_width=args.ilabel_width,
         symbol_size=args.symbol_size,
+        preview_png=args.preview_png.expanduser().resolve() if args.preview_png else None,
     )
 
 

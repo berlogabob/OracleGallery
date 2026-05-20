@@ -8,7 +8,7 @@ Local exhibition system for TouchDesigner session folders, Firebase publication,
 - MacBook operator station: runs `neje-gui`, the main supervisor for plotter control, preflight, logs, layout, scale, and test generation.
 - Firebase: stores public session documents, public SVG/TXT/QR assets, and real user print jobs.
 - Flutter Web: static GitHub Pages app at `https://berlogabob.github.io/OracleGallery/`, read-only against Firestore.
-- Plotter/FluidNC: controlled locally from `neje-gui`; real output is disabled until preflight, work zero, ready check, and explicit arm.
+- Plotter/FluidNC: controlled locally from `neje-gui`; output is blocked until preflight passes, work zero is set, and FluidNC is Idle.
 
 ## Session Contract
 
@@ -164,8 +164,9 @@ Legacy backup paths:
 
 ## Operating Modes
 
-- `TEST`: fake sessions, idle bank generation, dry-run G-code, no real FluidNC output.
-- `EXHIBITION DRY`: real uploader/session queue, dry-run/spool only.
-- `EXHIBITION REAL`: real uploader/session queue and real FluidNC output, gated by preflight, work zero, ready check, and `ARM REAL FLUIDNC`.
+- `TEST`: lab drawing mode for fake sessions and direct uploaded SVG prints.
+- `EXHIBITION`: real uploader/session queue and real FluidNC output.
+- Both modes send real G-code to FluidNC only after preflight passes, work zero is set, and FluidNC is Idle. `Generate G-code only` remains the non-printing diagnostic path.
 
-`STOP AFTER SHEET` is safe and waits for the current row/sheet boundary. `EMERGENCY STOP` sends FluidNC feed hold `!`, disables print, and disarms real mode, but it is not a replacement for a physical emergency stop.
+Drawing stops automatically after each sheet. Replace material, then press `START PRINT` when the next sheet is ready. `EMERGENCY STOP` sends FluidNC feed hold `!` and disables print, but it is not a replacement for a physical emergency stop.
+The GUI motion-speed controls write XY feed rates as G-code `F` values in mm/min. Acceleration is controlled by the saved FluidNC controller settings, not by inline print G-code.

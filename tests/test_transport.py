@@ -13,9 +13,10 @@ from neje_oracle.transport import FluidNCTransport, discover_fluidnc, parse_stat
 
 
 class FakeFluidNCServer:
-    def __init__(self, *, error_command: str = "", suppress_ok_command: str = "") -> None:
+    def __init__(self, *, error_command: str = "", suppress_ok_command: str = "", close_command: str = "") -> None:
         self.error_command = error_command
         self.suppress_ok_command = suppress_ok_command
+        self.close_command = close_command
         self.commands: list[str] = []
         self.realtime: list[bytes] = []
         self._stop = threading.Event()
@@ -80,6 +81,8 @@ class FakeFluidNCServer:
                     if not command:
                         continue
                     self.commands.append(command)
+                    if command == self.close_command:
+                        return
                     if command == self.suppress_ok_command:
                         continue
                     if command == self.error_command:
@@ -122,6 +125,16 @@ def test_probe_parses_status_and_modal_state(tmp_path: Path) -> None:
     assert probe.controller.state == FluidNCState.IDLE
     assert probe.controller.machine_position == (1.0, 2.0, 3.0)
     assert "G90" in probe.controller.modal_state
+
+
+def test_probe_accepts_status_when_modal_query_times_out(tmp_path: Path) -> None:
+    with FakeFluidNCServer(suppress_ok_command="$G") as server:
+        transport = FluidNCTransport(_settings(tmp_path, server))
+        probe = transport.probe()
+
+    assert probe.online
+    assert probe.controller.state == FluidNCState.IDLE
+    assert "Timed out waiting for ok after $G" in probe.last_error
 
 
 def test_discover_fluidnc_finds_controller_on_candidate_host(tmp_path: Path) -> None:
@@ -182,6 +195,7 @@ def test_control_commands_send_expected_payloads(tmp_path: Path) -> None:
     with FakeFluidNCServer() as server:
         transport = FluidNCTransport(_settings(tmp_path, server))
         assert transport.home().ok
+        assert transport.home("XY").ok
         assert transport.unlock_alarm().ok
         assert transport.jog("X", 1, 1000).ok
         assert transport.feed_hold().ok
@@ -190,11 +204,22 @@ def test_control_commands_send_expected_payloads(tmp_path: Path) -> None:
         time.sleep(0.1)
 
     assert "$H" in server.commands
+    assert "$H=XY" in server.commands
     assert "$X" in server.commands
     assert "$J=G91 G21 X1.000 F1000" in server.commands
     assert b"!" in server.realtime
     assert b"~" in server.realtime
     assert b"\x18" in server.realtime
+
+
+def test_home_returns_quickly_when_fluidnc_closes_connection(tmp_path: Path) -> None:
+    with FakeFluidNCServer(close_command="$H") as server:
+        transport = FluidNCTransport(_settings(tmp_path, server))
+        result = transport.home()
+
+    assert result.ok is False
+    assert "$H" in server.commands
+    assert "closed" in result.message.lower()
 
 
 def test_send_commands_uses_one_connection_for_modal_preamble(tmp_path: Path) -> None:

@@ -39,5 +39,17 @@
 #define PRINTER_RESPONSE_CHUNK_DELAY_MS 20
 #define BLE_NOTIFY_HEX_LIMIT 512
 
+// 40 rows is about 5 mm at 200 DPI. The trailing margin is doubled so the
+// receipt advances far enough beyond the tear edge.
+#define ILABEL_MARGIN_ROWS 40
+#define ILABEL_TRAILING_MARGIN_ROWS 80
+
+// Print one short iLabel text receipt after each ESP32 cold boot/reset.
+#define BOOT_TEST_PRINT_ENABLED 1
+#define BOOT_TEST_PRINT_DELAY_MS 5000
+#define BOOT_TEST_PRINT_RETRY_MS 10000
+#define BOOT_TEST_PRINT_MAX_ATTEMPTS 6
+#define BOOT_TEST_PRINT_MESSAGE "ORACLE PRINTER READY"
+
 #define STATUS_LED_PIN 2
 #define ENABLE_STATUS_LED 1

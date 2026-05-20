@@ -415,15 +415,9 @@ class OracleRuntimeStore(_SQLiteStore):
     def save_system_mode(self, mode: SystemMode) -> None:
         self.save_json("system_mode", {"mode": mode.value, "updated_at": datetime.now(tz=UTC).isoformat()})
 
-    def load_system_mode(self, default: SystemMode = SystemMode.EXHIBITION_DRY) -> SystemMode:
+    def load_system_mode(self, default: SystemMode = SystemMode.EXHIBITION) -> SystemMode:
         payload = self.load_json("system_mode", {"mode": default.value})
         return SystemMode(payload.get("mode", default.value))
-
-    def save_real_fluidnc_armed(self, armed: bool) -> None:
-        self.save_json("real_fluidnc_armed", {"armed": armed, "updated_at": datetime.now(tz=UTC).isoformat()})
-
-    def load_real_fluidnc_armed(self) -> bool:
-        return bool(self.load_json("real_fluidnc_armed", {"armed": False}).get("armed", False))
 
     def save_preflight_result(self, result: PreflightResult) -> None:
         self.save_json("preflight_result", result.to_dict())

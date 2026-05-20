@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+from nicegui.elements.upload_files import SmallFileUpload
 
 from neje_oracle.config import PlotterSettings
 from neje_oracle.gui_support import (
@@ -9,21 +15,22 @@ from neje_oracle.gui_support import (
     GuiSettings,
     build_preview_svg,
     build_realtime_preview_svg,
-    confirm_plotter_reload,
     create_idle_bank_from_gui,
     create_filler_packages_from_gui,
     create_next_filler_upload_from_gui,
+    create_direct_svg_print_job_from_gui,
     create_user_sessions_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
     load_gui_settings,
     load_symbol_scales,
     read_plotter_status,
+    read_upload_content_bytes,
+    read_upload_event_payload,
     save_gui_settings,
     save_symbol_scales,
 )
-from neje_oracle.models import PlotterControlState, PlotterRuntimeState, RuntimeStatus, SystemMode
-from neje_oracle.store import OracleRuntimeStore, PlotterStore
+from neje_oracle.models import RuntimeStatus, SystemMode
 
 
 SIMPLE_SYMBOL = (
@@ -66,9 +73,21 @@ def test_gui_settings_migrates_old_run_mode_to_system_mode(tmp_path: Path) -> No
 
     settings = load_gui_settings(settings_path)
 
-    assert settings.system_mode == SystemMode.EXHIBITION_REAL.value
+    assert settings.system_mode == SystemMode.EXHIBITION.value
     assert settings.run_mode == "exhibition"
     assert settings.dry_run is False
+
+
+def test_gui_settings_normalizes_legacy_exhibition_modes(tmp_path: Path) -> None:
+    for legacy_mode in ("exhibition_dry", "exhibition_real"):
+        settings_path = tmp_path / f"{legacy_mode}.json"
+        settings_path.write_text(f'{{"system_mode": "{legacy_mode}"}}', encoding="utf-8")
+
+        settings = load_gui_settings(settings_path)
+
+        assert settings.system_mode == SystemMode.EXHIBITION.value
+        assert settings.run_mode == "exhibition"
+        assert settings.dry_run is False
 
 
 def test_symbol_scales_load_save(tmp_path: Path) -> None:
@@ -112,6 +131,54 @@ def test_preview_svg_shows_mark_size_and_embedded_symbols(tmp_path: Path) -> Non
 
     assert "data:image/svg+xml;base64" in preview
     assert preview.count("<image") == layout_capacity(settings)
+
+
+def test_preview_svg_can_randomize_symbol_distribution(tmp_path: Path) -> None:
+    root = tmp_path / "symbols"
+    root.mkdir()
+    for index in range(3):
+        (root / f"symbol_{index}.svg").write_text(
+            f"<svg width='800' height='800' xmlns='http://www.w3.org/2000/svg'><path d='M{100 + index},100 L700,700'/></svg>",
+            encoding="utf-8",
+        )
+    scale_path = tmp_path / "symbol_scales.json"
+    save_symbol_scales({f"symbol_{index}.svg": 1.0 for index in range(3)}, scale_path, root)
+    settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80)
+
+    ordered = build_preview_svg(settings, user_count=layout_capacity(settings), idle_count=0, symbol_root=root, scale_path=scale_path)
+    randomized = build_preview_svg(
+        settings,
+        user_count=layout_capacity(settings),
+        idle_count=0,
+        randomize_symbols=True,
+        symbol_root=root,
+        scale_path=scale_path,
+    )
+
+    assert randomized.count("<image") == layout_capacity(settings)
+    assert randomized != ordered
+
+
+def test_preview_svg_shows_organic_rotation_and_scale(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    scale_path = tmp_path / "symbol_scales.json"
+    save_symbol_scales({"symbol_0.svg": 1.0, "symbol_1.svg": 1.0}, scale_path, root)
+    settings = GuiSettings(
+        sheet_width_mm=300,
+        sheet_height_mm=220,
+        cell_diameter_mm=80,
+        organic_enabled=True,
+        organic_cell_size_mm=18,
+        organic_rotation_ramp=1,
+        organic_scale_ramp=1,
+        organic_seed=42,
+    )
+
+    preview = build_preview_svg(settings, symbol_root=root, scale_path=scale_path)
+
+    assert preview.count("<image") == layout_capacity(settings)
+    assert "transform=\"rotate(" in preview
+    assert 'data-placement-scale="' in preview
 
 
 def test_preview_rings_toggle_changes_sheet_preview() -> None:
@@ -383,6 +450,103 @@ def test_next_filler_upload_uses_uploader_session_shape_and_tags(tmp_path: Path)
     assert metadata["priority"] == "filler"
 
 
+def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
+    settings = GuiSettings(
+        sheet_width_mm=200,
+        sheet_height_mm=120,
+        cell_diameter_mm=80,
+        include_rings=True,
+        include_markers=True,
+    )
+    job = create_direct_svg_print_job_from_gui(
+        settings,
+        svg_bytes=SIMPLE_SYMBOL.encode("utf-8"),
+        original_name="label-test.svg",
+        output_root=tmp_path / "uploaded_svg",
+    )
+
+    assert job.sheet_id.startswith("testsvg_")
+    assert job.label == "LABEL TEST"
+    assert job.svg_path.name.endswith("_label-test.svg")
+    assert job.svg_path.read_text(encoding="utf-8") == SIMPLE_SYMBOL
+    assert "direct SVG LABEL TEST" in job.gcode
+    assert "absolute SVG coordinates" in job.gcode
+    assert "; cell-start" not in job.gcode
+    assert "G0 Z" in job.gcode
+    assert "G0 X0 Y0" in job.gcode
+    assert not (tmp_path / "uploaded_svg" / "READY").exists()
+    assert not list((tmp_path / "uploaded_svg").glob("metadata.json"))
+
+
+def test_direct_svg_print_offsets_reference_origin_for_negative_artwork(tmp_path: Path) -> None:
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='160mm' height='200mm' viewBox='0 0 160 200'>"
+        "<path d='M -6,-26 H 154 V 174 H -6 Z' stroke='black' fill='none'/>"
+        "</svg>"
+    )
+
+    job = create_direct_svg_print_job_from_gui(
+        GuiSettings(direct_svg_origin_x_mm=25, direct_svg_origin_y_mm=25),
+        svg_bytes=svg.encode("utf-8"),
+        original_name="negative-frame.svg",
+        output_root=tmp_path / "uploaded_svg",
+    )
+    points = [
+        tuple(float(axis[1:]) for axis in line.split()[1:3])
+        for line in job.gcode.splitlines()
+        if line.startswith(("G0 X", "G1 X"))
+    ]
+
+    assert min(x for x, _ in points) >= 0
+    assert min(y for _, y in points) >= 0
+    assert "; SVG reference origin maps to X25.000 Y25.000" in job.gcode
+
+
+def test_upload_content_reader_rewinds_file_like_object() -> None:
+    content = BytesIO(SIMPLE_SYMBOL.encode("utf-8"))
+    content.read()
+
+    assert read_upload_content_bytes(content) == SIMPLE_SYMBOL.encode("utf-8")
+
+
+def test_upload_event_reader_supports_nicegui_file_payload() -> None:
+    event = SimpleNamespace(file=SmallFileUpload("test_draw.svg", "image/svg+xml", SIMPLE_SYMBOL.encode("utf-8")))
+
+    name, data = asyncio.run(read_upload_event_payload(event))
+
+    assert name == "test_draw.svg"
+    assert data == SIMPLE_SYMBOL.encode("utf-8")
+
+
+def test_upload_event_reader_supports_legacy_content_payload() -> None:
+    event = SimpleNamespace(name="legacy.svg", content=BytesIO(SIMPLE_SYMBOL.encode("utf-8")))
+
+    name, data = asyncio.run(read_upload_event_payload(event))
+
+    assert name == "legacy.svg"
+    assert data == SIMPLE_SYMBOL.encode("utf-8")
+
+
+def test_direct_svg_print_job_rejects_empty_file(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="empty"):
+        create_direct_svg_print_job_from_gui(
+            GuiSettings(),
+            svg_bytes=b"",
+            original_name="empty.svg",
+            output_root=tmp_path / "uploaded_svg",
+        )
+
+
+def test_direct_svg_print_job_rejects_non_svg_xml(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="root element"):
+        create_direct_svg_print_job_from_gui(
+            GuiSettings(),
+            svg_bytes=b"<html></html>",
+            original_name="not-svg.svg",
+            output_root=tmp_path / "uploaded_svg",
+        )
+
+
 def test_dry_run_sheet_and_status_helpers(tmp_path: Path) -> None:
     root = _symbol_root(tmp_path)
     settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80)
@@ -401,73 +565,6 @@ def test_read_status_does_not_create_runtime_db(tmp_path: Path) -> None:
     assert status["status"] == "daemon_not_started"
     assert status["gcode_progress_percent"] == 0.0
     assert not db_path.exists()
-
-
-def test_confirm_reload_updates_runtime_state(tmp_path: Path) -> None:
-    db_path = tmp_path / "runtime" / "plotter.sqlite3"
-    oracle_db_path = tmp_path / "runtime" / "oracle.sqlite3"
-    store = PlotterStore(db_path)
-    store.save_runtime_state(
-        PlotterRuntimeState(
-            status=RuntimeStatus.PAUSED,
-            message="Waiting",
-            pending_reload=True,
-        )
-    )
-
-    confirm_plotter_reload(db_path, oracle_db_path=oracle_db_path)
-    status = read_plotter_status(db_path=db_path, spool_root=tmp_path / "spool")
-
-    assert status["status"] == RuntimeStatus.IDLE.value
-    assert status["pending_reload"] is False
-
-
-def test_confirm_reload_pauses_dry_run_to_avoid_immediate_reload_loop(tmp_path: Path) -> None:
-    db_path = tmp_path / "runtime" / "plotter.sqlite3"
-    oracle_db_path = tmp_path / "runtime" / "oracle.sqlite3"
-    store = PlotterStore(db_path)
-    oracle_store = OracleRuntimeStore(oracle_db_path)
-    control = PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=True)
-    store.save_control_state(control)
-    oracle_store.save_print_control(control)
-    store.save_runtime_state(
-        PlotterRuntimeState(
-            status=RuntimeStatus.PAUSED,
-            message="Waiting",
-            pending_reload=True,
-        )
-    )
-
-    assert confirm_plotter_reload(db_path, oracle_db_path=oracle_db_path) is True
-
-    plotter_control = store.load_control_state()
-    oracle_control = oracle_store.load_print_control()
-    assert plotter_control.print_enabled is False
-    assert plotter_control.operator_paused is True
-    assert oracle_control.print_enabled is False
-    assert oracle_control.operator_paused is True
-
-
-def test_confirm_reload_keeps_real_print_enabled_for_next_sheet(tmp_path: Path) -> None:
-    db_path = tmp_path / "runtime" / "plotter.sqlite3"
-    oracle_db_path = tmp_path / "runtime" / "oracle.sqlite3"
-    store = PlotterStore(db_path)
-    oracle_store = OracleRuntimeStore(oracle_db_path)
-    control = PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=False)
-    store.save_control_state(control)
-    oracle_store.save_print_control(control)
-    store.save_runtime_state(
-        PlotterRuntimeState(
-            status=RuntimeStatus.PAUSED,
-            message="Waiting",
-            pending_reload=True,
-        )
-    )
-
-    assert confirm_plotter_reload(db_path, oracle_db_path=oracle_db_path) is True
-
-    assert store.load_control_state().print_enabled is True
-    assert oracle_store.load_print_control().print_enabled is True
 
 
 def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter():
@@ -536,21 +633,43 @@ def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
     settings_path = tmp_path / "gui_settings.json"
     settings = GuiSettings(
         cell_diameter_mm=160.0,
+        organic_enabled=True,
+        organic_cell_size_mm=21.0,
+        organic_rotation_ramp=0.75,
+        organic_scale_ramp=0.5,
+        organic_seed=77,
         sample_step_mm=0.5,
         sample_reference_cell_mm=80.0,
         sample_density_exponent=1.5,
         sample_min_step_mm=0.1,
         sample_max_step_mm=5.0,
+        xy_acceleration_mm_s2=1.0,
         streaming_mode="row",
     )
     save_gui_settings(settings, settings_path)
     loaded = load_gui_settings(settings_path)
     assert loaded.sample_step_mm == 0.5
+    assert loaded.organic_enabled is True
+    assert loaded.organic_cell_size_mm == 21.0
+    assert loaded.organic_rotation_ramp == 0.75
+    assert loaded.organic_scale_ramp == 0.5
+    assert loaded.organic_seed == 77
     assert loaded.sample_reference_cell_mm == 80.0
     assert loaded.sample_density_exponent == 1.5
     assert loaded.sample_min_step_mm == 0.1
     assert loaded.sample_max_step_mm == 5.0
+    assert loaded.xy_acceleration_mm_s2 == 1000.0
     assert loaded.streaming_mode == "row"
+
+
+def test_gui_optimisation_settings_preserve_zero_xy_acceleration(tmp_path: Path):
+    settings_path = tmp_path / "gui_settings.json"
+    settings = GuiSettings(xy_acceleration_mm_s2=0.0)
+
+    save_gui_settings(settings, settings_path)
+    loaded = load_gui_settings(settings_path)
+
+    assert loaded.xy_acceleration_mm_s2 == 0.0
 
 
 def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
@@ -558,20 +677,32 @@ def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
     from neje_oracle.models import PlotterRuntimeConfig
     settings = GuiSettings(
         cell_diameter_mm=160.0,
+        organic_enabled=True,
+        organic_cell_size_mm=21.0,
+        organic_rotation_ramp=0.75,
+        organic_scale_ramp=0.5,
+        organic_seed=77,
         sample_step_mm=0.5,
         sample_reference_cell_mm=80.0,
         sample_density_exponent=1.5,
         sample_min_step_mm=0.1,
         sample_max_step_mm=5.0,
+        xy_acceleration_mm_s2=1.0,
         streaming_mode="cell",
     )
     config = gui_settings_to_plotter_config(settings)
     assert isinstance(config, PlotterRuntimeConfig)
+    assert config.organic_enabled is True
+    assert config.organic_cell_size_mm == 21.0
+    assert config.organic_rotation_ramp == 0.75
+    assert config.organic_scale_ramp == 0.5
+    assert config.organic_seed == 77
     assert config.sample_step_mm == 0.5
     assert config.sample_reference_cell_mm == 80.0
     assert config.sample_density_exponent == 1.5
     assert config.sample_min_step_mm == 0.1
     assert config.sample_max_step_mm == 5.0
+    assert config.xy_acceleration_mm_s2 == 1000.0
     assert config.streaming_mode == "cell"
 
 
@@ -589,7 +720,10 @@ def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
     )
     settings = GuiSettings(
         sheet_width_mm=120.0, sheet_height_mm=120.0, cell_diameter_mm=40.0,
+        organic_enabled=True, organic_cell_size_mm=6.0, organic_rotation_ramp=1.0,
+        organic_scale_ramp=0.5, organic_seed=55,
         sample_step_mm=2.0, sample_density_exponent=2.0,
+        xy_acceleration_mm_s2=1.0,
     )
     spool_root = tmp_path / "spool"
     result = generate_dry_run_sheet(settings, spool_root=spool_root, symbol_root=symbol_root)
@@ -603,6 +737,14 @@ def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
     assert "sample_max_step_mm" in payload
     assert "effective_sample_step_mm" in payload
     assert payload["streaming_mode"] == settings.streaming_mode
+    assert payload["xy_acceleration_mm_s2"] == 1000.0
+    assert payload["organic_enabled"] is True
+    assert payload["organic_cell_size_mm"] == 6.0
+    assert payload["organic_rotation_ramp"] == 1.0
+    assert payload["organic_scale_ramp"] == 0.5
+    assert payload["organic_seed"] == 55
+    assert payload["items"][0]["rotation_deg"] != 0
+    assert payload["items"][0]["symbol_scale"] != 1.0
     # 40mm cell < 80mm ref: effective = 2 * (80/40)^2 = 8.0, clamped to max 3.0
     assert payload["effective_sample_step_mm"] > 2.0  # smaller cell → lighter = more spacing
 

@@ -28,7 +28,6 @@ class RuntimeStatus(str, Enum):
     IDLE = "idle"
     PREPARING = "preparing_sheet"
     PRINTING = "printing"
-    PAUSED = "paused_for_reload"
     OPERATOR_PAUSED = "operator_paused"
     ERROR = "error"
 
@@ -44,8 +43,13 @@ class ComponentStatus(str, Enum):
 
 class SystemMode(str, Enum):
     TEST = "test"
-    EXHIBITION_DRY = "exhibition_dry"
-    EXHIBITION_REAL = "exhibition_real"
+    EXHIBITION = "exhibition"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "SystemMode | None":
+        if str(value) in {"exhibition_dry", "exhibition_real"}:
+            return cls.EXHIBITION
+        return None
 
 
 class PreflightLevel(str, Enum):
@@ -145,6 +149,9 @@ class SheetPlacement:
     center_x_mm: float
     center_y_mm: float
     diameter_mm: float
+    rotation_deg: float = 0.0
+    symbol_scale: float = 1.0
+    row_y_mm: float | None = None
 
 
 @dataclass
@@ -165,7 +172,6 @@ class PlotterRuntimeState:
     current_sheet_id: str = ""
     last_sheet_path: str = ""
     placeholder_index: int = 0
-    pending_reload: bool = False
     gcode_lines_sent: int = 0
     gcode_lines_total: int = 0
     gcode_progress_percent: float = 0.0
@@ -186,7 +192,6 @@ class PlotterRuntimeState:
             "current_sheet_id": self.current_sheet_id,
             "last_sheet_path": self.last_sheet_path,
             "placeholder_index": self.placeholder_index,
-            "pending_reload": self.pending_reload,
             "gcode_lines_sent": self.gcode_lines_sent,
             "gcode_lines_total": self.gcode_lines_total,
             "gcode_progress_percent": self.gcode_progress_percent,
@@ -203,13 +208,17 @@ class PlotterRuntimeState:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "PlotterRuntimeState":
+        raw_status = payload.get("status", RuntimeStatus.IDLE.value)
+        try:
+            status = RuntimeStatus(raw_status)
+        except ValueError:
+            status = RuntimeStatus.OPERATOR_PAUSED
         return cls(
-            status=RuntimeStatus(payload.get("status", RuntimeStatus.IDLE.value)),
+            status=status,
             message=payload.get("message", "Idle"),
             current_sheet_id=payload.get("current_sheet_id", ""),
             last_sheet_path=payload.get("last_sheet_path", ""),
             placeholder_index=int(payload.get("placeholder_index", 0)),
-            pending_reload=bool(payload.get("pending_reload", False)),
             gcode_lines_sent=int(payload.get("gcode_lines_sent", 0)),
             gcode_lines_total=int(payload.get("gcode_lines_total", 0)),
             gcode_progress_percent=float(payload.get("gcode_progress_percent", 0.0)),
@@ -378,6 +387,11 @@ class PlotterRuntimeConfig:
     sheet_margin_mm: float = 0.0
     cell_diameter_mm: float = 80.0
     gap_mm: float = 0.0
+    organic_enabled: bool = False
+    organic_cell_size_mm: float = 18.0
+    organic_rotation_ramp: float = 0.0
+    organic_scale_ramp: float = 0.0
+    organic_seed: int = 1007
     run_mode: str = "exhibition"
     dry_run: bool = True
     include_rings: bool = True
@@ -385,6 +399,7 @@ class PlotterRuntimeConfig:
     marker_diameter_mm: float = 1.5
     travel_rate: float = 5000.0
     draw_rate: float = 1800.0
+    xy_acceleration_mm_s2: float = 1000.0
     use_z_servo: bool = True
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
@@ -407,6 +422,11 @@ class PlotterRuntimeConfig:
             "sheet_margin_mm": self.sheet_margin_mm,
             "cell_diameter_mm": self.cell_diameter_mm,
             "gap_mm": self.gap_mm,
+            "organic_enabled": self.organic_enabled,
+            "organic_cell_size_mm": self.organic_cell_size_mm,
+            "organic_rotation_ramp": self.organic_rotation_ramp,
+            "organic_scale_ramp": self.organic_scale_ramp,
+            "organic_seed": self.organic_seed,
             "run_mode": self.run_mode,
             "dry_run": self.dry_run,
             "include_rings": self.include_rings,
@@ -414,6 +434,7 @@ class PlotterRuntimeConfig:
             "marker_diameter_mm": self.marker_diameter_mm,
             "travel_rate": self.travel_rate,
             "draw_rate": self.draw_rate,
+            "xy_acceleration_mm_s2": self.xy_acceleration_mm_s2,
             "use_z_servo": self.use_z_servo,
             "z_down_mm": self.z_down_mm,
             "z_up_mm": self.z_up_mm,
@@ -437,6 +458,11 @@ class PlotterRuntimeConfig:
             sheet_margin_mm=float(payload.get("sheet_margin_mm", 0.0)),
             cell_diameter_mm=float(payload.get("cell_diameter_mm", 80.0)),
             gap_mm=float(payload.get("gap_mm", 0.0)),
+            organic_enabled=bool(payload.get("organic_enabled", False)),
+            organic_cell_size_mm=float(payload.get("organic_cell_size_mm", 18.0)),
+            organic_rotation_ramp=float(payload.get("organic_rotation_ramp", 0.0)),
+            organic_scale_ramp=float(payload.get("organic_scale_ramp", 0.0)),
+            organic_seed=int(payload.get("organic_seed", 1007)),
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
             include_rings=bool(payload.get("include_rings", True)),
@@ -444,6 +470,7 @@ class PlotterRuntimeConfig:
             marker_diameter_mm=float(payload.get("marker_diameter_mm", 1.5)),
             travel_rate=float(payload.get("travel_rate", 5000.0)),
             draw_rate=float(payload.get("draw_rate", 1800.0)),
+            xy_acceleration_mm_s2=float(payload.get("xy_acceleration_mm_s2", 1000.0)),
             use_z_servo=bool(payload.get("use_z_servo", True)),
             z_down_mm=float(payload.get("z_down_mm", -25.0)),
             z_up_mm=float(payload.get("z_up_mm", 0.0)),
@@ -554,6 +581,6 @@ class HealthResponse(BaseModel):
     detail: dict[str, Any]
 
 
-class ReloadResponse(BaseModel):
+class OperatorResponse(BaseModel):
     ok: bool
     status: str

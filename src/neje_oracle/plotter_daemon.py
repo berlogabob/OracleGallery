@@ -4,10 +4,11 @@ import json
 import random
 import threading
 import time
+import xml.etree.ElementTree as ET
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .config import SYMBOL_FIT_RATIO, PlotterSettings, ensure_dir
+from .config import SYMBOL_FIT_RATIO, PlotterSettings, _repo_root, ensure_dir
 from .firebase_io import FirebaseRemoteRepository
 from .layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
 from .models import ComponentStatus, PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, PlotterRuntimeState, RuntimeStatus, SheetItem, SheetPlacement
@@ -15,6 +16,16 @@ from .origin_markers import ALL_ORIGINS, DEFAULT_MARKER_DIAMETER_MM, ORIGIN_FILL
 from .sampling import compute_effective_sample_step
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_sheet_gcode
+from .svg_normalizer import (
+    DEFAULT_SIMPLIFY_TOLERANCE_MM,
+    DEFAULT_SINGLE_STROKE_SYMBOLS,
+    MARK_NAMES,
+    MAX_SCALE,
+    MIN_SCALE,
+    normalize_svg_file,
+    read_normalized_svg_metadata,
+    scale_for_mark_name,
+)
 from .transport import FluidNCTransport
 
 
@@ -57,32 +68,9 @@ class PlotterDaemon:
         with self.state_lock:
             return self.runtime_state
 
-    def confirm_reload(self) -> None:
-        with self.state_lock:
-            self.runtime_state.pending_reload = False
-            self.runtime_state.status = RuntimeStatus.IDLE
-            self.runtime_state.message = "Operator confirmed reload"
-            self.runtime_state.updated_at = datetime.now(tz=UTC)
-            self.store.save_runtime_state(self.runtime_state)
-        control = self._load_control_state()
-        if control.dry_run:
-            control.print_enabled = False
-            control.operator_paused = True
-            self.store.save_control_state(control)
-            if self.oracle_store is not None:
-                self.oracle_store.save_print_control(control)
-        if self.oracle_store is not None:
-            self.oracle_store.set_component("plotter", ComponentStatus.RUNNING, message="Reload confirmed", heartbeat=True)
-
     def run_cycle(self) -> None:
         if self.oracle_store is not None:
             self.oracle_store.set_component("plotter", ComponentStatus.RUNNING, message="Daemon cycle", heartbeat=True)
-        with self.state_lock:
-            if self.runtime_state.pending_reload:
-                self.runtime_state.message = "Waiting for operator reload confirmation"
-                self.runtime_state.updated_at = datetime.now(tz=UTC)
-                self.store.save_runtime_state(self.runtime_state)
-                return
 
         config = self._load_plotter_config()
         control = self._load_control_state()
@@ -124,6 +112,11 @@ class PlotterDaemon:
             margin_mm=config.sheet_margin_mm,
             diameter_mm=config.cell_diameter_mm,
             gap_mm=config.gap_mm,
+            organic_enabled=config.organic_enabled,
+            organic_cell_size_mm=config.organic_cell_size_mm,
+            organic_rotation_ramp=config.organic_rotation_ramp,
+            organic_scale_ramp=config.organic_scale_ramp,
+            organic_seed=config.organic_seed,
         )
         layout_rows = group_layout_rows(placements)
         if not layout_rows:
@@ -146,6 +139,11 @@ class PlotterDaemon:
             "layout_mode": config.layout_mode,
             "cell_diameter_mm": config.cell_diameter_mm,
             "gap_mm": config.gap_mm,
+            "organic_enabled": config.organic_enabled,
+            "organic_cell_size_mm": config.organic_cell_size_mm,
+            "organic_rotation_ramp": config.organic_rotation_ramp,
+            "organic_scale_ramp": config.organic_scale_ramp,
+            "organic_seed": config.organic_seed,
             "symbol_fit_ratio": SYMBOL_FIT_RATIO,
             "dry_run": control.dry_run,
             "run_mode": control.run_mode,
@@ -163,6 +161,7 @@ class PlotterDaemon:
             "sample_max_step_mm": config.sample_max_step_mm,
             "effective_sample_step_mm": effective_step,
             "streaming_mode": config.streaming_mode,
+            "xy_acceleration_mm_s2": config.xy_acceleration_mm_s2,
         }
         self._write_manifest(manifest_path, manifest)
 
@@ -215,6 +214,7 @@ class PlotterDaemon:
                     cell_diameter_mm=config.cell_diameter_mm,
                     travel_rate=config.travel_rate,
                     draw_rate=config.draw_rate,
+                    xy_acceleration_mm_s2=config.xy_acceleration_mm_s2,
                     pen_up_command=self.settings.pen_up_command,
                     pen_down_command=self.settings.pen_down_command,
                     title=f"{sheet_id} row {row_index}/{len(layout_rows)}",
@@ -277,7 +277,6 @@ class PlotterDaemon:
                         control.print_enabled = False
                         control.operator_paused = True
                         self.oracle_store.save_print_control(control)
-                        self.oracle_store.save_real_fluidnc_armed(False)
                         self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
                     self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on row {row_index}: {exc}", sheet_id=sheet_id)
                     return
@@ -318,17 +317,20 @@ class PlotterDaemon:
                 control.print_enabled = False
                 control.operator_paused = True
                 self.oracle_store.save_print_control(control)
-                self.oracle_store.save_real_fluidnc_armed(False)
                 self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after post-sheet safety failure: {exc}")
             self._set_state(RuntimeStatus.ERROR, f"Post-sheet safety failed: {exc}", sheet_id=sheet_id)
             return
 
+        control.print_enabled = False
+        control.operator_paused = True
+        self.store.save_control_state(control)
+        if self.oracle_store is not None:
+            self.oracle_store.save_print_control(control)
         with self.state_lock:
-            self.runtime_state.status = RuntimeStatus.PAUSED
-            self.runtime_state.message = "Sheet finished. Replace material and confirm reload."
+            self.runtime_state.status = RuntimeStatus.OPERATOR_PAUSED
+            self.runtime_state.message = "Sheet finished. Press START PRINT for the next sheet."
             self.runtime_state.current_sheet_id = sheet_id
             self.runtime_state.last_sheet_path = str(last_gcode_path or manifest_path)
-            self.runtime_state.pending_reload = True
             self.runtime_state.gcode_lines_sent = self.runtime_state.gcode_lines_total
             self.runtime_state.gcode_progress_percent = 100.0
             self.runtime_state.current_row_index = rows_printed
@@ -342,7 +344,7 @@ class PlotterDaemon:
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
-            self.oracle_store.set_component("plotter", ComponentStatus.WARNING, message="Sheet finished; waiting reload", heartbeat=True)
+            self.oracle_store.set_component("plotter", ComponentStatus.WARNING, message="Sheet finished; print stopped", heartbeat=True)
 
     def _post_sheet_safety_gcode(self, config: PlotterRuntimeConfig, sheet_id: str) -> str:
         if config.use_z_servo:
@@ -410,6 +412,7 @@ class PlotterDaemon:
                     cell_diameter_mm=config.cell_diameter_mm,
                     travel_rate=config.travel_rate,
                     draw_rate=config.draw_rate,
+                    xy_acceleration_mm_s2=config.xy_acceleration_mm_s2,
                     pen_up_command=self.settings.pen_up_command,
                     pen_down_command=self.settings.pen_down_command,
                     title=f"{sheet_id} cell {placement.index + 1}/{total_cells}",
@@ -471,7 +474,6 @@ class PlotterDaemon:
                         failed_control.print_enabled = False
                         failed_control.operator_paused = True
                         self.oracle_store.save_print_control(failed_control)
-                        self.oracle_store.save_real_fluidnc_armed(False)
                         self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
                     self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on cell {placement.index + 1}: {exc}", sheet_id=sheet_id)
                     return None
@@ -546,6 +548,7 @@ class PlotterDaemon:
         for job in user_jobs:
             local_svg = cache_dir / f"{job.session_id}.svg"
             self.remote.download_asset(job.svg_storage_path, local_svg)
+            _apply_current_mark_scale(local_svg, job.title)
             source_kind = "placeholder" if job.queue == "filler" or job.priority == "filler" or job.origin == ORIGIN_FILLER_MACBOOK else "user"
             items.append(
                 SheetItem(
@@ -572,12 +575,13 @@ class PlotterDaemon:
         random.Random(time.time_ns() + start_index).shuffle(placeholders)
         for offset in range(remaining):
             svg_path = placeholders[(start_index + offset) % len(placeholders)]
+            local_svg = _materialize_scaled_placeholder(svg_path, cache_dir)
             items.append(
                 SheetItem(
                     source_kind="placeholder",
                     session_id=f"placeholder_{start_index + offset}",
                     title=svg_path.stem,
-                    svg_path=svg_path,
+                    svg_path=local_svg,
                     origin=ORIGIN_FILLER_MACBOOK,
                     tags=normalize_tags(["filler", "local", "macbook"]),
                     marker_position=marker_position_for_origin(ORIGIN_FILLER_MACBOOK),
@@ -616,6 +620,9 @@ class PlotterDaemon:
                     "center_x_mm": placement.center_x_mm,
                     "center_y_mm": placement.center_y_mm,
                     "cell_diameter_mm": placement.diameter_mm,
+                    "rotation_deg": placement.rotation_deg,
+                    "symbol_scale": placement.symbol_scale,
+                    "row_y_mm": placement.row_y_mm,
                 }
                 for item, placement in zip(items, placements, strict=True)
             ],
@@ -657,6 +664,9 @@ class PlotterDaemon:
             "center_x_mm": placement.center_x_mm,
             "center_y_mm": placement.center_y_mm,
             "cell_diameter_mm": placement.diameter_mm,
+            "rotation_deg": placement.rotation_deg,
+            "symbol_scale": placement.symbol_scale,
+            "row_y_mm": placement.row_y_mm,
         }
 
     def _append_manifest_row(self, path: Path, manifest: dict[str, object], row_payload: dict[str, object]) -> None:
@@ -745,11 +755,17 @@ class PlotterDaemon:
             sheet_margin_mm=self.settings.sheet_margin_mm,
             cell_diameter_mm=self.settings.cell_diameter_mm,
             gap_mm=self.settings.cell_gap_mm,
+            organic_enabled=self.settings.organic_enabled,
+            organic_cell_size_mm=self.settings.organic_cell_size_mm,
+            organic_rotation_ramp=self.settings.organic_rotation_ramp,
+            organic_scale_ramp=self.settings.organic_scale_ramp,
+            organic_seed=self.settings.organic_seed,
             run_mode="exhibition",
             dry_run=self.settings.dry_run,
             include_rings=True,
             include_markers=self.settings.include_markers,
             marker_diameter_mm=self.settings.marker_diameter_mm,
+            xy_acceleration_mm_s2=self.settings.xy_acceleration_mm_s2,
             use_z_servo=self.settings.use_z_servo,
             z_down_mm=self.settings.z_down_mm,
             z_up_mm=self.settings.z_up_mm,
@@ -823,7 +839,7 @@ class PlotterDaemon:
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
             component_status = ComponentStatus.ERROR if status == RuntimeStatus.ERROR else ComponentStatus.RUNNING
-            if status in {RuntimeStatus.PAUSED, RuntimeStatus.OPERATOR_PAUSED}:
+            if status == RuntimeStatus.OPERATOR_PAUSED:
                 component_status = ComponentStatus.WARNING
             self.oracle_store.set_component(
                 "plotter",
@@ -879,3 +895,84 @@ def _list_placeholder_svg_paths(root: Path) -> list[Path]:
     for session_dir in sorted(path for path in root.iterdir() if path.is_dir()):
         package_svgs.extend(sorted(session_dir.glob("*_plotter.svg")))
     return flat_svgs + package_svgs
+
+
+def _apply_current_mark_scale(svg_path: Path, mark_name: str) -> None:
+    scale = _current_scale_for_mark(mark_name)
+    try:
+        metadata = read_normalized_svg_metadata(svg_path)
+    except ET.ParseError:
+        return
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+    changed = False
+    if metadata.normalized and scale is not None:
+        bounded = _bounded_symbol_scale(scale)
+        if abs(metadata.scale - bounded) >= 0.0001:
+            root.set("data-neje-scale", f"{bounded:.6g}")
+            changed = True
+    symbol_name = _symbol_file_name_for_mark(mark_name)
+    if symbol_name in DEFAULT_SINGLE_STROKE_SYMBOLS and root.get("data-neje-single-stroke") != "true":
+        root.set("data-neje-single-stroke", "true")
+        changed = True
+    simplify_tolerance = DEFAULT_SIMPLIFY_TOLERANCE_MM.get(symbol_name or "", 0.0)
+    if simplify_tolerance > 0 and root.get("data-neje-simplify-mm") != f"{simplify_tolerance:.6g}":
+        root.set("data-neje-simplify-mm", f"{simplify_tolerance:.6g}")
+        changed = True
+    if changed:
+        tree.write(svg_path, encoding="unicode")
+
+
+def _materialize_scaled_placeholder(svg_path: Path, cache_dir: Path) -> Path:
+    scale = _current_scale_for_symbol_file(svg_path)
+    ensure_dir(cache_dir)
+    cache_path = cache_dir / f"placeholder_{svg_path.stem}.svg"
+    cache_path.write_text(
+        normalize_svg_file(svg_path, marker_kind="idle", scale=scale, include_rings=False),
+        encoding="utf-8",
+    )
+    return cache_path
+
+
+def _current_scale_for_mark(mark_name: str) -> float | None:
+    normalized_name = mark_name.strip().upper()
+    if not normalized_name:
+        return None
+    scale = scale_for_mark_name(normalized_name, _symbol_root(), _scale_config_path())
+    return _bounded_symbol_scale(scale)
+
+
+def _symbol_file_name_for_mark(mark_name: str) -> str | None:
+    normalized_name = mark_name.strip().upper()
+    if normalized_name not in MARK_NAMES:
+        return None
+    symbol_index = MARK_NAMES.index(normalized_name)
+    symbols = sorted(path for path in _symbol_root().glob("*.svg") if path.is_file())
+    if symbol_index >= len(symbols):
+        return None
+    return symbols[symbol_index].name
+
+
+def _current_scale_for_symbol_file(svg_path: Path) -> float:
+    payload = _load_scale_payload()
+    return _bounded_symbol_scale(float(payload.get(svg_path.name, 1.0)))
+
+
+def _load_scale_payload() -> dict[str, float]:
+    path = _scale_config_path()
+    if not path.exists():
+        return {}
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    return {str(key): float(value) for key, value in raw.items()}
+
+
+def _bounded_symbol_scale(value: float) -> float:
+    return max(MIN_SCALE, min(MAX_SCALE, float(value)))
+
+
+def _symbol_root() -> Path:
+    return _repo_root() / "assets" / "symbols"
+
+
+def _scale_config_path() -> Path:
+    return _symbol_root() / "symbol_scales.json"

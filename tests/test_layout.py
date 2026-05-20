@@ -1,6 +1,6 @@
 import pytest
 
-from neje_oracle.layout import build_grid_layout, build_hex_layout, group_layout_rows
+from neje_oracle.layout import build_grid_layout, build_hex_layout, build_sheet_layout, group_layout_rows
 
 
 def test_hex_layout_stays_within_sheet() -> None:
@@ -154,3 +154,85 @@ def test_group_layout_rows_keeps_left_to_right_order() -> None:
 
     assert [len(row) for row in rows[:2]] == [3, 2]
     assert all(row[index].center_x_mm <= row[index + 1].center_x_mm for row in rows for index in range(len(row) - 1))
+
+
+def test_organic_layout_is_deterministic_and_varied() -> None:
+    first = build_sheet_layout(
+        9,
+        mode="grid",
+        sheet_width_mm=300,
+        sheet_height_mm=300,
+        margin_mm=0,
+        diameter_mm=80,
+        organic_enabled=True,
+        organic_cell_size_mm=18,
+        organic_rotation_ramp=1,
+        organic_scale_ramp=1,
+        organic_seed=42,
+    )
+    second = build_sheet_layout(
+        9,
+        mode="grid",
+        sheet_width_mm=300,
+        sheet_height_mm=300,
+        margin_mm=0,
+        diameter_mm=80,
+        organic_enabled=True,
+        organic_cell_size_mm=18,
+        organic_rotation_ramp=1,
+        organic_scale_ramp=1,
+        organic_seed=42,
+    )
+    regular = build_grid_layout(9, sheet_width_mm=300, sheet_height_mm=300, margin_mm=0, diameter_mm=80)
+
+    assert first == second
+    assert any((organic.center_x_mm, organic.center_y_mm) != (base.center_x_mm, base.center_y_mm) for organic, base in zip(first, regular, strict=True))
+    assert any(abs(placement.rotation_deg) > 0.001 for placement in first)
+    assert any(abs(placement.symbol_scale - 1.0) > 0.001 for placement in first)
+
+
+def test_organic_layout_stays_inside_printable_bounds_and_keeps_row_groups() -> None:
+    placements = build_sheet_layout(
+        12,
+        mode="hex",
+        sheet_width_mm=300,
+        sheet_height_mm=300,
+        margin_mm=10,
+        diameter_mm=80,
+        organic_enabled=True,
+        organic_cell_size_mm=80,
+        organic_rotation_ramp=1,
+        organic_scale_ramp=1,
+        organic_seed=12,
+    )
+    regular_rows = group_layout_rows(
+        build_sheet_layout(12, mode="hex", sheet_width_mm=300, sheet_height_mm=300, margin_mm=10, diameter_mm=80)
+    )
+    organic_rows = group_layout_rows(placements)
+
+    assert [len(row) for row in organic_rows] == [len(row) for row in regular_rows]
+    for placement in placements:
+        radius = placement.diameter_mm / 2
+        assert placement.center_x_mm - radius >= 10
+        assert placement.center_y_mm - radius >= 10
+        assert placement.center_x_mm + radius <= 300 - 10
+        assert placement.center_y_mm + radius <= 300 - 10
+
+
+def test_organic_disabled_keeps_regular_layout() -> None:
+    regular = build_grid_layout(9, sheet_width_mm=300, sheet_height_mm=300, margin_mm=0, diameter_mm=80)
+    disabled = build_sheet_layout(
+        9,
+        mode="grid",
+        sheet_width_mm=300,
+        sheet_height_mm=300,
+        margin_mm=0,
+        diameter_mm=80,
+        organic_enabled=False,
+        organic_cell_size_mm=80,
+        organic_rotation_ramp=1,
+        organic_scale_ramp=1,
+        organic_seed=12,
+    )
+
+    assert disabled == regular

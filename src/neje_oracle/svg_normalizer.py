@@ -19,6 +19,17 @@ CANONICAL_BASE_DIAMETER = 720.0
 CANONICAL_IDLE_INNER_DIAMETER = 676.0
 MIN_SCALE = 0.3
 MAX_SCALE = 5.0
+DEFAULT_CENTER_Y_OFFSETS = {
+    "test_the_kind_soul_220047_plotter.svg": -72.0,
+}
+DEFAULT_SINGLE_STROKE_SYMBOLS = {
+    "20260421_223735_plotter.svg",
+    "test_the_kind_soul_220047_plotter.svg",
+}
+DEFAULT_SIMPLIFY_TOLERANCE_MM = {
+    "20260421_223735_plotter.svg": 0.04,
+    "test_the_kind_soul_220047_plotter.svg": 0.02,
+}
 
 MARK_NAMES = [
     "THE KIND SOUL",
@@ -38,6 +49,7 @@ class NormalizedSvgMetadata:
     scale: float
     base_diameter: float
     canvas_size: float
+    center_y_offset: float = 0.0
 
 
 def normalize_svg_file(
@@ -54,7 +66,19 @@ def normalize_svg_file(
     if rng is not None:
         _jitter_drawables(root, rng, jitter_px)
     bbox = _drawable_bbox_from_tree(root, fallback_path=source_svg)
-    return normalize_svg_root(root, bbox=bbox, marker_kind=marker_kind, scale=scale, include_rings=include_rings)
+    center_y_offset = DEFAULT_CENTER_Y_OFFSETS.get(source_svg.name, 0.0)
+    single_stroke = source_svg.name in DEFAULT_SINGLE_STROKE_SYMBOLS
+    simplify_tolerance_mm = DEFAULT_SIMPLIFY_TOLERANCE_MM.get(source_svg.name, 0.0)
+    return normalize_svg_root(
+        root,
+        bbox=bbox,
+        marker_kind=marker_kind,
+        scale=scale,
+        include_rings=include_rings,
+        center_y_offset=center_y_offset,
+        single_stroke=single_stroke,
+        simplify_tolerance_mm=simplify_tolerance_mm,
+    )
 
 
 def normalize_svg_text(
@@ -82,6 +106,9 @@ def normalize_svg_root(
     marker_kind: str = "user",
     scale: float = 1.0,
     include_rings: bool = False,
+    center_y_offset: float = 0.0,
+    single_stroke: bool = False,
+    simplify_tolerance_mm: float = 0.0,
 ) -> str:
     if marker_kind not in {"idle", "user"}:
         raise ValueError(f"Unsupported marker kind: {marker_kind}")
@@ -108,13 +135,16 @@ def normalize_svg_root(
         f'viewBox="0 0 {int(CANONICAL_CANVAS_SIZE)} {int(CANONICAL_CANVAS_SIZE)}" overflow="visible" '
         'style="overflow:visible" '
         'data-neje-normalized="true" '
+        f'data-neje-single-stroke="{str(single_stroke).lower()}" '
+        f'data-neje-simplify-mm="{max(0.0, simplify_tolerance_mm):.6g}" '
         f'data-neje-scale="{bounded_scale:.6g}" '
+        f'data-neje-center-y-offset="{center_y_offset:.6g}" '
         f'data-neje-base-diameter="{CANONICAL_BASE_DIAMETER:.6g}" '
         f'data-neje-canvas-size="{CANONICAL_CANVAS_SIZE:.6g}">\n'
         '<g fill="none" stroke="black" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round">\n'
         + "\n".join(rings)
         + "\n"
-        f'<g data-neje-layer="mark" transform="translate({CANONICAL_CENTER:.3f} {CANONICAL_CENTER:.3f}) '
+        f'<g data-neje-layer="mark" transform="translate({CANONICAL_CENTER:.3f} {CANONICAL_CENTER + center_y_offset:.3f}) '
         f'scale({transform_scale:.8f}) translate({-source_mid_x:.3f} {-source_mid_y:.3f})">\n'
         f"{children}\n"
         "</g>\n"
@@ -130,6 +160,7 @@ def read_normalized_svg_metadata(svg_path: Path) -> NormalizedSvgMetadata:
         scale=_read_float_attr(root, "data-neje-scale", 1.0),
         base_diameter=_read_float_attr(root, "data-neje-base-diameter", CANONICAL_BASE_DIAMETER),
         canvas_size=_read_float_attr(root, "data-neje-canvas-size", CANONICAL_CANVAS_SIZE),
+        center_y_offset=_read_float_attr(root, "data-neje-center-y-offset", 0.0),
     )
 
 

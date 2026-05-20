@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from neje_oracle.config import OracleSupervisorSettings, PlotterSettings
+from neje_oracle.gui_support import GuiSettings
 from neje_oracle.models import (
     ComponentStatus,
     FluidNCCommandResult,
     FluidNCControllerState,
     FluidNCProbeResult,
     FluidNCState,
+    PlotterControlState,
     PlotterRuntimeConfig,
     PlotterReadinessState,
     PlotterRuntimeState,
@@ -71,6 +73,11 @@ class DryTransport:
         self.commands.append(command)
         return FluidNCCommandResult(ok=True, command=command, response_lines=["ok"])
 
+    def home(self, axis: str | None = None):
+        command = "$H" if axis is None else f"$H={axis.upper()}"
+        self.commands.append(command)
+        return FluidNCCommandResult(ok=True, command=command, response_lines=["ok"])
+
     def send_commands(self, commands: list[str], *, timeout_seconds=None):
         self.commands.extend(commands)
         return FluidNCCommandResult(ok=True, command=" ; ".join(commands), response_lines=["ok"] * len(commands))
@@ -84,9 +91,36 @@ class DryTransport:
         return path
 
 
-class ProbeBlockedTransport(DryTransport):
+class HomeReconnectTransport(DryTransport):
+    def __init__(self, settings: PlotterSettings) -> None:
+        super().__init__(settings)
+        self.probe_count = 0
+
+    def home(self, axis: str | None = None):
+        command = "$H" if axis is None else f"$H={axis.upper()}"
+        self.commands.append(command)
+        return FluidNCCommandResult(ok=False, command=command, error="Connection closed by FluidNC")
+
     def probe(self, *, timeout_seconds: float = 2.0):
-        raise AssertionError("Ready Check must not probe FluidNC after moving")
+        self.probe_count += 1
+        return FluidNCProbeResult(
+            http_online=True,
+            telnet_online=True,
+            ok=True,
+            message="fake fluidnc idle after homing",
+            controller=FluidNCControllerState(state=FluidNCState.IDLE),
+        )
+
+
+class BusyTransport(DryTransport):
+    def probe(self, *, timeout_seconds: float = 2.0):
+        return FluidNCProbeResult(
+            http_online=True,
+            telnet_online=True,
+            ok=True,
+            message="fake fluidnc running",
+            controller=FluidNCControllerState(state=FluidNCState.RUN),
+        )
 
 
 def _plotter_settings(tmp_path: Path) -> PlotterSettings:
@@ -104,6 +138,17 @@ def _plotter_settings(tmp_path: Path) -> PlotterSettings:
         spool_root=tmp_path / "spool",
         poll_seconds=10.0,
         dry_run=True,
+    )
+
+
+def _supervisor(tmp_path: Path, transport_cls=DryTransport) -> SupervisorService:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    return SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport_cls(resolved),  # type: ignore[arg-type]
     )
 
 
@@ -175,7 +220,7 @@ def test_start_system_reports_plotter_start_failure_in_real_mode(tmp_path: Path)
     assert "firebase unavailable" in states["plotter"].last_error
 
 
-def test_real_print_requires_arm_and_successful_preflight(tmp_path: Path) -> None:
+def test_real_print_requires_successful_preflight_and_work_zero(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     supervisor = SupervisorService(
         settings=settings,
@@ -184,7 +229,7 @@ def test_real_print_requires_arm_and_successful_preflight(tmp_path: Path) -> Non
         transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
     )
 
-    blocked = supervisor.start_print(SystemMode.EXHIBITION_REAL)
+    blocked = supervisor.start_print(SystemMode.EXHIBITION)
     assert blocked.status == ComponentStatus.WARNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
 
@@ -197,16 +242,75 @@ def test_real_print_requires_arm_and_successful_preflight(tmp_path: Path) -> Non
     supervisor.runtime_store.save_plotter_readiness(
         PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
     )
-    armed = supervisor.arm_real_fluidnc(SystemMode.EXHIBITION_REAL)
-    started = supervisor.start_print(SystemMode.EXHIBITION_REAL)
+    started = supervisor.start_print(SystemMode.EXHIBITION)
 
-    assert "armed" in armed.message.lower()
     assert started.status == ComponentStatus.RUNNING
     assert supervisor.runtime_store.load_print_control().print_enabled is True
     assert supervisor.runtime_store.load_print_control().dry_run is False
 
 
-def test_emergency_stop_disables_print_and_disarms_real_mode(tmp_path: Path) -> None:
+def test_print_uploaded_svg_sends_direct_gcode_when_fluidnc_idle(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = DryTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")])
+    )
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<path d='M10,10 L90,90' stroke='black' fill='none'/>"
+        "</svg>"
+    )
+
+    state = supervisor.print_uploaded_svg(
+        GuiSettings(sheet_width_mm=200, sheet_height_mm=120, cell_diameter_mm=80),
+        svg_bytes=svg.encode("utf-8"),
+        original_name="label-test.svg",
+    )
+
+    assert state.status == ComponentStatus.STOPPED
+    gcode_files = list(plotter_settings.spool_root.glob("testsvg_*.gcode"))
+    assert len(gcode_files) == 1
+    gcode = gcode_files[0].read_text(encoding="utf-8")
+    assert "direct SVG LABEL TEST" in gcode
+    assert "G0 Z" in gcode
+    assert "G0 X0 Y0" in gcode
+    runtime = PlotterStore(plotter_settings.db_path).load_runtime_state()
+    assert runtime.status == RuntimeStatus.OPERATOR_PAUSED
+    assert runtime.sheet_progress_percent == 100.0
+
+
+def test_print_uploaded_svg_blocks_when_fluidnc_not_idle(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path, transport_cls=BusyTransport)
+    supervisor.runtime_store.save_preflight_result(
+        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")])
+    )
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<path d='M10,10 L90,90' stroke='black' fill='none'/>"
+        "</svg>"
+    )
+
+    state = supervisor.print_uploaded_svg(GuiSettings(), svg_bytes=svg.encode("utf-8"), original_name="busy.svg")
+
+    assert state.status == ComponentStatus.WARNING
+    assert "Idle" in state.message
+    assert not list(supervisor.plotter_settings.spool_root.glob("testsvg_*.gcode"))
+
+
+def test_emergency_stop_disables_print_and_clears_readiness(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     plotter_settings = _plotter_settings(tmp_path)
     supervisor = SupervisorService(
@@ -215,7 +319,6 @@ def test_emergency_stop_disables_print_and_disarms_real_mode(tmp_path: Path) -> 
         remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
         transport_factory=lambda resolved: DryTransport(resolved),  # type: ignore[arg-type]
     )
-    supervisor.runtime_store.save_real_fluidnc_armed(True)
     supervisor.runtime_store.save_preflight_result(
         PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "online")])
     )
@@ -228,7 +331,6 @@ def test_emergency_stop_disables_print_and_disarms_real_mode(tmp_path: Path) -> 
 
     assert state.status == ComponentStatus.WARNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
-    assert supervisor.runtime_store.load_real_fluidnc_armed() is False
     assert supervisor.runtime_store.load_plotter_readiness().plotter_ready is False
 
 
@@ -270,7 +372,6 @@ def test_manual_control_pauses_enabled_print_before_jog(tmp_path: Path) -> None:
 
     assert state.status == ComponentStatus.RUNNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
-    assert supervisor.runtime_store.load_real_fluidnc_armed() is False
 
 
 def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
@@ -300,57 +401,6 @@ def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
     assert all(not command.startswith("$J=") for command in transport.commands)
 
 
-def test_ready_check_returns_to_work_zero_without_homing(tmp_path: Path) -> None:
-    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
-    plotter_settings = _plotter_settings(tmp_path)
-    transport = DryTransport(plotter_settings)
-    supervisor = SupervisorService(
-        settings=settings,
-        plotter_settings=plotter_settings,
-        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
-        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
-    )
-    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(use_z_servo=True))
-
-    supervisor.set_work_zero()
-    ready = supervisor.ready_check()
-
-    assert ready.status == ComponentStatus.RUNNING
-    assert transport.commands == [
-        "G10 L20 P1 X0 Y0",
-        "G21",
-        "G90",
-        "G54",
-        "G0 X0 Y0",
-    ]
-    assert all(not command.startswith("$H") for command in transport.commands)
-
-
-def test_ready_check_does_not_probe_after_ready_move(tmp_path: Path) -> None:
-    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
-    plotter_settings = _plotter_settings(tmp_path)
-    transport = ProbeBlockedTransport(plotter_settings)
-    supervisor = SupervisorService(
-        settings=settings,
-        plotter_settings=plotter_settings,
-        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
-        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
-    )
-    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(use_z_servo=True))
-
-    supervisor.set_work_zero()
-    ready = supervisor.ready_check()
-
-    assert ready.status == ComponentStatus.RUNNING
-    assert transport.commands == [
-        "G10 L20 P1 X0 Y0",
-        "G21",
-        "G90",
-        "G54",
-        "G0 X0 Y0",
-    ]
-
-
 def test_set_work_zero_migrates_legacy_z_zero_for_servo(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     plotter_settings = _plotter_settings(tmp_path)
@@ -368,7 +418,7 @@ def test_set_work_zero_migrates_legacy_z_zero_for_servo(tmp_path: Path) -> None:
     assert transport.commands == ["G10 L20 P1 X0 Y0"]
 
 
-def test_ready_workflow_sets_work_zero_and_ready_state(tmp_path: Path) -> None:
+def test_set_work_zero_sets_ready_state(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     plotter_settings = _plotter_settings(tmp_path)
     supervisor = SupervisorService(
@@ -379,13 +429,49 @@ def test_ready_workflow_sets_work_zero_and_ready_state(tmp_path: Path) -> None:
     )
     supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(work_zero_command="G10 L20 P1 X0 Y0"))
 
-    supervisor.set_work_zero()
-    ready = supervisor.ready_check()
+    state = supervisor.set_work_zero()
 
-    assert ready.status == ComponentStatus.RUNNING
+    assert state.status == ComponentStatus.RUNNING
     readiness = supervisor.runtime_store.load_plotter_readiness()
     assert readiness.work_zero_set is True
     assert readiness.plotter_ready is True
+
+
+def test_home_recovers_when_fluidnc_closes_connection_during_homing(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = HomeReconnectTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+
+    state = supervisor.home_fluidnc()
+
+    assert state.status == ComponentStatus.RUNNING
+    assert "$H" in transport.commands
+    assert transport.probe_count >= 1
+    assert "homing complete" in state.message.lower()
+
+
+def test_home_xy_uses_xy_homing_command(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = DryTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+
+    state = supervisor.home_xy_fluidnc()
+
+    assert state.status == ComponentStatus.RUNNING
+    assert "$H=XY" in transport.commands
+    assert "$H" not in transport.commands
 
 
 def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:

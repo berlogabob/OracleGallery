@@ -113,25 +113,38 @@ def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:
     assert supervisor.runtime_store.load_print_control().print_enabled is False
 
 
-def test_real_print_blocked_without_arm(tmp_path: Path) -> None:
+def test_exhibition_print_starts_after_preflight_ready_and_idle(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path)
     _save_ok_preflight_and_ready(supervisor)
 
-    state = supervisor.start_print(SystemMode.EXHIBITION_REAL)
+    state = supervisor.start_print(SystemMode.EXHIBITION)
 
-    assert state.status == ComponentStatus.WARNING
-    assert "armed" in state.message.lower()
-    assert supervisor.runtime_store.load_print_control().print_enabled is False
+    assert state.status == ComponentStatus.RUNNING
+    control = supervisor.runtime_store.load_print_control()
+    assert control.print_enabled is True
+    assert control.run_mode == "exhibition"
+    assert control.dry_run is False
+
+
+def test_test_print_starts_after_preflight_ready_and_idle(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path)
+    _save_ok_preflight_and_ready(supervisor)
+
+    state = supervisor.start_print(SystemMode.TEST)
+
+    assert state.status == ComponentStatus.RUNNING
+    control = supervisor.runtime_store.load_print_control()
+    assert control.print_enabled is True
+    assert control.run_mode == "test"
+    assert control.dry_run is False
 
 
 def test_real_print_blocked_when_fluidnc_not_idle(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path, BusyTransport)
     _save_ok_preflight_and_ready(supervisor)
-    supervisor.runtime_store.save_real_fluidnc_armed(True)
 
-    state = supervisor.start_print(SystemMode.EXHIBITION_REAL)
+    state = supervisor.start_print(SystemMode.EXHIBITION)
 
     assert state.status == ComponentStatus.WARNING
     assert "fluidnc" in state.message.lower()
     assert supervisor.runtime_store.load_print_control().print_enabled is False
-    assert supervisor.runtime_store.load_real_fluidnc_armed() is False
