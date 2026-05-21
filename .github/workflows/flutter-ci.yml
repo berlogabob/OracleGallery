@@ -1,0 +1,33 @@
+# Flutter CI workflow for public_gallery
+# Part of the modernization effort to verify Flutter gallery compatibility
+
+name: Flutter CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: "stable"
+
+      - name: Install dependencies
+        working-directory: public_gallery
+        run: flutter pub get
+
+      - name: Run flutter analyze
+        working-directory: public_gallery
+        run: flutter analyze
+
+      - name: Run tests
+        working-directory: public_gallery
+        run: flutter test

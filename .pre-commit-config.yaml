@@ -1,0 +1,24 @@
+# Pre-commit config for neje_oracle
+# Implements staged quality gates without blocking on BLE001 until cleanup begins
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: "\.DS_Store|coverage/|__pycache__|\.venv"
+      - id: end-of-file-fixer
+        exclude: "\.DS_Store|coverage/|__pycache__"
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: '--maxkb=50000'
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix, --show-source]
+      - id: ruff-format
+        exclude: ".DS_Store|coverage/|__pycache__"

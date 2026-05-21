@@ -13,10 +13,20 @@ from neje_oracle.transport import FluidNCTransport, discover_fluidnc, parse_stat
 
 
 class FakeFluidNCServer:
-    def __init__(self, *, error_command: str = "", suppress_ok_command: str = "", close_command: str = "") -> None:
+    def __init__(
+        self,
+        *,
+        error_command: str = "",
+        suppress_ok_command: str = "",
+        close_command: str = "",
+        status_states: list[str] | None = None,
+    ) -> None:
         self.error_command = error_command
         self.suppress_ok_command = suppress_ok_command
         self.close_command = close_command
+        self.status_states = status_states or ["Idle"]
+        self.status_queries = 0
+        self._status_lock = threading.Lock()
         self.commands: list[str] = []
         self.realtime: list[bytes] = []
         self._stop = threading.Event()
@@ -71,9 +81,9 @@ class FakeFluidNCServer:
                     self.realtime.append(b"~")
                 if b"\x18" in data:
                     self.realtime.append(b"\x18")
-                if b"?" in data:
-                    conn.sendall(b"<Idle|MPos:1.000,2.000,3.000|FS:0,0|Ov:100,100,100>\r\n")
-                    data = data.replace(b"?", b"")
+                while b"?" in data:
+                    conn.sendall(self._next_status_response())
+                    data = data.replace(b"?", b"", 1)
                 buffer += data
                 while b"\n" in buffer:
                     raw, buffer = buffer.split(b"\n", 1)
@@ -92,8 +102,15 @@ class FakeFluidNCServer:
                     else:
                         conn.sendall(b"ok\r\n")
 
+    def _next_status_response(self) -> bytes:
+        with self._status_lock:
+            index = min(self.status_queries, len(self.status_states) - 1)
+            state = self.status_states[index]
+            self.status_queries += 1
+        return f"<{state}|MPos:1.000,2.000,3.000|FS:0,0|Ov:100,100,100>\r\n".encode("utf-8")
 
-def _settings(tmp_path: Path, server: FakeFluidNCServer) -> PlotterSettings:
+
+def _settings(tmp_path: Path, server: FakeFluidNCServer, *, idle_timeout_seconds: float = 0.5) -> PlotterSettings:
     return PlotterSettings(
         spool_root=tmp_path / "spool",
         fluidnc_http_url="",
@@ -101,6 +118,7 @@ def _settings(tmp_path: Path, server: FakeFluidNCServer) -> PlotterSettings:
         fluidnc_telnet_port=server.port,
         fluidnc_connect_timeout_seconds=0.5,
         fluidnc_ack_timeout_seconds=0.5,
+        fluidnc_idle_timeout_seconds=idle_timeout_seconds,
         dry_run=False,
     )
 
@@ -175,6 +193,29 @@ def test_send_waits_for_ok_for_each_line(tmp_path: Path) -> None:
     assert "G1 X1" in server.commands
     assert "; comment" not in server.commands
     assert progress[-1] == (2, 2)
+
+
+def test_send_waits_for_idle_after_final_ack(tmp_path: Path) -> None:
+    with FakeFluidNCServer(status_states=["Idle", "Run", "Run", "Idle"]) as server:
+        transport = FluidNCTransport(_settings(tmp_path, server, idle_timeout_seconds=1.0))
+        gcode_path = transport.send(gcode="G1 X1\n", sheet_id="sheet", dry_run=False)
+
+    assert gcode_path.exists()
+    assert server.status_queries >= 4
+
+
+def test_send_times_out_waiting_for_idle_after_final_ack(tmp_path: Path) -> None:
+    with FakeFluidNCServer(status_states=["Idle", "Run"]) as server:
+        transport = FluidNCTransport(_settings(tmp_path, server, idle_timeout_seconds=0.15))
+        with pytest.raises(RuntimeError, match="Timed out waiting for motion to complete"):
+            transport.send(gcode="G1 X1\n", sheet_id="sheet", dry_run=False)
+
+
+def test_send_fails_fast_when_fluidnc_holds_after_final_ack(tmp_path: Path) -> None:
+    with FakeFluidNCServer(status_states=["Idle", "Hold"]) as server:
+        transport = FluidNCTransport(_settings(tmp_path, server, idle_timeout_seconds=1.0))
+        with pytest.raises(RuntimeError, match="entered Hold while waiting for motion to complete"):
+            transport.send(gcode="G1 X1\n", sheet_id="sheet", dry_run=False)
 
 
 def test_send_fails_on_fluidnc_error(tmp_path: Path) -> None:

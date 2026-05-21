@@ -9,7 +9,7 @@ from base64 import b64encode
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .config import SYMBOL_FIT_RATIO, FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root, ensure_dir, ensure_parent
 from .firebase_io import FirebaseRemoteRepository
@@ -87,7 +87,7 @@ GUI_DEFAULTS = {
     "sample_density_exponent": 1.0,
     "sample_min_step_mm": 0.25,
     "sample_max_step_mm": 3.0,
-    "streaming_mode": "cell",
+    "streaming_mode": "row",
     "xy_acceleration_mm_s2": 1000.0,
     "direct_svg_origin_x_mm": 25.0,
     "direct_svg_origin_y_mm": 25.0,
@@ -179,7 +179,7 @@ class GuiSettings:
             sample_density_exponent=settings.sample_density_exponent,
             sample_min_step_mm=settings.sample_min_step_mm,
             sample_max_step_mm=settings.sample_max_step_mm,
-            streaming_mode=GUI_DEFAULTS["streaming_mode"],
+            streaming_mode=settings.streaming_mode,
         )
 
 
@@ -230,7 +230,7 @@ def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSetting
 
 def _repair_xy_acceleration(value: float) -> float:
     if 0.0 < value < 100.0:
-        return GUI_DEFAULTS["xy_acceleration_mm_s2"]
+        return cast(float, GUI_DEFAULTS["xy_acceleration_mm_s2"])
     return value
 
 

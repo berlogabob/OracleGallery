@@ -9,6 +9,9 @@ firebase/serviceAccountKey.json
 .flutter-plugins-dependencies
 .packages
 .pytest_cache/
+.coverage
+.coverage.*
+.coverage_cache/
 .pub/
 .venv/
 .idea/

@@ -7,9 +7,16 @@ REPO_DIR="${0:A:h}"
 BUILD_ROOT="$REPO_DIR/dist/macmini_whatsapp"
 PACKAGE_DIR="$BUILD_ROOT/Oracle Mac mini Uploader"
 APP_DIR="$PACKAGE_DIR/Oracle Mac mini Uploader.app"
-COMMAND_NAME="${ORACLE_MACMINI_COMMAND_NAME:-START_ORACLE_UPLOADER.command}"
+DEFAULT_COMMAND_NAME="START_ORACLE_UPLOADER.command"
+PRIVATE_COMMAND_NAME="START_ORACLE_UPLOADER_WITH_FIREBASE_KEY.command"
+if [[ -n "${ORACLE_MACMINI_COMMAND_NAME:-}" ]]; then
+  COMMAND_NAME="$ORACLE_MACMINI_COMMAND_NAME"
+elif [[ -f "$REPO_DIR/assets/sessions/$PRIVATE_COMMAND_NAME" ]]; then
+  COMMAND_NAME="$PRIVATE_COMMAND_NAME"
+else
+  COMMAND_NAME="$DEFAULT_COMMAND_NAME"
+fi
 SOURCE_COMMAND="$REPO_DIR/assets/sessions/$COMMAND_NAME"
-SOURCE_ENV="$REPO_DIR/assets/sessions/macmini_uploader.env"
 ZIP_PATH="$REPO_DIR/dist/Oracle_MacMini_Uploader_WhatsApp.zip"
 
 pause() {
@@ -30,9 +37,6 @@ fail() {
 /bin/mkdir -p "$PACKAGE_DIR" "$APP_DIR/Contents/MacOS"
 
 /bin/cp "$SOURCE_COMMAND" "$PACKAGE_DIR/START_ORACLE_UPLOADER.command"
-if [[ -f "$SOURCE_ENV" ]]; then
-  /bin/cp "$SOURCE_ENV" "$PACKAGE_DIR/macmini_uploader.env"
-fi
 
 /bin/chmod u+x "$PACKAGE_DIR/START_ORACLE_UPLOADER.command"
 /usr/bin/xattr -dr com.apple.quarantine "$PACKAGE_DIR" >/dev/null 2>&1 || true
@@ -77,7 +81,12 @@ fi
 
 /bin/chmod u+x "$COMMAND_PATH" >/dev/null 2>&1 || true
 /usr/bin/xattr -d com.apple.quarantine "$COMMAND_PATH" >/dev/null 2>&1 || true
-/usr/bin/open -a Terminal "$COMMAND_PATH"
+/usr/bin/osascript <<APPLESCRIPT
+tell application "Terminal"
+  activate
+  do script "zsh " & quoted form of "$COMMAND_PATH"
+end tell
+APPLESCRIPT
 EOF
 
 /bin/chmod +x "$APP_DIR/Contents/MacOS/launcher"
@@ -87,8 +96,9 @@ cat > "$PACKAGE_DIR/OPEN_ME_FIRST.txt" <<'EOF'
 ORACLE MAC MINI UPLOADER
 
 1. Double-click: Oracle Mac mini Uploader.app
-2. Keep this app in the same folder as START_ORACLE_UPLOADER.command.
-3. Put TouchDesigner session folders in this same folder.
+2. If macOS Tahoe blocks the app, run START_ORACLE_UPLOADER.command directly.
+3. Keep this app in the same folder as START_ORACLE_UPLOADER.command.
+4. Put TouchDesigner session folders in this same folder.
 
 If macOS blocks the first launch:
 - Right-click Oracle Mac mini Uploader.app
@@ -97,7 +107,7 @@ If macOS blocks the first launch:
 
 After that, normal double-click should work.
 
-If Terminal asks for Firebase JSON, drag the Firebase service account JSON into the Terminal window and press Enter.
+This package creates its Firebase JSON and uploader config inside this folder on first launch.
 EOF
 
 /usr/bin/xattr -dr com.apple.quarantine "$PACKAGE_DIR" >/dev/null 2>&1 || true

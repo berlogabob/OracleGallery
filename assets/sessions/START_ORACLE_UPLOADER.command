@@ -60,6 +60,44 @@ NEJE_UPLOADER_AGENT_PORT=8790
 EOF
 }
 
+repair_firebase_credentials_config() {
+  local default_credentials="$SCRIPT_DIR/firebase-service-account.json"
+  local raw_credentials="${NEJE_FIREBASE_CREDENTIALS:-}"
+  local expanded_credentials="${raw_credentials/#\~/$HOME}"
+  local resolved_script_dir="${SCRIPT_DIR:A}"
+  local resolved_credentials="${expanded_credentials:A}"
+
+  if [[ -z "$raw_credentials" ]]; then
+    export NEJE_FIREBASE_CREDENTIALS="$default_credentials"
+    return 0
+  fi
+
+  if [[ "$resolved_credentials" == /Users/berloga/* ]]; then
+    :
+  elif [[ "$resolved_credentials" == "$resolved_script_dir"/* ]]; then
+    return 0
+  else
+    :
+  fi
+
+  export NEJE_FIREBASE_CREDENTIALS="$default_credentials"
+
+  local tmp_file="$CONFIG_FILE.tmp.$$"
+  local replaced=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == NEJE_FIREBASE_CREDENTIALS=* ]]; then
+      printf 'NEJE_FIREBASE_CREDENTIALS="%s"\n' "$default_credentials" >> "$tmp_file"
+      replaced=1
+    else
+      printf '%s\n' "$line" >> "$tmp_file"
+    fi
+  done < "$CONFIG_FILE"
+  if [[ $replaced -eq 0 ]]; then
+    printf 'NEJE_FIREBASE_CREDENTIALS="%s"\n' "$default_credentials" >> "$tmp_file"
+  fi
+  mv "$tmp_file" "$CONFIG_FILE"
+}
+
 ensure_firebase_credentials() {
   if [[ -f "$NEJE_FIREBASE_CREDENTIALS" ]]; then
     return 0
@@ -772,6 +810,7 @@ create_default_config
 set -a
 source "$CONFIG_FILE"
 set +a
+repair_firebase_credentials_config
 
 PYTHON_BIN="$(find_python)" || fail "python3 was not found. Install Python 3 first."
 [[ -n "${NEJE_FIREBASE_PROJECT_ID:-}" ]] || fail "NEJE_FIREBASE_PROJECT_ID is empty in $CONFIG_FILE"

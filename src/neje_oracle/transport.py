@@ -243,7 +243,44 @@ class FluidNCTransport:
                     raise RuntimeError(f"FluidNC rejected line {index}: {line} :: {result.message}")
                 if progress_callback:
                     progress_callback(index, total)
+            if commands:
+                self._wait_until_idle(conn, sheet_id=sheet_id)
         return gcode_path
+
+    def _wait_until_idle(self, conn: socket.socket, *, sheet_id: str) -> None:
+        timeout = self.settings.fluidnc_idle_timeout_seconds
+        deadline = time.monotonic() + timeout
+        last_state = "unknown"
+        last_status = ""
+        while time.monotonic() < deadline:
+            remaining = deadline - time.monotonic()
+            try:
+                status_response = self._query_status(
+                    conn,
+                    timeout_seconds=max(0.1, min(0.5, remaining)),
+                )
+            except TimeoutError:
+                time.sleep(min(0.2, max(0.0, remaining)))
+                continue
+            except OSError as exc:
+                raise RuntimeError(
+                    f"FluidNC connection closed while waiting for motion to complete after streaming {sheet_id}: {exc}"
+                ) from exc
+
+            controller = parse_status_response(status_response)
+            last_state = controller.state.value
+            last_status = controller.raw_status
+            if controller.is_idle:
+                return
+            if controller.is_alarm or controller.is_hold:
+                raise RuntimeError(
+                    f"FluidNC entered {controller.state.value} while waiting for motion to complete after streaming {sheet_id}: {last_status}"
+                )
+            time.sleep(min(0.25, max(0.0, deadline - time.monotonic())))
+
+        raise RuntimeError(
+            f"Timed out waiting for motion to complete after streaming {sheet_id}; FluidNC last state {last_state}"
+        )
 
     def _check_http(self, timeout_seconds: float) -> bool:
         if not self.settings.fluidnc_http_url:

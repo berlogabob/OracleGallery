@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from nicegui import run, ui
 
@@ -147,16 +147,16 @@ def build_page() -> None:
         settings.organic_cell_size_mm = float(fields["organic_cell_size_mm"].value or 0)
         settings.organic_rotation_ramp = float(fields["organic_rotation_ramp"].value or 0)
         settings.organic_scale_ramp = float(fields["organic_scale_ramp"].value or 0)
-        settings.organic_seed = int(float(fields["organic_seed"].value or GUI_DEFAULTS["organic_seed"]))
+        settings.organic_seed = int(float(fields["organic_seed"].value or cast(float, GUI_DEFAULTS["organic_seed"])))
         settings.randomness = float(fields["randomness"].value or 0)
         settings.randomness_fine = float(fields["randomness_fine"].value or 0)
         settings.include_rings = bool(fields["include_rings"].value)
         settings.include_markers = bool(fields["include_markers"].value)
         settings.marker_diameter_mm = float(fields["marker_diameter_mm"].value or 1.5)
-        settings.sample_step_mm = float(fields["sample_step_mm"].value or GUI_DEFAULTS["sample_step_mm"])
-        settings.sample_density_exponent = float(fields["sample_density_exponent"].value or GUI_DEFAULTS["sample_density_exponent"])
-        settings.sample_min_step_mm = float(fields["sample_min_step_mm"].value or GUI_DEFAULTS["sample_min_step_mm"])
-        settings.sample_max_step_mm = float(fields["sample_max_step_mm"].value or GUI_DEFAULTS["sample_max_step_mm"])
+        settings.sample_step_mm = float(fields["sample_step_mm"].value or cast(float, GUI_DEFAULTS["sample_step_mm"]))
+        settings.sample_density_exponent = float(fields["sample_density_exponent"].value or cast(float, GUI_DEFAULTS["sample_density_exponent"]))
+        settings.sample_min_step_mm = float(fields["sample_min_step_mm"].value or cast(float, GUI_DEFAULTS["sample_min_step_mm"]))
+        settings.sample_max_step_mm = float(fields["sample_max_step_mm"].value or cast(float, GUI_DEFAULTS["sample_max_step_mm"]))
         settings.streaming_mode = str(fields["streaming_mode"].value or GUI_DEFAULTS["streaming_mode"])
         settings.show_origins = [
             origin for origin in ALL_ORIGINS if bool(fields.get(f"show_origin:{origin}") and fields[f"show_origin:{origin}"].value)
@@ -834,7 +834,7 @@ def build_page() -> None:
                             with ui.grid(columns=2).classes("w-full gap-2"):
                                 number_control(fields, "travel_rate", label="Travel mm/min", value=settings.travel_rate, default=5000, min_value=1, width_class="w-full", tooltip="Pen-up movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
                                 number_control(fields, "draw_rate", label="Draw mm/min", value=settings.draw_rate, default=1800, min_value=1, width_class="w-full", tooltip="Drawing movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
-                                number_control(fields, "xy_acceleration_mm_s2", label="XY accel mm/s^2", value=settings.xy_acceleration_mm_s2, default=GUI_DEFAULTS["xy_acceleration_mm_s2"], min_value=0, width_class="w-full", tooltip="Recorded in manifests only. Print G-code uses the controller's saved acceleration settings.", on_change=persist_and_refresh)
+                                number_control(fields, "xy_acceleration_mm_s2", label="XY accel mm/s^2", value=settings.xy_acceleration_mm_s2, default=cast(float, GUI_DEFAULTS["xy_acceleration_mm_s2"]), min_value=0, width_class="w-full", tooltip="Recorded in manifests only. Print G-code uses the controller's saved acceleration settings.", on_change=persist_and_refresh)
                                 number_control(fields, "z_up_mm", label="Z up legacy", value=settings.z_up_mm, default=0, min_value=-25, width_class="w-full", tooltip="Legacy absolute Z-up value; current pen-up behavior uses Z homing.", on_change=persist_and_refresh)
                                 number_control(fields, "z_down_mm", label="Z down legacy", value=settings.z_down_mm, default=-25, min_value=-25, width_class="w-full", tooltip="Legacy value; current pen-down behavior is fixed at absolute G0 Z-25.", on_change=persist_and_refresh)
                                 number_control(fields, "z_feed_mm_min", label="Z mm/min", value=settings.z_feed_mm_min, default=1000, min_value=1, width_class="w-full", tooltip="Z servo axis feed rate. FluidNC maps this Z axis to PWM.", on_change=persist_and_refresh)
@@ -859,8 +859,8 @@ def build_page() -> None:
                             ui.label("SVG test draw").classes("text-sm font-bold")
                             ui.label("Prints the selected Inkscape SVG directly to FluidNC. Requires preflight, work zero, CONNECT and Idle.").classes("text-xs text-[#8f4f2b]")
                             with ui.row().classes("gap-2 w-full"):
-                                number_control(fields, "direct_svg_origin_x_mm", label="SVG X0", value=settings.direct_svg_origin_x_mm, default=GUI_DEFAULTS["direct_svg_origin_x_mm"], min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work X position for SVG coordinate 0.", on_change=persist_and_refresh)
-                                number_control(fields, "direct_svg_origin_y_mm", label="SVG Y0", value=settings.direct_svg_origin_y_mm, default=GUI_DEFAULTS["direct_svg_origin_y_mm"], min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.", on_change=persist_and_refresh)
+                                number_control(fields, "direct_svg_origin_x_mm", label="SVG X0", value=settings.direct_svg_origin_x_mm, default=cast(float, GUI_DEFAULTS["direct_svg_origin_x_mm"]), min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work X position for SVG coordinate 0.", on_change=persist_and_refresh)
+                                number_control(fields, "direct_svg_origin_y_mm", label="SVG Y0", value=settings.direct_svg_origin_y_mm, default=cast(float, GUI_DEFAULTS["direct_svg_origin_y_mm"]), min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.", on_change=persist_and_refresh)
                             ui.upload(on_upload=handle_svg_upload).props("accept=.svg max-files=1 auto-upload").classes("w-full")
                             with ui.row().classes("items-center gap-2"):
                                 ui.button("PRINT SVG", on_click=print_uploaded_svg).props("dense color=positive")
@@ -954,19 +954,19 @@ def build_page() -> None:
                                 fields["include_rings"] = ui.switch("Rings", value=settings.include_rings).on_value_change(persist_and_refresh)
                                 fields["include_markers"] = ui.switch("Origin dots", value=settings.include_markers).on_value_change(persist_and_refresh)
                             with ui.grid(columns=2).classes("w-full gap-2"):
-                                number_control(fields, "sheet_width_mm", label="Field W", value=settings.sheet_width_mm, default=GUI_DEFAULTS["sheet_width_mm"], min_value=1, width_class="w-full", tooltip="Printable field width in mm.", on_change=persist_and_refresh)
-                                number_control(fields, "sheet_height_mm", label="Field H", value=settings.sheet_height_mm, default=GUI_DEFAULTS["sheet_height_mm"], min_value=1, width_class="w-full", tooltip="Printable field height in mm.", on_change=persist_and_refresh)
-                                number_control(fields, "cell_diameter_mm", label="Cell", value=settings.cell_diameter_mm, default=GUI_DEFAULTS["cell_diameter_mm"], min_value=1, width_class="w-full", tooltip="Packing cell diameter and grid step base.", on_change=persist_and_refresh)
-                                number_control(fields, "gap_mm", label="Gap", value=settings.gap_mm, default=GUI_DEFAULTS["gap_mm"], min_value=0, width_class="w-full", tooltip="Distance between neighboring cell diameters.", on_change=persist_and_refresh)
-                                number_control(fields, "sheet_margin_mm", label="Margin", value=settings.sheet_margin_mm, default=GUI_DEFAULTS["sheet_margin_mm"], min_value=0, width_class="w-full", tooltip="Safe border inside printable field.", on_change=persist_and_refresh)
-                                number_control(fields, "marker_diameter_mm", label="Dot mm", value=settings.marker_diameter_mm, default=GUI_DEFAULTS["marker_diameter_mm"], min_value=0.5, width_class="w-full", tooltip="Printed origin-dot diameter.", on_change=persist_and_refresh)
+                                number_control(fields, "sheet_width_mm", label="Field W", value=settings.sheet_width_mm, default=cast(float, GUI_DEFAULTS["sheet_width_mm"]), min_value=1, width_class="w-full", tooltip="Printable field width in mm.", on_change=persist_and_refresh)
+                                number_control(fields, "sheet_height_mm", label="Field H", value=settings.sheet_height_mm, default=cast(float, GUI_DEFAULTS["sheet_height_mm"]), min_value=1, width_class="w-full", tooltip="Printable field height in mm.", on_change=persist_and_refresh)
+                                number_control(fields, "cell_diameter_mm", label="Cell", value=settings.cell_diameter_mm, default=cast(float, GUI_DEFAULTS["cell_diameter_mm"]), min_value=1, width_class="w-full", tooltip="Packing cell diameter and grid step base.", on_change=persist_and_refresh)
+                                number_control(fields, "gap_mm", label="Gap", value=settings.gap_mm, default=cast(float, GUI_DEFAULTS["gap_mm"]), min_value=0, width_class="w-full", tooltip="Distance between neighboring cell diameters.", on_change=persist_and_refresh)
+                                number_control(fields, "sheet_margin_mm", label="Margin", value=settings.sheet_margin_mm, default=cast(float, GUI_DEFAULTS["sheet_margin_mm"]), min_value=0, width_class="w-full", tooltip="Safe border inside printable field.", on_change=persist_and_refresh)
+                                number_control(fields, "marker_diameter_mm", label="Dot mm", value=settings.marker_diameter_mm, default=cast(float, GUI_DEFAULTS["marker_diameter_mm"]), min_value=0.5, width_class="w-full", tooltip="Printed origin-dot diameter.", on_change=persist_and_refresh)
                             with ui.row().classes("items-center gap-2"):
                                 fields["organic_enabled"] = ui.switch("Organic / Voronoi", value=settings.organic_enabled).on_value_change(persist_and_refresh)
                             with ui.grid(columns=2).classes("w-full gap-2"):
-                                number_control(fields, "organic_cell_size_mm", label="Voronoi cell", value=settings.organic_cell_size_mm, default=GUI_DEFAULTS["organic_cell_size_mm"], min_value=0, step=1, width_class="w-full", tooltip="Maximum organic position drift in mm.", on_change=persist_and_refresh)
-                                number_control(fields, "organic_seed", label="Seed", value=settings.organic_seed, default=GUI_DEFAULTS["organic_seed"], min_value=0, step=1, width_class="w-full", tooltip="Repeats the same organic layout for preview and print.", on_change=persist_and_refresh)
-                            calibration_slider_row("Rotation ramp", "organic_rotation_ramp", value=settings.organic_rotation_ramp, default=GUI_DEFAULTS["organic_rotation_ramp"], min_value=0, max_value=1, step=0.01, on_change=persist_and_refresh)
-                            calibration_slider_row("Scale ramp", "organic_scale_ramp", value=settings.organic_scale_ramp, default=GUI_DEFAULTS["organic_scale_ramp"], min_value=0, max_value=1, step=0.01, on_change=persist_and_refresh)
+                                number_control(fields, "organic_cell_size_mm", label="Voronoi cell", value=settings.organic_cell_size_mm, default=cast(float, GUI_DEFAULTS["organic_cell_size_mm"]), min_value=0, step=1, width_class="w-full", tooltip="Maximum organic position drift in mm.", on_change=persist_and_refresh)
+                                number_control(fields, "organic_seed", label="Seed", value=settings.organic_seed, default=cast(float, GUI_DEFAULTS["organic_seed"]), min_value=0, step=1, width_class="w-full", tooltip="Repeats the same organic layout for preview and print.", on_change=persist_and_refresh)
+                            calibration_slider_row("Rotation ramp", "organic_rotation_ramp", value=settings.organic_rotation_ramp, default=cast(float, GUI_DEFAULTS["organic_rotation_ramp"]), min_value=0, max_value=1, step=0.01, on_change=persist_and_refresh)
+                            calibration_slider_row("Scale ramp", "organic_scale_ramp", value=settings.organic_scale_ramp, default=float(float(float(float(cast(float, GUI_DEFAULTS["organic_scale_ramp"]))))), min_value=0, max_value=1, step=0.01, on_change=persist_and_refresh)
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Drawing detail").classes("text-sm font-bold")
                             ui.label("Sets how many G-code points are generated from SVG curves. Smaller spacing is smoother and slower; larger spacing is lighter and faster.").classes("text-xs text-[#8f4f2b]")
@@ -981,15 +981,15 @@ def build_page() -> None:
                                     ui.label("G-code load").classes("label")
                                     gcode_labels["load"] = ui.label("-").classes("value")
                             ui.label("Main detail").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
-                            number_control(fields, "sample_step_mm", label="Spacing at normal cell size (mm)", value=settings.sample_step_mm, default=GUI_DEFAULTS["sample_step_mm"], min_value=0.05, step=0.05, width_class="w-full", tooltip="Distance between sampled points for an 80 mm reference cell.", on_change=persist_and_refresh)
+                            number_control(fields, "sample_step_mm", label="Spacing at normal cell size (mm)", value=settings.sample_step_mm, default=cast(float, GUI_DEFAULTS["sample_step_mm"]), min_value=0.05, step=0.05, width_class="w-full", tooltip="Distance between sampled points for an 80 mm reference cell.", on_change=persist_and_refresh)
                             ui.label("Auto-adjust for cell size").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
-                            number_control(fields, "sample_density_exponent", label="Auto density strength", value=settings.sample_density_exponent, default=GUI_DEFAULTS["sample_density_exponent"], min_value=0.0, step=0.1, width_class="w-full", tooltip="0 disables cell-size compensation. 1 is normal. Higher values make large cells denser.", on_change=persist_and_refresh)
+                            number_control(fields, "sample_density_exponent", label="Auto density strength", value=settings.sample_density_exponent, default=cast(float, GUI_DEFAULTS["sample_density_exponent"]), min_value=0.0, step=0.1, width_class="w-full", tooltip="0 disables cell-size compensation. 1 is normal. Higher values make large cells denser.", on_change=persist_and_refresh)
                             with ui.row().classes("items-center gap-2"):
                                 ui.label("Clamp").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
                                 gcode_labels["limits"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
                             with ui.grid(columns=2).classes("w-full gap-2"):
-                                number_control(fields, "sample_min_step_mm", label="Finest allowed spacing", value=settings.sample_min_step_mm, default=GUI_DEFAULTS["sample_min_step_mm"], min_value=0.01, step=0.01, width_class="w-full", tooltip="Lower safety limit. Prevents extremely dense G-code.", on_change=persist_and_refresh)
-                                number_control(fields, "sample_max_step_mm", label="Coarsest allowed spacing", value=settings.sample_max_step_mm, default=GUI_DEFAULTS["sample_max_step_mm"], min_value=0.05, step=0.05, width_class="w-full", tooltip="Upper safety limit. Prevents overly simplified curves.", on_change=persist_and_refresh)
+                                number_control(fields, "sample_min_step_mm", label="Finest allowed spacing", value=settings.sample_min_step_mm, default=cast(float, GUI_DEFAULTS["sample_min_step_mm"]), min_value=0.01, step=0.01, width_class="w-full", tooltip="Lower safety limit. Prevents extremely dense G-code.", on_change=persist_and_refresh)
+                                number_control(fields, "sample_max_step_mm", label="Coarsest allowed spacing", value=settings.sample_max_step_mm, default=cast(float, GUI_DEFAULTS["sample_max_step_mm"]), min_value=0.05, step=0.05, width_class="w-full", tooltip="Upper safety limit. Prevents overly simplified curves.", on_change=persist_and_refresh)
                             fields["streaming_mode"] = ui.select(
                                 {"row": "Row at a time", "cell": "Cell at a time"},
                                 value=settings.streaming_mode,
@@ -1010,9 +1010,9 @@ def build_page() -> None:
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Symbol scale correction").classes("text-sm font-bold")
                             ui.label("These controls define how generated symbols will look before test generation and printing.").classes("text-xs text-[#8f4f2b]")
-                            calibration_slider_row("Random coarse", "randomness", value=settings.randomness, default=GUI_DEFAULTS["randomness"], min_value=0, max_value=100, step=1, on_change=persist_and_refresh)
-                            calibration_slider_row("Random fine", "randomness_fine", value=settings.randomness_fine, default=GUI_DEFAULTS["randomness_fine"], min_value=-10, max_value=10, step=0.1, on_change=persist_and_refresh)
-                            calibration_slider_row("Global scale", "global_scale", value=settings.global_scale, default=GUI_DEFAULTS["global_scale"], min_value=0.3, max_value=3.0, step=0.01, on_change=persist_and_refresh)
+                            calibration_slider_row("Random coarse", "randomness", value=settings.randomness, default=cast(float, GUI_DEFAULTS["randomness"]), min_value=0, max_value=100, step=1, on_change=persist_and_refresh)
+                            calibration_slider_row("Random fine", "randomness_fine", value=settings.randomness_fine, default=cast(float, GUI_DEFAULTS["randomness_fine"]), min_value=-10, max_value=10, step=0.1, on_change=persist_and_refresh)
+                            calibration_slider_row("Global scale", "global_scale", value=settings.global_scale, default=cast(float, GUI_DEFAULTS["global_scale"]), min_value=0.3, max_value=3.0, step=0.01, on_change=persist_and_refresh)
                             ui.label("Double-click any scale slider to reset it to 1.0. Scale changes are applied and saved immediately.").classes("text-xs text-[#8f4f2b]")
                             with ui.column().classes("w-full gap-0"):
                                 for symbol in symbols:

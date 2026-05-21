@@ -44,7 +44,8 @@ _load_dotenv_file()
 
 
 def _firebase_project_id() -> str:
-    return os.getenv("NEJE_FIREBASE_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID", "")
+    value = os.getenv("NEJE_FIREBASE_PROJECT_ID") or os.getenv("FIREBASE_PROJECT_ID")
+    return value or ""
 
 
 def _firebase_storage_bucket() -> str:
@@ -137,6 +138,7 @@ class PlotterSettings:
     )
     fluidnc_connect_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_CONNECT_TIMEOUT_SECONDS", 3.0)
     fluidnc_ack_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_ACK_TIMEOUT_SECONDS", 10.0)
+    fluidnc_idle_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_IDLE_TIMEOUT_SECONDS", 600.0)
     fluidnc_host: str = fluidnc_telnet_host
     fluidnc_port: int = fluidnc_telnet_port
     operator_host: str = os.getenv("NEJE_PLOTTER_OPERATOR_HOST", "0.0.0.0")

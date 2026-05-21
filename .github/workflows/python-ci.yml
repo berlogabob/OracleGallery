@@ -1,0 +1,57 @@
+# Python CI workflow for neje_oracle
+# Implements staged quality gates with baseline thresholds
+
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Run coverage
+        run: |
+          uv run coverage run -m pytest -q
+          uv run coverage report --fail-under=64
+
+      - name: Run mypy baseline
+        run: |
+          set +e
+          output=$(uv run mypy src/neje_oracle 2>&1)
+          status=$?
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          count=$(printf '%s\n' "$output" | sed -n 's/Found \([0-9][0-9]*\) errors.*/\1/p' | tail -n 1)
+          if [ -n "$count" ] && [ "$count" -le 66 ]; then
+            exit 0
+          fi
+          exit "$status"
+
+      - name: Run ruff check
+        run: uv run ruff check src/neje_oracle tests
+
+      - name: Run ruff format check
+        run: uv run ruff format --check src/neje_oracle tests

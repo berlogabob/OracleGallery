@@ -18,6 +18,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.0",
+  "coverage>=7.6.0",
+  "mypy>=2.1.0",
+  "radon>=6.0.1",
+  "ruff>=0.8.0",
+  "types-qrcode>=8.0",
+  "pre-commit>=4.1.0",
 ]
 
 [project.scripts]
@@ -38,9 +44,42 @@ packages = ["src/neje_oracle"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-vv"
 
-[dependency-groups]
-dev = [
-    "mypy>=2.1.0",
-    "radon>=6.0.1",
+[tool.coverage.run]
+source = ["src/neje_oracle"]
+omit = [
+    "*/__main__.py",
+    "*/test_*.py",
+    "*/tests/*.py",
 ]
+
+[tool.coverage.report]
+fail_under = 64
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+  "E9",
+  "F63",
+  "F7",
+  "F82",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_configs = true
+show_error_codes = true
+show_error_context = true
+
+[[tool.mypy.overrides]]
+module = ["firebase_admin", "svgpathtools", "qrcode"]
+ignore_missing_imports = true

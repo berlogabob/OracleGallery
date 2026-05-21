@@ -56,6 +56,7 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     assert settings.sheet_width_mm == 300
     assert settings.system_mode == GUI_DEFAULTS["system_mode"]
     assert settings.gap_mm == 0
+    assert settings.streaming_mode == "row"
     assert not hasattr(settings, "mark_diameter_mm")
     assert not hasattr(settings, "sheet_capacity")
     settings.layout_mode = "grid"
@@ -64,6 +65,23 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     reloaded = load_gui_settings(settings_path)
 
     assert reloaded.layout_mode == "grid"
+
+
+def test_gui_settings_missing_file_uses_plotter_streaming_default(tmp_path: Path) -> None:
+    settings_path = tmp_path / "runtime" / "gui_settings.json"
+    settings = load_gui_settings(settings_path, PlotterSettings(streaming_mode="cell"))
+
+    assert settings.streaming_mode == "cell"
+
+
+def test_gui_settings_preserves_saved_cell_streaming(tmp_path: Path) -> None:
+    settings_path = tmp_path / "runtime" / "gui_settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text('{"streaming_mode": "cell"}', encoding="utf-8")
+
+    settings = load_gui_settings(settings_path, PlotterSettings(streaming_mode="row"))
+
+    assert settings.streaming_mode == "cell"
 
 
 def test_gui_settings_migrates_old_run_mode_to_system_mode(tmp_path: Path) -> None:

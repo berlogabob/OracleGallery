@@ -1,0 +1,48 @@
+# ESP32 CI workflow for printer firmware
+# Verifies that ESP32 sketches compile successfully
+
+name: ESP32 CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up arduino-cli
+        uses: arduino/setup-arduino-cli@v1
+        with:
+          version: "latest"
+
+      - name: Install board packages
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "NimBLE-Arduino"
+          arduino-cli lib install "Thermal Printer Library"
+
+      - name: Compile BTN Printer sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            ./ESP32-BTN_Printer/ESP32_BTN_Printer
+
+      - name: Compile PrinterOnly sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            ./ESP32-BTN_Printer/ESP32_PrinterOnly
+
+      - name: Compile PrinterDiscovery sketch
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            ./ESP32-BTN_Printer/PrinterDiscovery
