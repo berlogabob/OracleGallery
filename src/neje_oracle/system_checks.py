@@ -8,11 +8,11 @@ from typing import Callable
 from .config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, ensure_dir
 from .gui_modes import mode_policy
 from .gui_support import GuiSettings, default_idle_root, generate_dry_run_sheet, list_base_symbols
-from .models import PreflightCheck, PreflightLevel, PreflightResult, SystemMode
+from .models import SystemCheck, SystemCheckLevel, SystemCheckResult, SystemMode
 from .transport import FluidNCTransport
 
 
-class PreflightService:
+class SystemCheckService:
     def __init__(
         self,
         *,
@@ -28,7 +28,7 @@ class PreflightService:
         self.firebase_settings = firebase_settings or FirebaseSettings()
         self.fluidnc_checker = fluidnc_checker
 
-    def run(self, *, mode: SystemMode, gui_settings: GuiSettings) -> PreflightResult:
+    def run(self, *, mode: SystemMode, gui_settings: GuiSettings) -> SystemCheckResult:
         checks = [
             self._check_runtime_folder(),
             self._check_symbols(),
@@ -41,53 +41,53 @@ class PreflightService:
             self._check_gcode_generation(gui_settings),
         ]
         status = _aggregate_status(checks)
-        return PreflightResult(status=status, checks=checks)
+        return SystemCheckResult(status=status, checks=checks)
 
-    def _check_runtime_folder(self) -> PreflightCheck:
+    def _check_runtime_folder(self) -> SystemCheck:
         runtime_root = self.supervisor_settings.runtime_db_path.parent
         try:
             ensure_dir(runtime_root)
             _assert_writable(runtime_root)
         except Exception as exc:  # noqa: BLE001
-            return PreflightCheck("runtime folder", PreflightLevel.CRITICAL, f"Runtime folder is not writable: {exc}")
-        return PreflightCheck("runtime folder", PreflightLevel.OK, f"Runtime folder writable: {runtime_root}")
+            return SystemCheck("runtime folder", SystemCheckLevel.CRITICAL, f"Runtime folder is not writable: {exc}")
+        return SystemCheck("runtime folder", SystemCheckLevel.OK, f"Runtime folder writable: {runtime_root}")
 
-    def _check_symbols(self) -> PreflightCheck:
+    def _check_symbols(self) -> SystemCheck:
         symbols = list_base_symbols()
         if not symbols:
-            return PreflightCheck("base symbols", PreflightLevel.CRITICAL, "No base SVG symbols found")
-        return PreflightCheck("base symbols", PreflightLevel.OK, f"{len(symbols)} base symbol(s) available")
+            return SystemCheck("base symbols", SystemCheckLevel.CRITICAL, "No base SVG symbols found")
+        return SystemCheck("base symbols", SystemCheckLevel.OK, f"{len(symbols)} base symbol(s) available")
 
-    def _check_idle_bank(self) -> PreflightCheck:
+    def _check_idle_bank(self) -> SystemCheck:
         idle_root = default_idle_root()
         idle_count = len(list(idle_root.glob("*.svg"))) if idle_root.exists() else 0
         if idle_count <= 0:
-            return PreflightCheck("local filler fallback", PreflightLevel.WARNING, "No legacy local filler SVGs found; production uses queue jobs or Generate next filler")
-        return PreflightCheck("local filler fallback", PreflightLevel.OK, f"{idle_count} legacy local filler SVG(s) available as fallback")
+            return SystemCheck("local filler fallback", SystemCheckLevel.WARNING, "No legacy local filler SVGs found; production uses queue jobs or Generate next filler")
+        return SystemCheck("local filler fallback", SystemCheckLevel.OK, f"{idle_count} legacy local filler SVG(s) available as fallback")
 
-    def _check_uploader_folder(self) -> PreflightCheck:
+    def _check_uploader_folder(self) -> SystemCheck:
         root = self.uploader_settings.session_root
         if not root.exists():
-            return PreflightCheck("uploader folder", PreflightLevel.WARNING, f"Uploader watched folder does not exist yet: {root}")
+            return SystemCheck("uploader folder", SystemCheckLevel.WARNING, f"Uploader watched folder does not exist yet: {root}")
         if not root.is_dir():
-            return PreflightCheck("uploader folder", PreflightLevel.CRITICAL, f"Uploader path is not a folder: {root}")
-        return PreflightCheck("uploader folder", PreflightLevel.OK, f"Uploader watches {root}")
+            return SystemCheck("uploader folder", SystemCheckLevel.CRITICAL, f"Uploader path is not a folder: {root}")
+        return SystemCheck("uploader folder", SystemCheckLevel.OK, f"Uploader watches {root}")
 
-    def _check_firebase(self, mode: SystemMode) -> PreflightCheck:
+    def _check_firebase(self, mode: SystemMode) -> SystemCheck:
         if self.firebase_settings.enabled:
-            return PreflightCheck("firebase config", PreflightLevel.OK, f"Firebase configured: {self.firebase_settings.project_id}")
-        level = PreflightLevel.CRITICAL if mode_policy(mode).firebase_required else PreflightLevel.WARNING
-        return PreflightCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
+            return SystemCheck("firebase config", SystemCheckLevel.OK, f"Firebase configured: {self.firebase_settings.project_id}")
+        level = SystemCheckLevel.CRITICAL if mode_policy(mode).firebase_required else SystemCheckLevel.WARNING
+        return SystemCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
 
-    def _check_tinybee_hardware(self, mode: SystemMode, gui_settings: GuiSettings) -> PreflightCheck:
+    def _check_tinybee_hardware(self, mode: SystemMode, gui_settings: GuiSettings) -> SystemCheck:
         config_path = self.plotter_settings.tinybee_config_path
         if not config_path.exists():
-            level = PreflightLevel.CRITICAL if mode_policy(mode).real_output_required else PreflightLevel.WARNING
-            return PreflightCheck("tinybee hardware", level, f"TinyBee config JSON not found: {config_path}")
+            level = SystemCheckLevel.CRITICAL if mode_policy(mode).real_output_required else SystemCheckLevel.WARNING
+            return SystemCheck("tinybee hardware", level, f"TinyBee config JSON not found: {config_path}")
         try:
             payload = json.loads(config_path.read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001
-            return PreflightCheck("tinybee hardware", PreflightLevel.CRITICAL, f"TinyBee config JSON is unreadable: {exc}")
+            return SystemCheck("tinybee hardware", SystemCheckLevel.CRITICAL, f"TinyBee config JSON is unreadable: {exc}")
 
         values = _flatten_tinybee_settings(payload)
         problems: list[str] = []
@@ -128,17 +128,17 @@ class PreflightService:
             "warnings": warnings,
         }
         if problems:
-            return PreflightCheck("tinybee hardware", PreflightLevel.CRITICAL, "; ".join(problems), detail=detail)
+            return SystemCheck("tinybee hardware", SystemCheckLevel.CRITICAL, "; ".join(problems), detail=detail)
         if warnings:
-            return PreflightCheck("tinybee hardware", PreflightLevel.WARNING, "; ".join(warnings), detail=detail)
-        return PreflightCheck(
+            return SystemCheck("tinybee hardware", SystemCheckLevel.WARNING, "; ".join(warnings), detail=detail)
+        return SystemCheck(
             "tinybee hardware",
-            PreflightLevel.OK,
+            SystemCheckLevel.OK,
             f"{board}; travel X{x_travel:.0f} Y{y_travel:.0f} Z{z_travel:.0f}; single-axis homing enabled",
             detail=detail,
         )
 
-    def _check_fluidnc(self, mode: SystemMode) -> PreflightCheck:
+    def _check_fluidnc(self, mode: SystemMode) -> SystemCheck:
         if self.fluidnc_checker is not None:
             online, message = self.fluidnc_checker(1.5)
             detail = {}
@@ -150,24 +150,24 @@ class PreflightService:
             if probe.online and not probe.controller.is_idle:
                 message = f"{probe.message}; controller must be Idle for real print"
         if online:
-            return PreflightCheck("fluidnc", PreflightLevel.OK, message, detail=detail)
-        level = PreflightLevel.CRITICAL if mode_policy(mode).real_output_required else PreflightLevel.WARNING
-        return PreflightCheck("fluidnc", level, message, detail=detail)
+            return SystemCheck("fluidnc", SystemCheckLevel.OK, message, detail=detail)
+        level = SystemCheckLevel.CRITICAL if mode_policy(mode).real_output_required else SystemCheckLevel.WARNING
+        return SystemCheck("fluidnc", level, message, detail=detail)
 
-    def _check_spool_write(self) -> PreflightCheck:
+    def _check_spool_write(self) -> SystemCheck:
         try:
             ensure_dir(self.plotter_settings.spool_root)
             _assert_writable(self.plotter_settings.spool_root)
         except Exception as exc:  # noqa: BLE001
-            return PreflightCheck("spool folder", PreflightLevel.CRITICAL, f"Spool folder is not writable: {exc}")
-        return PreflightCheck("spool folder", PreflightLevel.OK, f"Spool folder writable: {self.plotter_settings.spool_root}")
+            return SystemCheck("spool folder", SystemCheckLevel.CRITICAL, f"Spool folder is not writable: {exc}")
+        return SystemCheck("spool folder", SystemCheckLevel.OK, f"Spool folder writable: {self.plotter_settings.spool_root}")
 
-    def _check_gcode_generation(self, gui_settings: GuiSettings) -> PreflightCheck:
+    def _check_gcode_generation(self, gui_settings: GuiSettings) -> SystemCheck:
         try:
             output = generate_dry_run_sheet(gui_settings)
         except Exception as exc:  # noqa: BLE001
-            return PreflightCheck("g-code generation", PreflightLevel.CRITICAL, f"G-code generation failed: {exc}")
-        return PreflightCheck("g-code generation", PreflightLevel.OK, f"Generated {Path(output['gcode']).name}")
+            return SystemCheck("g-code generation", SystemCheckLevel.CRITICAL, f"G-code generation failed: {exc}")
+        return SystemCheck("g-code generation", SystemCheckLevel.OK, f"Generated {Path(output['gcode']).name}")
 
 
 def _assert_writable(path: Path) -> None:
@@ -202,9 +202,9 @@ def _float_value(value: str | None, default: float) -> float:
         return default
 
 
-def _aggregate_status(checks: list[PreflightCheck]) -> PreflightLevel:
-    if any(check.level == PreflightLevel.CRITICAL for check in checks):
-        return PreflightLevel.CRITICAL
-    if any(check.level == PreflightLevel.WARNING for check in checks):
-        return PreflightLevel.WARNING
-    return PreflightLevel.OK
+def _aggregate_status(checks: list[SystemCheck]) -> SystemCheckLevel:
+    if any(check.level == SystemCheckLevel.CRITICAL for check in checks):
+        return SystemCheckLevel.CRITICAL
+    if any(check.level == SystemCheckLevel.WARNING for check in checks):
+        return SystemCheckLevel.WARNING
+    return SystemCheckLevel.OK

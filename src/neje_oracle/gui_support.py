@@ -32,10 +32,11 @@ from .sampling import compute_effective_sample_step
 from .session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import generate_absolute_svg_gcode, generate_sheet_gcode, symbol_diameter_for_cell
-from .svg_normalizer import normalize_svg_file
+from .svg_normalizer import CANONICAL_BASE_DIAMETER, CANONICAL_CANVAS_SIZE, normalize_svg_file, read_normalized_svg_metadata
 
 
 _QUEUE_STATUS_CACHE: tuple[datetime, dict[str, Any]] | None = None
+PREVIEW_PX_PER_MM = 2.0
 
 
 @dataclass(frozen=True)
@@ -400,9 +401,8 @@ def build_preview_svg(
             )
         if symbol_images and visible_origin:
             symbol_index = _preview_symbol_index(index, symbol_images, randomize=randomize_symbols)
-            href, symbol_scale = symbol_images[symbol_index]
-            placement_symbol_scale = max(0.0, placement.symbol_scale)
-            image_size = mark_size * max(symbol_scale, 1.0) * placement_symbol_scale
+            href, _symbol_scale = symbol_images[symbol_index]
+            image_size = _preview_image_size(mark_size, placement.symbol_scale)
             transform = _preview_rotation_transform(placement.rotation_deg, cx, cy)
             circles.append(
                 f'<image href="{href}" x="{cx - image_size / 2.0:.2f}" y="{cy - image_size / 2.0:.2f}" '
@@ -575,8 +575,7 @@ def _build_live_preview_svg(settings: GuiSettings, items: list[LivePreviewItem])
         if href:
             opacity = "0.35" if state == "next" else "1.0"
             grayscale = ' filter="grayscale(1)"' if state == "next" else ""
-            placement_symbol_scale = max(0.0, placement.symbol_scale)
-            image_size = mark_size * placement_symbol_scale
+            image_size = _preview_image_size(mark_size, placement.symbol_scale, svg_path=item.svg_path)
             transform = _preview_rotation_transform(placement.rotation_deg, cx, cy)
             elements.append(
                 f'<image href="{href}" x="{cx - image_size / 2.0:.2f}" y="{cy - image_size / 2.0:.2f}" '
@@ -1207,8 +1206,22 @@ def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:
 
 
 def _preview_scale(settings: GuiSettings) -> float:
-    longest = max(settings.sheet_width_mm, settings.sheet_height_mm, 1.0)
-    return min(900.0 / longest, 1.2)
+    return PREVIEW_PX_PER_MM
+
+
+def _preview_image_size(mark_size: float, placement_symbol_scale: float, *, svg_path: Path | None = None) -> float:
+    canvas_to_base_ratio = CANONICAL_CANVAS_SIZE / CANONICAL_BASE_DIAMETER
+    if svg_path is not None:
+        try:
+            metadata = read_normalized_svg_metadata(svg_path)
+        except Exception:  # noqa: BLE001
+            canvas_to_base_ratio = 1.0
+        else:
+            if metadata.normalized and metadata.base_diameter > 0:
+                canvas_to_base_ratio = metadata.canvas_size / metadata.base_diameter
+            else:
+                canvas_to_base_ratio = 1.0
+    return mark_size * canvas_to_base_ratio * max(0.0, placement_symbol_scale)
 
 
 def _empty_preview_svg(settings: GuiSettings, message: str) -> str:

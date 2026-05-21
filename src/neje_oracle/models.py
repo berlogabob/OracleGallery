@@ -52,7 +52,7 @@ class SystemMode(str, Enum):
         return None
 
 
-class PreflightLevel(str, Enum):
+class SystemCheckLevel(str, Enum):
     OK = "ok"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -516,9 +516,9 @@ class PlotterReadinessState:
 
 
 @dataclass
-class PreflightCheck:
+class SystemCheck:
     name: str
-    level: PreflightLevel
+    level: SystemCheckLevel
     message: str
     detail: dict[str, Any] = field(default_factory=dict)
 
@@ -531,24 +531,24 @@ class PreflightCheck:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PreflightCheck":
+    def from_dict(cls, payload: dict[str, Any]) -> "SystemCheck":
         return cls(
             name=str(payload.get("name", "")),
-            level=PreflightLevel(payload.get("level", PreflightLevel.WARNING.value)),
+            level=SystemCheckLevel(payload.get("level", SystemCheckLevel.WARNING.value)),
             message=str(payload.get("message", "")),
             detail=dict(payload.get("detail", {})),
         )
 
 
 @dataclass
-class PreflightResult:
-    status: PreflightLevel
-    checks: list[PreflightCheck]
+class SystemCheckResult:
+    status: SystemCheckLevel
+    checks: list[SystemCheck]
     generated_at: datetime = field(default_factory=utcnow)
 
     @property
     def has_critical(self) -> bool:
-        return any(check.level == PreflightLevel.CRITICAL for check in self.checks)
+        return any(check.level == SystemCheckLevel.CRITICAL for check in self.checks)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -558,10 +558,10 @@ class PreflightResult:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PreflightResult":
-        checks = [PreflightCheck.from_dict(item) for item in payload.get("checks", [])]
+    def from_dict(cls, payload: dict[str, Any]) -> "SystemCheckResult":
+        checks = [SystemCheck.from_dict(item) for item in payload.get("checks", [])]
         return cls(
-            status=PreflightLevel(payload.get("status", PreflightLevel.WARNING.value)),
+            status=SystemCheckLevel(payload.get("status", SystemCheckLevel.WARNING.value)),
             checks=checks,
             generated_at=datetime.fromisoformat(payload["generated_at"])
             if payload.get("generated_at")

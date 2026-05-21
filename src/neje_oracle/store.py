@@ -11,7 +11,7 @@ from .config import ensure_parent
 from .models import (
     ComponentState,
     ComponentStatus,
-    PreflightResult,
+    SystemCheckResult,
     PlotterControlState,
     PlotterRuntimeConfig,
     PlotterRuntimeState,
@@ -419,14 +419,14 @@ class OracleRuntimeStore(_SQLiteStore):
         payload = self.load_json("system_mode", {"mode": default.value})
         return SystemMode(payload.get("mode", default.value))
 
-    def save_preflight_result(self, result: PreflightResult) -> None:
-        self.save_json("preflight_result", result.to_dict())
+    def save_system_check_result(self, result: SystemCheckResult) -> None:
+        self.save_json("system_check_result", result.to_dict())
 
-    def load_preflight_result(self) -> PreflightResult | None:
-        payload = self.load_json("preflight_result")
+    def load_system_check_result(self) -> SystemCheckResult | None:
+        payload = self.load_json("system_check_result")
         if not payload:
             return None
-        return PreflightResult.from_dict(payload)
+        return SystemCheckResult.from_dict(payload)
 
 
 def _normalized_origin_list(values: Any) -> list[str]:

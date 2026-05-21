@@ -132,6 +132,27 @@ def test_preview_svg_builds_hex_and_grid() -> None:
     assert grid_preview.count("<circle") >= 4
 
 
+def test_preview_svg_keeps_large_sheet_intrinsic_size_for_scrolling() -> None:
+    settings = GuiSettings(sheet_width_mm=1200, sheet_height_mm=800, cell_diameter_mm=80)
+
+    preview = build_preview_svg(settings)
+
+    assert 'viewBox="0 0 2400.00 1600.00"' in preview
+    assert 'width="2400" height="1600"' in preview
+
+
+def test_preview_symbol_scale_is_not_applied_to_image_viewport_twice(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    scale_path = tmp_path / "symbol_scales.json"
+    save_symbol_scales({"symbol_0.svg": 2.0, "symbol_1.svg": 2.0}, scale_path, root)
+    settings = GuiSettings(sheet_width_mm=90, sheet_height_mm=90, cell_diameter_mm=80)
+
+    preview = build_preview_svg(settings, symbol_root=root, scale_path=scale_path)
+
+    assert 'width="191.11" height="191.11"' in preview
+    assert 'width="275.20" height="275.20"' not in preview
+
+
 def test_gap_changes_layout_capacity() -> None:
     tight = GuiSettings(sheet_width_mm=250, sheet_height_mm=440, cell_diameter_mm=80, gap_mm=0)
     loose = GuiSettings(sheet_width_mm=250, sheet_height_mm=440, cell_diameter_mm=80, gap_mm=20)

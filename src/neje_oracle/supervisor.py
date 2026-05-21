@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from .config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
+from .config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
 from .firebase_io import FirebaseRemoteRepository
 from .gui_modes import mode_to_control
 from .gui_support import GuiSettings, create_direct_svg_print_job_from_gui
@@ -29,14 +29,14 @@ from .models import (
     PlotterReadinessState,
     PlotterRuntimeConfig,
     PlotterRuntimeState,
-    PreflightLevel,
-    PreflightResult,
+    SystemCheckLevel,
+    SystemCheckResult,
     RuntimeStatus,
     SystemMode,
 )
 from .oracle_logging import append_log
 from .plotter_daemon import PlotterDaemon
-from .preflight import PreflightService
+from .system_checks import SystemCheckService
 from .store import OracleRuntimeStore, PlotterStore
 from .svg_gcode import Z_SERVO_PEN_DOWN_COMMAND
 from .transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
@@ -67,14 +67,18 @@ class SupervisorService:
         *,
         settings: OracleSupervisorSettings | None = None,
         plotter_settings: PlotterSettings | None = None,
+        uploader_settings: UploaderSettings | None = None,
+        firebase_settings: FirebaseSettings | None = None,
         runtime_store: OracleRuntimeStore | None = None,
         remote_factory: Callable[[], FirebaseRemoteRepository] | None = None,
         transport_factory: Callable[[PlotterSettings], FluidNCTransport] | None = None,
     ) -> None:
         self.settings = settings or OracleSupervisorSettings()
+        self.uploader_settings = uploader_settings or UploaderSettings()
+        self.firebase_settings = firebase_settings or FirebaseSettings()
         self.runtime_store = runtime_store or OracleRuntimeStore(self.settings.runtime_db_path)
         self.plotter_settings = self._apply_saved_fluidnc_endpoint(plotter_settings or PlotterSettings())
-        self.remote_factory = remote_factory or (lambda: FirebaseRemoteRepository(FirebaseSettings()))
+        self.remote_factory = remote_factory or (lambda: FirebaseRemoteRepository(self.firebase_settings))
         self.transport_factory = transport_factory or (lambda resolved_settings: FluidNCTransport(resolved_settings))
         self._plotter_daemon: PlotterDaemon | None = None
         self._plotter_thread: threading.Thread | None = None
@@ -151,42 +155,60 @@ class SupervisorService:
         append_log("system", f"System mode changed to {mode.value}", settings=self.settings)
         return self.runtime_store.set_component("system", ComponentStatus.STOPPED, message=f"Mode set to {mode.value}")
 
-    def run_preflight(self, gui_settings: GuiSettings) -> PreflightResult:
+    def run_system_check(self, gui_settings: GuiSettings) -> SystemCheckResult:
         mode = gui_settings.mode
-        append_log("preflight", f"Preflight started for {mode.value}", settings=self.settings)
-        result = PreflightService(
+        append_log("checks", f"System check started for {mode.value}", settings=self.settings)
+        result = SystemCheckService(
             supervisor_settings=self.settings,
             plotter_settings=self.plotter_settings,
+            uploader_settings=self.uploader_settings,
+            firebase_settings=self.firebase_settings,
+            fluidnc_checker=self._system_check_fluidnc,
         ).run(
             mode=mode,
             gui_settings=gui_settings,
         )
-        self.runtime_store.save_preflight_result(result)
+        self.runtime_store.save_system_check_result(result)
         status = ComponentStatus.RUNNING
         level = "info"
-        if result.status == PreflightLevel.WARNING:
+        if result.status == SystemCheckLevel.WARNING:
             status = ComponentStatus.WARNING
             level = "warning"
-        elif result.status == PreflightLevel.CRITICAL:
+        elif result.status == SystemCheckLevel.CRITICAL:
             status = ComponentStatus.ERROR
             level = "error"
-        critical_count = sum(1 for check in result.checks if check.level == PreflightLevel.CRITICAL)
-        warning_count = sum(1 for check in result.checks if check.level == PreflightLevel.WARNING)
-        ok_count = sum(1 for check in result.checks if check.level == PreflightLevel.OK)
-        message = f"Preflight {result.status.value}: {critical_count} critical, {warning_count} warning, {ok_count} ok"
-        append_log("preflight", message, level=level, settings=self.settings)
+        critical_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.CRITICAL)
+        warning_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.WARNING)
+        ok_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.OK)
+        message = f"System check {result.status.value}: {critical_count} critical, {warning_count} warning, {ok_count} ok"
+        append_log("checks", message, level=level, settings=self.settings)
         for check in result.checks:
-            append_log("preflight", f"{check.level.value}: {check.name}: {check.message}", level=check.level.value if check.level != PreflightLevel.OK else "info", settings=self.settings)
-        self.runtime_store.set_component("preflight", status, message=message, heartbeat=True)
+            append_log("checks", f"{check.level.value}: {check.name}: {check.message}", level=check.level.value if check.level != SystemCheckLevel.OK else "info", settings=self.settings)
+        self.runtime_store.set_component("checks", status, message=message, heartbeat=True)
         return result
 
-    def start_print(self, mode: SystemMode) -> ComponentState:
-        mode = SystemMode(mode)
+    def _system_check_fluidnc(self, timeout_seconds: float) -> tuple[bool, str]:
+        probe = self.transport_factory(self.plotter_settings).probe(timeout_seconds=timeout_seconds)
+        message = probe.message
+        if probe.online and not probe.controller.is_idle:
+            message = f"{probe.message}; controller must be Idle for real print"
+        return probe.online and probe.controller.is_idle, message
+
+    def _system_check_block_message(self, result: SystemCheckResult, action: str) -> str:
+        first_critical = next((check for check in result.checks if check.level == SystemCheckLevel.CRITICAL), None)
+        if first_critical is None:
+            return f"Resolve system checks before {action}"
+        return f"Resolve system check before {action}: {first_critical.name}: {first_critical.message}"
+
+    def start_print(self, gui_settings: GuiSettings) -> ComponentState:
+        gui_settings.apply_system_mode()
+        mode = gui_settings.mode
         control = mode_to_control(mode, print_enabled=True)
-        preflight = self.runtime_store.load_preflight_result()
-        if preflight is None or preflight.has_critical:
-            append_log("plotter", "Start print blocked: preflight missing or critical", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="Run successful preflight before START PRINT")
+        system_check = self.run_system_check(gui_settings)
+        if system_check.has_critical:
+            message = self._system_check_block_message(system_check, "START PRINT")
+            append_log("plotter", f"Start print blocked: {message}", level="warning", settings=self.settings)
+            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message=message)
         readiness = self.runtime_store.load_plotter_readiness()
         if not readiness.work_zero_set:
             append_log("plotter", "Start print blocked: work zero is not set", level="warning", settings=self.settings)
@@ -202,9 +224,10 @@ class SupervisorService:
         return self.runtime_store.set_component("print", ComponentStatus.RUNNING, message=f"Print enabled: {mode.value}", heartbeat=True)
 
     def print_uploaded_svg(self, gui_settings: GuiSettings, *, svg_bytes: bytes, original_name: str) -> ComponentState:
-        preflight = self.runtime_store.load_preflight_result()
-        if preflight is None or preflight.has_critical:
-            message = "Run successful preflight before PRINT SVG"
+        gui_settings.apply_system_mode()
+        system_check = self.run_system_check(gui_settings)
+        if system_check.has_critical:
+            message = self._system_check_block_message(system_check, "PRINT SVG")
             append_log("plotter", f"Uploaded SVG print blocked: {message}", level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message=message)
         readiness = self.runtime_store.load_plotter_readiness()
@@ -371,7 +394,7 @@ class SupervisorService:
         return self.runtime_store.set_component("plotter", ComponentStatus.STOPPED, message="Local plotter daemon stopped")
 
     def check_firebase(self) -> ComponentState:
-        firebase = FirebaseSettings()
+        firebase = self.firebase_settings
         if not firebase.enabled:
             append_log("system", "Firebase is not configured", level="warning", settings=self.settings)
             return self.runtime_store.set_component("firebase", ComponentStatus.WARNING, message="Firebase is not configured")

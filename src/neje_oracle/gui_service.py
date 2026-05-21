@@ -19,7 +19,7 @@ from .gui_ui import (
     update_status_pill,
     warning_banner,
 )
-from .models import ComponentStatus, PreflightLevel, SystemMode
+from .models import ComponentStatus, SystemCheckLevel, SystemMode
 from .gui_support import (
     GUI_DEFAULTS,
     build_preview_svg,
@@ -105,7 +105,18 @@ def build_page() -> None:
             padding-right: 8px;
             box-sizing: border-box;
           }
-          .preview-frame svg { width: 100%; height: auto; max-height: calc(100vh - 182px); }
+          .preview-frame {
+            max-height: calc(100vh - 210px);
+            overflow: auto;
+            width: 100%;
+          }
+          .preview-frame svg {
+            display: block;
+            width: auto;
+            height: auto;
+            max-width: none;
+            max-height: none;
+          }
           .symbol-preview svg { width: 58px; height: 58px; }
           .path-label { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .tight-slider .q-slider { min-height: 28px; }
@@ -131,7 +142,7 @@ def build_page() -> None:
           @media (max-width: 1199px) {
             .workspace-grid { grid-template-columns: 1fr !important; height: auto !important; overflow: visible !important; }
             .workspace-scroll { max-height: none; overflow: visible; padding-right: 0; }
-            .preview-frame svg { max-height: 70vh; }
+            .preview-frame { max-height: 70vh; }
             .path-label { max-width: 100%; white-space: normal; }
           }
         </style>
@@ -400,27 +411,27 @@ def build_page() -> None:
         pull_settings_from_fields()
         save_gui_settings(settings)
         save_oracle_plotter_config(settings)
-        result = await run.io_bound(supervisor.run_preflight, settings)
+        result = await run.io_bound(supervisor.run_system_check, settings)
         refresh_system_check_result()
         refresh_component_status()
         refresh_logs()
         if result.has_critical:
-            first_critical = next((check for check in result.checks if check.level == PreflightLevel.CRITICAL), None)
+            first_critical = next((check for check in result.checks if check.level == SystemCheckLevel.CRITICAL), None)
             message = first_critical.message if first_critical is not None else "System is not ready"
             ui.notify(f"Cannot start: {message}", color="negative")
             return False
         if notify_success:
-            ui.notify("System check passed", color="positive" if result.status == PreflightLevel.OK else "warning")
+            ui.notify("System check passed", color="positive" if result.status == SystemCheckLevel.OK else "warning")
         return True
 
     def refresh_system_check_result() -> None:
-        result = supervisor.runtime_store.load_preflight_result()
+        result = supervisor.runtime_store.load_system_check_result()
         if not result:
             system_check_label.set_text("System check: not run")
             return
-        critical = sum(1 for check in result.checks if check.level == PreflightLevel.CRITICAL)
-        warnings = sum(1 for check in result.checks if check.level == PreflightLevel.WARNING)
-        ok_count = sum(1 for check in result.checks if check.level == PreflightLevel.OK)
+        critical = sum(1 for check in result.checks if check.level == SystemCheckLevel.CRITICAL)
+        warnings = sum(1 for check in result.checks if check.level == SystemCheckLevel.WARNING)
+        ok_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.OK)
         system_check_label.set_text(f"System check: {critical} blocked · {warnings} warnings · {ok_count} ok")
 
     async def start_print() -> None:
@@ -437,7 +448,7 @@ def build_page() -> None:
             refresh_status()
             refresh_logs()
             return
-        state = await run.io_bound(supervisor.start_print, settings.mode)
+        state = await run.io_bound(supervisor.start_print, settings)
         color = "positive" if state.status == ComponentStatus.RUNNING else "warning"
         ui.notify(state.message, color=color)
         refresh_status()
@@ -464,7 +475,7 @@ def build_page() -> None:
             refresh_status()
             refresh_logs()
             return
-        state = await run.io_bound(supervisor.start_print, settings.mode)
+        state = await run.io_bound(supervisor.start_print, settings)
         color = "positive" if state.status == ComponentStatus.RUNNING else "warning"
         ui.notify(f"TEST PRINT: {state.message}", color=color)
         refresh_status()
@@ -765,7 +776,7 @@ def build_page() -> None:
             with ui.row().classes("items-center gap-2"):
                 ui.button("EMERGENCY STOP", on_click=emergency_stop).props("dense color=negative")
 
-        real_warning = warning_banner("Plotter output starts only after preflight passes, work zero is set, and FluidNC is Idle.")
+        real_warning = warning_banner("Plotter output starts only after system checks pass, work zero is set, and FluidNC is Idle.")
 
         with ui.grid(columns="360px minmax(420px, 0.9fr) 460px").classes("w-full gap-2 min-h-0 workspace-panel workspace-grid"):
             with ui.tab_panels(workspace_tabs, value=active_workspace["value"]).classes("w-full h-full"):
@@ -857,7 +868,7 @@ def build_page() -> None:
                                 ui.button("START TEST PRINT", on_click=start_test_print).props("dense color=positive")
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("SVG test draw").classes("text-sm font-bold")
-                            ui.label("Prints the selected Inkscape SVG directly to FluidNC. Requires preflight, work zero, CONNECT and Idle.").classes("text-xs text-[#8f4f2b]")
+                            ui.label("Prints the selected Inkscape SVG directly to FluidNC. Requires passing system checks, work zero, CONNECT and Idle.").classes("text-xs text-[#8f4f2b]")
                             with ui.row().classes("gap-2 w-full"):
                                 number_control(fields, "direct_svg_origin_x_mm", label="SVG X0", value=settings.direct_svg_origin_x_mm, default=cast(float, GUI_DEFAULTS["direct_svg_origin_x_mm"]), min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work X position for SVG coordinate 0.", on_change=persist_and_refresh)
                                 number_control(fields, "direct_svg_origin_y_mm", label="SVG Y0", value=settings.direct_svg_origin_y_mm, default=cast(float, GUI_DEFAULTS["direct_svg_origin_y_mm"]), min_value=0, width_class="w-full", tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.", on_change=persist_and_refresh)
@@ -1048,7 +1059,7 @@ def build_page() -> None:
                         with ui.card().classes("oracle-card compact-card w-full"):
                             ui.label("Logs").classes("text-sm font-bold")
                             fields["log_filter"] = ui.select(
-                                {"all": "all", "errors": "errors", "system": "system", "plotter": "plotter", "uploader": "uploader", "preflight": "checks"},
+                                {"all": "all", "errors": "errors", "system": "system", "plotter": "plotter", "uploader": "uploader", "checks": "checks"},
                                 value="all",
                                 label="Filter",
                             ).props("dense outlined").classes("w-full").on_value_change(refresh_logs)

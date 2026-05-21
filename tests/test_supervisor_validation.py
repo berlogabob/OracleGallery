@@ -1,6 +1,8 @@
+import json
 from pathlib import Path
 
-from neje_oracle.config import OracleSupervisorSettings, PlotterSettings
+from neje_oracle.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
+from neje_oracle.gui_support import GuiSettings
 from neje_oracle.models import (
     ComponentStatus,
     FluidNCCommandResult,
@@ -8,9 +10,6 @@ from neje_oracle.models import (
     FluidNCProbeResult,
     FluidNCState,
     PlotterReadinessState,
-    PreflightCheck,
-    PreflightLevel,
-    PreflightResult,
     SystemMode,
 )
 from neje_oracle.supervisor import SupervisorService
@@ -61,63 +60,84 @@ def _plotter_settings(tmp_path: Path) -> PlotterSettings:
         "</svg>",
         encoding="utf-8",
     )
+    tinybee_config = tmp_path / "tinybee.json"
+    _write_tinybee_config(tinybee_config)
     return PlotterSettings(
         db_path=tmp_path / "runtime" / "plotter.sqlite3",
         placeholder_root=placeholders,
         spool_root=tmp_path / "spool",
+        tinybee_config_path=tinybee_config,
         dry_run=True,
     )
+
+
+def _write_tinybee_config(path: Path, *, x_travel: float = 255.0, y_travel: float = 440.0, z_travel: float = 25.0) -> None:
+    settings = {
+        "Flash": {"Settings": [{"id": "Telnet/Enable", "value": "1"}, {"id": "Telnet/Port", "value": "23"}]},
+        "Running": {
+            "Config": [
+                {"id": "/board", "value": "MKS TinyBee V1.0 XXYYZ"},
+                {"id": "/axes/X/max_travel_mm", "value": f"{x_travel:.3f}"},
+                {"id": "/axes/Y/max_travel_mm", "value": f"{y_travel:.3f}"},
+                {"id": "/axes/Z/max_travel_mm", "value": f"{z_travel:.3f}"},
+                {"id": "/axes/X/homing/allow_single_axis", "value": "1"},
+                {"id": "/axes/Y/homing/allow_single_axis", "value": "1"},
+                {"id": "/axes/Z/homing/allow_single_axis", "value": "1"},
+                {"id": "/axes/Z/motor0/rc_servo/pwm_hz", "value": "50"},
+            ]
+        },
+    }
+    path.write_text(json.dumps(settings), encoding="utf-8")
+
+
+def _firebase_settings(tmp_path: Path) -> FirebaseSettings:
+    credentials = tmp_path / "firebase.json"
+    credentials.write_text("{}", encoding="utf-8")
+    return FirebaseSettings(project_id="test-project", storage_bucket="test-project.appspot.com", credentials_path=credentials)
 
 
 def _supervisor(tmp_path: Path, transport_cls=DryTransport) -> SupervisorService:
     return SupervisorService(
         settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3"),
         plotter_settings=_plotter_settings(tmp_path),
+        firebase_settings=_firebase_settings(tmp_path),
         remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
         transport_factory=lambda settings: transport_cls(settings),  # type: ignore[arg-type]
     )
 
 
-def _save_ok_preflight_and_ready(supervisor: SupervisorService) -> None:
-    supervisor.runtime_store.save_preflight_result(
-        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "idle")])
-    )
+def _save_ready(supervisor: SupervisorService) -> None:
     supervisor.runtime_store.save_plotter_readiness(
         PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
     )
 
 
-def test_start_print_blocked_without_preflight(tmp_path: Path) -> None:
+def test_start_print_runs_live_checks_without_saved_result(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path)
-    supervisor.runtime_store.save_plotter_readiness(
-        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
-    )
+    _save_ready(supervisor)
 
-    state = supervisor.start_print(SystemMode.TEST)
+    state = supervisor.start_print(GuiSettings(system_mode=SystemMode.TEST.value))
 
-    assert state.status == ComponentStatus.WARNING
-    assert "preflight" in state.message.lower()
-    assert supervisor.runtime_store.load_print_control().print_enabled is False
+    assert state.status == ComponentStatus.RUNNING
+    assert supervisor.runtime_store.load_system_check_result() is not None
+    assert supervisor.runtime_store.load_print_control().print_enabled is True
 
 
 def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path)
-    supervisor.runtime_store.save_preflight_result(
-        PreflightResult(status=PreflightLevel.OK, checks=[PreflightCheck("fluidnc", PreflightLevel.OK, "idle")])
-    )
 
-    state = supervisor.start_print(SystemMode.TEST)
+    state = supervisor.start_print(GuiSettings(system_mode=SystemMode.TEST.value))
 
     assert state.status == ComponentStatus.WARNING
     assert "work zero" in state.message.lower()
     assert supervisor.runtime_store.load_print_control().print_enabled is False
 
 
-def test_exhibition_print_starts_after_preflight_ready_and_idle(tmp_path: Path) -> None:
+def test_exhibition_print_starts_after_system_checks_ready_and_idle(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path)
-    _save_ok_preflight_and_ready(supervisor)
+    _save_ready(supervisor)
 
-    state = supervisor.start_print(SystemMode.EXHIBITION)
+    state = supervisor.start_print(GuiSettings(system_mode=SystemMode.EXHIBITION.value))
 
     assert state.status == ComponentStatus.RUNNING
     control = supervisor.runtime_store.load_print_control()
@@ -126,11 +146,11 @@ def test_exhibition_print_starts_after_preflight_ready_and_idle(tmp_path: Path) 
     assert control.dry_run is False
 
 
-def test_test_print_starts_after_preflight_ready_and_idle(tmp_path: Path) -> None:
+def test_test_print_starts_after_system_checks_ready_and_idle(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path)
-    _save_ok_preflight_and_ready(supervisor)
+    _save_ready(supervisor)
 
-    state = supervisor.start_print(SystemMode.TEST)
+    state = supervisor.start_print(GuiSettings(system_mode=SystemMode.TEST.value))
 
     assert state.status == ComponentStatus.RUNNING
     control = supervisor.runtime_store.load_print_control()
@@ -141,9 +161,9 @@ def test_test_print_starts_after_preflight_ready_and_idle(tmp_path: Path) -> Non
 
 def test_real_print_blocked_when_fluidnc_not_idle(tmp_path: Path) -> None:
     supervisor = _supervisor(tmp_path, BusyTransport)
-    _save_ok_preflight_and_ready(supervisor)
+    _save_ready(supervisor)
 
-    state = supervisor.start_print(SystemMode.EXHIBITION)
+    state = supervisor.start_print(GuiSettings(system_mode=SystemMode.EXHIBITION.value))
 
     assert state.status == ComponentStatus.WARNING
     assert "fluidnc" in state.message.lower()
