@@ -8,7 +8,11 @@ import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
 
 class SessionReceiptPage extends StatelessWidget {
-  const SessionReceiptPage({super.key, required this.firebaseReady, required this.sessionId});
+  const SessionReceiptPage({
+    super.key,
+    required this.firebaseReady,
+    required this.sessionId,
+  });
 
   final bool firebaseReady;
   final String sessionId;
@@ -18,7 +22,11 @@ class SessionReceiptPage extends StatelessWidget {
     if (!firebaseReady) {
       return const OraclePage(
         children: [
-          OracleSection(label: 'Session', title: 'Firebase is not configured.', child: ConfigHelpCard()),
+          OracleSection(
+            label: 'Session',
+            title: 'Firebase is not configured.',
+            child: ConfigHelpCard(),
+          ),
         ],
       );
     }
@@ -32,7 +40,10 @@ class SessionReceiptPage extends StatelessWidget {
               OracleSection(
                 label: 'Session',
                 title: 'The receipt could not be loaded.',
-                child: StatusPanel(title: 'Firestore error', message: snapshot.error.toString()),
+                child: StatusPanel(
+                  title: 'Firestore error',
+                  message: snapshot.error.toString(),
+                ),
               ),
             ],
           );
@@ -43,7 +54,12 @@ class SessionReceiptPage extends StatelessWidget {
               OracleSection(
                 label: 'Session',
                 title: 'The receipt is opening.',
-                child: Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator())),
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(28),
+                    child: CircularProgressIndicator(),
+                  ),
+                ),
               ),
             ],
           );
@@ -58,7 +74,8 @@ class SessionReceiptPage extends StatelessWidget {
                 title: 'This fragment is still publishing.',
                 child: StatusPanel(
                   title: sessionId,
-                  message: 'The QR route is valid, but the uploader has not finished publishing the public receipt yet.',
+                  message:
+                      'The QR route is valid, but the uploader has not finished publishing the public receipt yet.',
                 ),
               ),
             ],
@@ -105,10 +122,22 @@ class _Receipt extends StatelessWidget {
               Text(
                 'THE ORACLE',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(color: OracleColors.gold, fontSize: 20, letterSpacing: 5),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.gold,
+                  fontSize: 20,
+                  letterSpacing: 5,
+                ),
               ),
               const SizedBox(height: 10),
-              Text(dateLine, textAlign: TextAlign.center, style: GoogleFonts.cinzel(color: OracleColors.inkMuted, fontSize: 11, letterSpacing: 4)),
+              Text(
+                dateLine,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.inkMuted,
+                  fontSize: 11,
+                  letterSpacing: 4,
+                ),
+              ),
               const SizedBox(height: 34),
               _Rule(label: 'THE MARK'),
               const SizedBox(height: 18),
@@ -116,18 +145,28 @@ class _Receipt extends StatelessWidget {
                 _TarotImage(tarotUrl: session.tarotUrl),
                 const SizedBox(height: 22),
               ],
-              Center(child: SymbolNetworkView(svgUrl: session.svgUrl, size: 160)),
+              Center(
+                child: SymbolNetworkView(svgUrl: session.svgUrl, size: 160),
+              ),
               const SizedBox(height: 26),
               Text(
-                session.markName.isEmpty ? 'THE UNNAMED MARK' : session.markName.toUpperCase(),
+                session.markName.isEmpty
+                    ? 'THE UNNAMED MARK'
+                    : session.markName.toUpperCase(),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(color: OracleColors.ink, fontSize: 22, letterSpacing: 3),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.ink,
+                  fontSize: 22,
+                  letterSpacing: 3,
+                ),
               ),
               const SizedBox(height: 28),
               _Rule(label: 'WHAT THE ORACLE PERCEIVED'),
               const SizedBox(height: 14),
               Text(
-                session.oracleText.isEmpty ? 'The oracle has not spoken yet.' : session.oracleText,
+                session.oracleText.isEmpty
+                    ? 'The oracle has not spoken yet.'
+                    : session.oracleText,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.ebGaramond(
                   color: OracleColors.inkMid,
@@ -144,15 +183,25 @@ class _Receipt extends StatelessWidget {
               _Rule(label: 'THEMES'),
               const SizedBox(height: 14),
               Text(
-                session.themes.isEmpty ? 'UNSPECIFIED' : session.themes.map((t) => t.toUpperCase()).join(' · '),
+                session.themes.isEmpty
+                    ? 'UNSPECIFIED'
+                    : session.themes.map((t) => t.toUpperCase()).join(' · '),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(color: OracleColors.ink, fontSize: 15, letterSpacing: 2.5),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.ink,
+                  fontSize: 15,
+                  letterSpacing: 2.5,
+                ),
               ),
               const SizedBox(height: 24),
               Text(
                 'PRINT STATUS · ${session.plotStatus.toUpperCase()}',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(color: OracleColors.goldDim, fontSize: 10, letterSpacing: 2.4),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.goldDim,
+                  fontSize: 10,
+                  letterSpacing: 2.4,
+                ),
               ),
               if (session.qrImageUrl.isNotEmpty) ...[
                 const SizedBox(height: 22),
@@ -160,7 +209,9 @@ class _Receipt extends StatelessWidget {
               ],
               const SizedBox(height: 22),
               OutlinedButton(
-                onPressed: () => context.go('/cloth?session=${Uri.encodeQueryComponent(session.sessionId)}'),
+                onPressed: () => context.go(
+                  '/cloth?session=${Uri.encodeQueryComponent(session.sessionId)}',
+                ),
                 child: const Text('View in the cloth'),
               ),
             ],
@@ -170,7 +221,10 @@ class _Receipt extends StatelessWidget {
     );
   }
 
-  List<Widget> _measureRows(BuildContext context, Map<String, double> measures) {
+  List<Widget> _measureRows(
+    BuildContext context,
+    Map<String, double> measures,
+  ) {
     if (measures.isEmpty) {
       return [
         Text(
@@ -191,7 +245,11 @@ class _Receipt extends StatelessWidget {
               child: Text(
                 entry.key.toUpperCase(),
                 textAlign: TextAlign.right,
-                style: GoogleFonts.cinzel(color: OracleColors.inkMid, fontSize: 12, letterSpacing: 1.6),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.inkMid,
+                  fontSize: 12,
+                  letterSpacing: 1.6,
+                ),
               ),
             ),
             const SizedBox(width: 24),
@@ -199,7 +257,11 @@ class _Receipt extends StatelessWidget {
               width: 54,
               child: Text(
                 entry.value.toStringAsFixed(2),
-                style: GoogleFonts.cinzel(color: OracleColors.ink, fontSize: 12, letterSpacing: 1.6),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.ink,
+                  fontSize: 12,
+                  letterSpacing: 1.6,
+                ),
               ),
             ),
           ],
@@ -228,7 +290,11 @@ class _QrImage extends StatelessWidget {
           Text(
             'QR RECEIPT',
             textAlign: TextAlign.center,
-            style: GoogleFonts.cinzel(color: OracleColors.rust, fontSize: 10, letterSpacing: 3),
+            style: GoogleFonts.cinzel(
+              color: OracleColors.rust,
+              fontSize: 10,
+              letterSpacing: 3,
+            ),
           ),
           const SizedBox(height: 14),
           Center(
@@ -288,7 +354,11 @@ class _Rule extends StatelessWidget {
         Text(
           label,
           textAlign: TextAlign.center,
-          style: GoogleFonts.cinzel(color: OracleColors.rust, fontSize: 11, letterSpacing: 4),
+          style: GoogleFonts.cinzel(
+            color: OracleColors.rust,
+            fontSize: 11,
+            letterSpacing: 4,
+          ),
         ),
       ],
     );

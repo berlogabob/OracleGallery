@@ -54,6 +54,10 @@ class DryTransport:
     def feed_hold(self):
         return FluidNCCommandResult(ok=True, command="!", response_lines=["sent"])
 
+    def unlock_alarm(self):
+        self.commands.append("$X")
+        return FluidNCCommandResult(ok=True, command="$X", response_lines=["ok"])
+
     def jog(self, axis: str, distance_mm: float, feed_mm_min: float):
         command = f"$J={axis}{distance_mm}"
         self.commands.append(command)
@@ -119,6 +123,19 @@ class BusyTransport(DryTransport):
             message="fake fluidnc running",
             controller=FluidNCControllerState(state=FluidNCState.RUN),
         )
+
+
+class InvalidConfigUnlockTransport(DryTransport):
+    def unlock_alarm(self):
+        self.commands.append("$X")
+        return FluidNCCommandResult(ok=False, command="$X", error="error:152")
+
+
+class HomingDisabledTransport(DryTransport):
+    def home(self, axis: str | None = None):
+        command = "$H" if axis is None else f"$H={axis.upper()}"
+        self.commands.append(command)
+        return FluidNCCommandResult(ok=False, command=command, error="error:5")
 
 
 def _plotter_settings(tmp_path: Path) -> PlotterSettings:
@@ -402,7 +419,10 @@ def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
     assert up.status == ComponentStatus.RUNNING
     assert down.status == ComponentStatus.RUNNING
     assert transport.commands == [
-        "$H=Z",
+        "G21",
+        "G90",
+        "G54",
+        "G0 Z0.000",
         "G21",
         "G90",
         "G54",
@@ -466,7 +486,7 @@ def test_home_recovers_when_fluidnc_closes_connection_during_homing(tmp_path: Pa
     assert "homing complete" in state.message.lower()
 
 
-def test_home_xy_uses_xy_homing_command(tmp_path: Path) -> None:
+def test_home_xy_button_uses_full_homing_command(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     plotter_settings = _plotter_settings(tmp_path)
     transport = DryTransport(plotter_settings)
@@ -480,8 +500,61 @@ def test_home_xy_uses_xy_homing_command(tmp_path: Path) -> None:
     state = supervisor.home_xy_fluidnc()
 
     assert state.status == ComponentStatus.RUNNING
-    assert "$H=XY" in transport.commands
-    assert "$H" not in transport.commands
+    assert "$H" in transport.commands
+    assert "$H=XY" not in transport.commands
+
+
+def test_unlock_alarm_sends_x_without_requiring_alarm_probe(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = DryTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+
+    state = supervisor.unlock_fluidnc_alarm()
+
+    assert state.status == ComponentStatus.RUNNING
+    assert "$X" in transport.commands
+
+
+def test_unlock_alarm_explains_invalid_fluidnc_config(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = InvalidConfigUnlockTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+
+    state = supervisor.unlock_fluidnc_alarm()
+
+    assert state.status == ComponentStatus.ERROR
+    assert "$X" in transport.commands
+    assert "invalid configuration" in state.message.lower()
+
+
+def test_home_explains_disabled_fluidnc_homing(tmp_path: Path) -> None:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = HomingDisabledTransport(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+
+    state = supervisor.home_fluidnc()
+
+    assert state.status == ComponentStatus.ERROR
+    assert "$H" in transport.commands
+    assert "homing is not enabled" in state.message.lower()
 
 
 def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:

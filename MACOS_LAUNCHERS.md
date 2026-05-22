@@ -14,11 +14,17 @@ This creates:
 dist/Oracle_MacMini_Uploader_WhatsApp.zip
 ```
 
-Send that ZIP to the Mac mini user. She should unzip it and double-click:
+Send that ZIP to the Mac mini user. She should unzip it, put the whole
+`Oracle Mac mini Uploader` folder inside the real TouchDesigner sessions folder,
+and double-click:
 
 ```text
 Oracle Mac mini Uploader/Oracle Mac mini Uploader.app
 ```
+
+The app watches the parent TouchDesigner sessions folder. Existing session folders
+are skipped by the launch baseline; only new sessions created after the uploader
+starts scanning are uploaded and added to the print queue.
 
 If macOS blocks the first launch, right-click the app and choose **Open** once.
 

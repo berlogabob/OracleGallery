@@ -5,7 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/oracle_theme.dart';
 
 class OraclePage extends StatelessWidget {
-  const OraclePage({super.key, required this.children, this.voidHeader = false});
+  const OraclePage({
+    super.key,
+    required this.children,
+    this.voidHeader = false,
+  });
 
   final List<Widget> children;
   final bool voidHeader;
@@ -13,7 +17,10 @@ class OraclePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 }
@@ -53,7 +60,10 @@ class OracleSection extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              Container(height: 0.7, color: voidSection ? OracleColors.goldDim : OracleColors.rule),
+              Container(
+                height: 0.7,
+                color: voidSection ? OracleColors.goldDim : OracleColors.rule,
+              ),
               const SizedBox(height: 22),
               Text(
                 title,
@@ -81,7 +91,8 @@ class ConfigHelpCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return const StatusPanel(
       title: 'Firebase config is missing',
-      message: 'The public gallery can render static pages, but live sessions need Firebase web config.',
+      message:
+          'The public gallery can render static pages, but live sessions need Firebase web config.',
     );
   }
 }
@@ -130,7 +141,11 @@ class SymbolNetworkView extends StatelessWidget {
         svgUrl,
         fit: BoxFit.contain,
         placeholderBuilder: (_) => const Center(
-          child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 1.4)),
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 1.4),
+          ),
         ),
       ),
     );
@@ -141,12 +156,14 @@ class SymbolNetworkView extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        border: Border.all(color: OracleColors.rule),
-      ),
+      decoration: BoxDecoration(border: Border.all(color: OracleColors.rule)),
       child: Text(
         'MARK',
-        style: GoogleFonts.cinzel(color: OracleColors.gold, fontSize: 11, letterSpacing: 2),
+        style: GoogleFonts.cinzel(
+          color: OracleColors.gold,
+          fontSize: 11,
+          letterSpacing: 2,
+        ),
       ),
     );
   }

@@ -7,12 +7,14 @@ Date: 2026-05-18
 Give this file to the Mac mini user:
 
 ```text
-START_ORACLE_UPLOADER_WITH_FIREBASE_KEY.command
+dist/Oracle_MacMini_Uploader_WhatsApp.zip
 ```
 
-Put it directly inside the real TouchDesigner session output folder.
+Unzip it and put the whole `Oracle Mac mini Uploader` folder inside the real
+TouchDesigner session output folder. Double-click `Oracle Mac mini Uploader.app`.
 
-This is a private file. It contains the Firebase key and must not be uploaded to GitHub or shared outside the operator team.
+If you use the private Firebase-key launcher inside the package, it contains the
+Firebase key and must not be uploaded to GitHub or shared outside the operator team.
 
 ## What It Does
 
@@ -23,9 +25,10 @@ When the Mac mini user double-clicks the file, it:
 3. Creates `.macmini_uploader_runtime/`.
 4. Starts the standalone uploader agent on port `8790`.
 5. Creates a launch baseline immediately.
-6. Watches the same folder where the command file is located.
-7. Uploads new TouchDesigner session folders to Firebase.
-8. Downloads the uploaded Firebase QR image back into the session folder.
+6. Starts scanning immediately.
+7. Watches the TouchDesigner sessions folder.
+8. Uploads new TouchDesigner session folders to Firebase.
+9. Downloads the uploaded Firebase QR image back into the session folder.
 
 The user does not need the project source folder.
 
@@ -35,7 +38,10 @@ The TouchDesigner output folder should look like this:
 
 ```text
 TouchDesignerOutput/
-  START_ORACLE_UPLOADER_WITH_FIREBASE_KEY.command
+  Oracle Mac mini Uploader/
+    Oracle Mac mini Uploader.app
+    START_ORACLE_UPLOADER.command
+    README_MACMINI_UPLOADER.md
   20260518_143000/
     20260518_143000_plotter.svg
     20260518_143000_receipt.txt
@@ -60,8 +66,8 @@ Each session folder must contain:
 ## Mac Mini User Steps
 
 1. Open the real TouchDesigner output folder.
-2. Put `START_ORACLE_UPLOADER_WITH_FIREBASE_KEY.command` in that folder.
-3. Double-click `START_ORACLE_UPLOADER_WITH_FIREBASE_KEY.command`.
+2. Put the unzipped `Oracle Mac mini Uploader` folder in that folder.
+3. Double-click `Oracle Mac mini Uploader.app`.
 4. If macOS blocks it, right-click the file, choose Open, then confirm.
 5. Leave the Terminal window open.
 
@@ -70,10 +76,11 @@ Good Terminal output:
 ```text
 Standalone Oracle Mac mini Uploader
 Sessions folder: <TouchDesigner output folder>
-Runtime folder:  <TouchDesigner output folder>/.macmini_uploader_runtime
-Config file:     <TouchDesigner output folder>/macmini_uploader.env
+Runtime folder:  <TouchDesigner output folder>/Oracle Mac mini Uploader/.macmini_uploader_runtime
+Config file:     <TouchDesigner output folder>/Oracle Mac mini Uploader/macmini_uploader.env
 Firebase:        oraclegallery / oraclegallery.firebasestorage.app
 Agent:           http://0.0.0.0:8790/
+Uploader is scanning for new TouchDesigner sessions now.
 ```
 
 ## NEJE GUI Setup
@@ -89,11 +96,10 @@ Then in `neje-gui`:
 1. Press `NEW RUN`.
 2. Press `Find/Scan` in the Mac mini uploader panel.
 3. Confirm the Mac mini uploader becomes reachable.
-4. Press `Start` in the Mac mini uploader panel.
-5. Create a new TouchDesigner session after pressing `Start`.
+4. Create a new TouchDesigner session after the uploader Terminal says it is scanning.
 
-Important: only sessions created after `Start` are uploaded. Old folders already in the output folder are skipped.
-If the uploader is already running, pressing `Start` again does not reset the baseline.
+Important: only sessions created after the uploader launch baseline are uploaded.
+Old folders already in the output folder are skipped.
 
 ## Upload Result
 

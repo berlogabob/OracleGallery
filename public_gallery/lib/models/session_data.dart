@@ -43,7 +43,9 @@ class SessionData {
 
   bool get isPublicInLibrary {
     final lowerTags = tags.map((tag) => tag.toLowerCase()).toSet();
-    return visibleInLibrary && origin.toLowerCase() != 'test' && !lowerTags.contains('test');
+    return visibleInLibrary &&
+        origin.toLowerCase() != 'test' &&
+        !lowerTags.contains('test');
   }
 
   factory SessionData.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -56,10 +58,16 @@ class SessionData {
         ? _string(data['qrImageUrl'])
         : _string(assetUrls['qr']);
     return SessionData(
-      sessionId: _string(data['sessionId']).isNotEmpty ? _string(data['sessionId']) : doc.id,
+      sessionId: _string(data['sessionId']).isNotEmpty
+          ? _string(data['sessionId'])
+          : doc.id,
       createdAt: _dateTime(data['createdAt']),
-      status: _string(data['status']).isNotEmpty ? _string(data['status']) : 'publishing',
-      plotStatus: _string(data['plotStatus']).isNotEmpty ? _string(data['plotStatus']) : 'pending',
+      status: _string(data['status']).isNotEmpty
+          ? _string(data['status'])
+          : 'publishing',
+      plotStatus: _string(data['plotStatus']).isNotEmpty
+          ? _string(data['plotStatus'])
+          : 'pending',
       markName: _firstNonEmpty([
         _string(data['markName']),
         _string(data['title']),
@@ -72,15 +80,28 @@ class SessionData {
       ]),
       themes: _stringList(data['themes']),
       measures: _measuresMap(data['measures']),
-      svgUrl: _firstNonEmpty([_string(assetUrls['svg']), _string(data['svgUrl'])]),
-      receiptUrl: _firstNonEmpty([_string(assetUrls['receipt']), _string(data['receiptUrl'])]),
-      qrUrl: _string(data['qrUrl']).isNotEmpty ? _string(data['qrUrl']) : sessionUrl,
+      svgUrl: _firstNonEmpty([
+        _string(assetUrls['svg']),
+        _string(data['svgUrl']),
+      ]),
+      receiptUrl: _firstNonEmpty([
+        _string(assetUrls['receipt']),
+        _string(data['receiptUrl']),
+      ]),
+      qrUrl: _string(data['qrUrl']).isNotEmpty
+          ? _string(data['qrUrl'])
+          : sessionUrl,
       sessionUrl: sessionUrl,
       qrImageUrl: qrImageUrl,
-      tarotUrl: _firstNonEmpty([_string(assetUrls['tarot']), _string(data['tarotUrl'])]),
+      tarotUrl: _firstNonEmpty([
+        _string(assetUrls['tarot']),
+        _string(data['tarotUrl']),
+      ]),
       origin: _string(data['origin']),
       tags: _stringList(data['tags']),
-      visibleInLibrary: data['visibleInLibrary'] is bool ? data['visibleInLibrary'] as bool : true,
+      visibleInLibrary: data['visibleInLibrary'] is bool
+          ? data['visibleInLibrary'] as bool
+          : true,
     );
   }
 }
@@ -88,7 +109,10 @@ class SessionData {
 String _string(Object? value) => value == null ? '' : value.toString();
 
 String _firstNonEmpty(List<String> values) {
-  return values.firstWhere((value) => value.trim().isNotEmpty, orElse: () => '');
+  return values.firstWhere(
+    (value) => value.trim().isNotEmpty,
+    orElse: () => '',
+  );
 }
 
 Map<String, dynamic> _stringMap(Object? value) {
@@ -103,10 +127,17 @@ Map<String, dynamic> _stringMap(Object? value) {
 
 List<String> _stringList(Object? value) {
   if (value is Iterable) {
-    return value.map((item) => item.toString()).where((item) => item.trim().isNotEmpty).toList();
+    return value
+        .map((item) => item.toString())
+        .where((item) => item.trim().isNotEmpty)
+        .toList();
   }
   if (value is String && value.trim().isNotEmpty) {
-    return value.split(',').map((item) => item.trim()).where((item) => item.isNotEmpty).toList();
+    return value
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
   return const <String>[];
 }
@@ -118,7 +149,9 @@ Map<String, double> _measuresMap(Object? value) {
   final result = <String, double>{};
   for (final entry in value.entries) {
     final raw = entry.value;
-    final parsed = raw is num ? raw.toDouble() : double.tryParse(raw.toString());
+    final parsed = raw is num
+        ? raw.toDouble()
+        : double.tryParse(raw.toString());
     if (parsed != null) {
       result[entry.key.toString()] = parsed;
     }

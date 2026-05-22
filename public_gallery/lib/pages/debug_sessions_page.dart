@@ -19,7 +19,9 @@ class DebugSessionsPage extends StatelessWidget {
         OracleSection(
           label: 'Private debug',
           title: 'All Firebase sessions for testing and operator review.',
-          child: firebaseReady ? const _DebugSessionStream() : const ConfigHelpCard(),
+          child: firebaseReady
+              ? const _DebugSessionStream()
+              : const ConfigHelpCard(),
         ),
       ],
     );
@@ -51,21 +53,33 @@ class _DebugSessionStreamState extends State<_DebugSessionStream> {
       stream: SessionRepository().watchAllSessions(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return StatusPanel(title: 'Could not load sessions', message: snapshot.error.toString());
+          return StatusPanel(
+            title: 'Could not load sessions',
+            message: snapshot.error.toString(),
+          );
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()));
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(28),
+              child: CircularProgressIndicator(),
+            ),
+          );
         }
         final sessions = snapshot.data ?? const <SessionData>[];
-        final allTags = sessions
-            .expand((session) => session.tags)
-            .map((tag) => tag.toLowerCase())
-            .toSet()
-            .toList()
-          ..sort();
+        final allTags =
+            sessions
+                .expand((session) => session.tags)
+                .map((tag) => tag.toLowerCase())
+                .toSet()
+                .toList()
+              ..sort();
         final filtered = sessions.where(_matchesFilters).toList();
         if (sessions.isEmpty) {
-          return const StatusPanel(title: 'No sessions found', message: 'Firestore returned no session documents.');
+          return const StatusPanel(
+            title: 'No sessions found',
+            message: 'Firestore returned no session documents.',
+          );
         }
 
         return Column(
@@ -87,7 +101,11 @@ class _DebugSessionStreamState extends State<_DebugSessionStream> {
             const SizedBox(height: 18),
             LayoutBuilder(
               builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 1080 ? 4 : constraints.maxWidth > 760 ? 3 : 2;
+                final crossAxisCount = constraints.maxWidth > 1080
+                    ? 4
+                    : constraints.maxWidth > 760
+                    ? 3
+                    : 2;
                 return GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -98,7 +116,8 @@ class _DebugSessionStreamState extends State<_DebugSessionStream> {
                     crossAxisSpacing: 14,
                     childAspectRatio: 0.66,
                   ),
-                  itemBuilder: (context, index) => _DebugSessionCard(session: filtered[index]),
+                  itemBuilder: (context, index) =>
+                      _DebugSessionCard(session: filtered[index]),
                 );
               },
             ),
@@ -218,7 +237,10 @@ class _DebugSessionCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: hidden ? OracleColors.cream : OracleColors.paper,
-          border: Border.all(color: hidden ? OracleColors.rust : OracleColors.rule, width: 0.8),
+          border: Border.all(
+            color: hidden ? OracleColors.rust : OracleColors.rule,
+            width: 0.8,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,17 +248,27 @@ class _DebugSessionCard extends StatelessWidget {
             Center(child: SymbolNetworkView(svgUrl: session.svgUrl, size: 116)),
             const SizedBox(height: 12),
             Text(
-              session.markName.isEmpty ? 'UNNAMED MARK' : session.markName.toUpperCase(),
+              session.markName.isEmpty
+                  ? 'UNNAMED MARK'
+                  : session.markName.toUpperCase(),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.cinzel(color: OracleColors.ink, fontSize: 12, letterSpacing: 1.4),
+              style: GoogleFonts.cinzel(
+                color: OracleColors.ink,
+                fontSize: 12,
+                letterSpacing: 1.4,
+              ),
             ),
             const SizedBox(height: 8),
             SelectableText(
               session.sessionId,
               textAlign: TextAlign.center,
-              style: GoogleFonts.cinzel(color: OracleColors.goldDim, fontSize: 10, letterSpacing: 1.4),
+              style: GoogleFonts.cinzel(
+                color: OracleColors.goldDim,
+                fontSize: 10,
+                letterSpacing: 1.4,
+              ),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -282,7 +314,11 @@ class _Pill extends StatelessWidget {
       ),
       child: Text(
         label.toUpperCase(),
-        style: GoogleFonts.cinzel(color: OracleColors.inkMuted, fontSize: 8, letterSpacing: 1.2),
+        style: GoogleFonts.cinzel(
+          color: OracleColors.inkMuted,
+          fontSize: 8,
+          letterSpacing: 1.2,
+        ),
       ),
     );
   }

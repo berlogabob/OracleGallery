@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
@@ -9,44 +10,66 @@ class MarksPage extends StatelessWidget {
 
   static const _marks = [
     _BaseMark(
-      'THE KIND SOUL',
-      '../assets/symbols/test_the_kind_soul_220047_plotter.svg',
-      'A soft line that keeps returning to the center.',
+      name: 'THE KIND SOUL',
+      emotion: 'Warmth',
+      assetPath: '../assets/symbols/test_the_kind_soul_220047_plotter.svg',
+      description:
+          'Arcs ascend from a shared baseline, widening as they recede.',
+      reading: 'The oracle heard warmth: a voice that was giving something.',
     ),
     _BaseMark(
-      'THE BITTER ROOT',
-      '../assets/symbols/20260416_213514_plotter.svg',
-      'A fractured descent, pulled by certainty and fear.',
+      name: 'THE BITTER ROOT',
+      emotion: 'Refusal',
+      assetPath: '../assets/symbols/20260416_213514_plotter.svg',
+      description:
+          'A perimeter pulls inward, guarded by uneven crossings and pressure.',
+      reading:
+          'The oracle heard particularity: a refusal that is specific, not general.',
     ),
     _BaseMark(
-      'THE PITIFUL STORY',
-      '../assets/symbols/test_the_pitiful_story_215312_plotter.svg',
-      'A hesitant shape carrying a repeated wound.',
+      name: 'THE PITIFUL STORY',
+      emotion: 'Weight',
+      assetPath: '../assets/symbols/test_the_pitiful_story_215312_plotter.svg',
+      description: 'A repeated wound rises and falls from the same held line.',
+      reading:
+          'The oracle heard something said more than once, returned to but not resolved.',
     ),
     _BaseMark(
-      'THE SHRIEK',
-      '../assets/symbols/test_the_shriek_220002_plotter.svg',
-      'A sharp signal, unstable and bright.',
+      name: 'THE SHRIEK',
+      emotion: 'Surprise',
+      assetPath: '../assets/symbols/test_the_shriek_220002_plotter.svg',
+      description:
+          'A sharp signal opens from a small center and reorganises the field.',
+      reading:
+          'The oracle heard an opening: something that arrived without warning.',
     ),
     _BaseMark(
-      'THE THORNS',
-      '../assets/symbols/test_the_thorns_215209_plotter.svg',
-      'A defensive rhythm built from small refusals.',
+      name: 'THE THORNS',
+      emotion: 'Defense',
+      assetPath: '../assets/symbols/test_the_thorns_215209_plotter.svg',
+      description: 'Small refusals repeat into a defensive rhythm.',
+      reading: 'The oracle heard pressure held at the edge of the body.',
     ),
     _BaseMark(
-      'THE VEIL',
-      '../assets/symbols/20260420_195415_plotter.svg',
-      'A partial cover, neither hidden nor revealed.',
+      name: 'THE VEIL',
+      emotion: 'Cover',
+      assetPath: '../assets/symbols/20260420_195415_plotter.svg',
+      description: 'A partial cover, neither hidden nor revealed.',
+      reading: 'The oracle heard a surface that keeps part of itself withheld.',
     ),
     _BaseMark(
-      'THE MIRROR',
-      '../assets/symbols/20260421_195713_plotter.svg',
-      'A doubled trace that answers itself.',
+      name: 'THE MIRROR',
+      emotion: 'Echo',
+      assetPath: '../assets/symbols/20260421_195713_plotter.svg',
+      description: 'A doubled trace answers itself across the same boundary.',
+      reading: 'The oracle heard reflection: a voice measuring its own return.',
     ),
     _BaseMark(
-      'THE SEED',
-      '../assets/symbols/20260421_223735_plotter.svg',
-      'A compact beginning waiting for pressure.',
+      name: 'THE SEED',
+      emotion: 'Beginning',
+      assetPath: '../assets/symbols/20260421_223735_plotter.svg',
+      description: 'A compact beginning waits inside pressure.',
+      reading: 'The oracle heard a form not yet released from its container.',
     ),
   ];
 
@@ -56,26 +79,42 @@ class MarksPage extends StatelessWidget {
       children: [
         OracleSection(
           label: 'Library',
-          title: 'Eight base marks become unstable variants.',
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final crossAxisCount = constraints.maxWidth > 860 ? 4 : constraints.maxWidth > 560 ? 2 : 1;
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _marks.length,
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 1.05,
-                ),
-                itemBuilder: (context, index) {
-                  final mark = _marks[index];
-                  return _MarkCard(mark: mark);
+          title:
+              'These signs were once used to leave messages for those who came after.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Did not receive your receipt? Browse the eight marks below to find yours.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 26),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final crossAxisCount = constraints.maxWidth > 920 ? 2 : 1;
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _marks.length,
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: constraints.maxWidth > 920
+                          ? 2.35
+                          : 1.35,
+                    ),
+                    itemBuilder: (context, index) =>
+                        _MarkCard(mark: _marks[index]),
+                  );
                 },
-              );
-            },
+              ),
+              const SizedBox(height: 28),
+              Text(
+                'The oracle does not understand your words. It listens to the texture of your voice: pitch, energy, and rhythm. A small machine-learning model selects one of these marks, and the plotter draws it onto fabric.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ],
           ),
         ),
       ],
@@ -91,33 +130,109 @@ class _MarkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: OracleColors.paper,
         border: Border.all(color: OracleColors.rule, width: 0.7),
       ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked = constraints.maxWidth < 520;
+          final visual = _MarkVisual(mark: mark);
+          final copy = _MarkCopy(mark: mark);
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 5, child: visual),
+                Expanded(flex: 4, child: copy),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: constraints.maxWidth * 0.42, child: visual),
+              Expanded(child: copy),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MarkVisual extends StatelessWidget {
+  const _MarkVisual({required this.mark});
+
+  final _BaseMark mark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: OracleColors.voidColor,
+      padding: const EdgeInsets.all(22),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 104,
-            height: 104,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: OracleColors.cream,
-              shape: BoxShape.circle,
-              border: Border.all(color: OracleColors.goldDim, width: 0.8),
-            ),
+          Expanded(
             child: SvgPicture.asset(
               mark.assetPath,
               fit: BoxFit.contain,
-              colorFilter: const ColorFilter.mode(OracleColors.ink, BlendMode.srcIn),
+              colorFilter: const ColorFilter.mode(
+                OracleColors.gold,
+                BlendMode.srcIn,
+              ),
             ),
           ),
+          const SizedBox(height: 12),
+          Text(
+            mark.emotion.toUpperCase(),
+            style: GoogleFonts.cinzel(
+              color: OracleColors.goldDim,
+              fontSize: 10,
+              letterSpacing: 2.4,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            mark.name,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.cinzel(
+              color: OracleColors.gold,
+              fontSize: 13,
+              letterSpacing: 2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MarkCopy extends StatelessWidget {
+  const _MarkCopy({required this.mark});
+
+  final _BaseMark mark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(22),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(mark.description, style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: 16),
-          Text(mark.name, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(mark.description, textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            mark.reading,
+            style: GoogleFonts.ebGaramond(
+              color: OracleColors.inkMid,
+              fontSize: 17,
+              fontStyle: FontStyle.italic,
+              height: 1.35,
+            ),
+          ),
         ],
       ),
     );
@@ -125,9 +240,17 @@ class _MarkCard extends StatelessWidget {
 }
 
 class _BaseMark {
-  const _BaseMark(this.name, this.assetPath, this.description);
+  const _BaseMark({
+    required this.name,
+    required this.emotion,
+    required this.assetPath,
+    required this.description,
+    required this.reading,
+  });
 
   final String name;
+  final String emotion;
   final String assetPath;
   final String description;
+  final String reading;
 }

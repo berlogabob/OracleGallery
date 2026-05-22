@@ -54,6 +54,7 @@ def make_service(
         settings,
         http_get_json=http_get_json,
         print_receipt=print_receipt,
+        firebase_sessions=lambda: [],
         now=lambda: now_value[0],
     )
 
@@ -148,3 +149,161 @@ def test_failed_print_retries_after_retry_window(tmp_path: Path) -> None:
     third = service.run_once()
     assert third["printed"] == ["session_001"]
     assert len(printed) == 2
+
+
+def test_firebase_fallback_materializes_latest_session_when_agent_missing(tmp_path: Path) -> None:
+    now_value = [200.0]
+    printed: list[Path] = []
+    downloads: list[tuple[str, Path]] = []
+    firebase_rows = [
+        {
+            "sessionId": "session_002",
+            "createdAt": "1970-01-01T00:02:00+00:00",
+            "status": "published",
+            "origin": "real_macmini",
+            "markName": "THE SHRIEK",
+            "oracleText": "A receipt from Firebase.",
+            "themes": ["echo"],
+            "measures": {"intensity": 0.8, "instability": 0.3, "confidence": 0.9},
+            "assetPaths": {
+                "receipt": "sessions/session_002/receipt.txt",
+                "svg": "sessions/session_002/artwork.svg",
+            },
+        },
+        {
+            "sessionId": "session_001",
+            "createdAt": "1970-01-01T00:01:00+00:00",
+            "status": "published",
+            "origin": "real_macmini",
+            "assetPaths": {
+                "receipt": "sessions/session_001/receipt.txt",
+                "svg": "sessions/session_001/artwork.svg",
+            },
+        },
+    ]
+    settings = ThermalAutoprintSettings(
+        macmini_agent_url="",
+        esp32_url="http://10.28.8.56",
+        delay_seconds=0.0,
+        timeout_seconds=1.0,
+        state_path=tmp_path / "thermal_autoprint.json",
+        cache_root=tmp_path / "thermal_sessions",
+        repo_root=tmp_path,
+    )
+
+    def download_asset(storage_path: str, destination: Path) -> None:
+        downloads.append((storage_path, destination))
+        if storage_path.endswith("receipt.txt"):
+            destination.write_text("Your symbol: THE SHRIEK\nA receipt from Firebase.\n", encoding="utf-8")
+        else:
+            destination.write_text(
+                '<svg width="100" height="100" viewBox="0 0 100 100"><line x1="0" y1="0" x2="100" y2="100"/></svg>',
+                encoding="utf-8",
+            )
+
+    def print_receipt(session_dir: Path) -> dict[str, object]:
+        printed.append(session_dir)
+        return {"ok": True, "printed": True}
+
+    service = ThermalAutoprintService(
+        settings,
+        http_get_json=lambda _url, _timeout: (_ for _ in ()).throw(RuntimeError("offline")),
+        print_receipt=print_receipt,
+        firebase_sessions=lambda: firebase_rows,
+        download_asset=download_asset,
+        now=lambda: now_value[0],
+    )
+
+    result = service.run_once()
+
+    assert result["observed_firebase"] == ["session_002"]
+    assert result["printed"] == ["session_002"]
+    assert printed == [tmp_path / "thermal_sessions" / "session_002"]
+    assert (tmp_path / "thermal_sessions" / "session_002" / "session_002_receipt.txt").exists()
+    assert (tmp_path / "thermal_sessions" / "session_002" / "session_002_plotter.svg").exists()
+    assert [path for _, path in downloads] == [
+        tmp_path / "thermal_sessions" / "session_002" / "session_002_receipt.txt",
+        tmp_path / "thermal_sessions" / "session_002" / "session_002_plotter.svg",
+    ]
+
+    restarted = ThermalAutoprintService(
+        settings,
+        http_get_json=lambda _url, _timeout: (_ for _ in ()).throw(RuntimeError("offline")),
+        print_receipt=print_receipt,
+        firebase_sessions=lambda: firebase_rows,
+        download_asset=download_asset,
+        now=lambda: now_value[0],
+    )
+    second = restarted.run_once()
+
+    assert second["observed_firebase"] == []
+    assert second["printed"] == []
+    assert len(printed) == 1
+
+
+def test_firebase_fallback_retries_when_asset_download_fails(tmp_path: Path) -> None:
+    now_value = [200.0]
+    firebase_rows = [
+        {
+            "sessionId": "session_003",
+            "createdAt": "1970-01-01T00:03:00+00:00",
+            "status": "published",
+            "origin": "real_macmini",
+            "markName": "THE SHRIEK",
+            "oracleText": "A receipt from Firebase.",
+            "assetPaths": {
+                "receipt": "sessions/session_003/receipt.txt",
+                "svg": "sessions/session_003/artwork.svg",
+            },
+        }
+    ]
+    settings = ThermalAutoprintSettings(
+        macmini_agent_url="",
+        esp32_url="http://10.28.8.56",
+        delay_seconds=0.0,
+        timeout_seconds=1.0,
+        state_path=tmp_path / "thermal_autoprint.json",
+        cache_root=tmp_path / "thermal_sessions",
+        repo_root=tmp_path,
+    )
+    calls = [0]
+    printed: list[Path] = []
+
+    def download_asset(storage_path: str, destination: Path) -> None:
+        calls[0] += 1
+        if calls[0] == 1:
+            raise RuntimeError("temporary storage failure")
+        if storage_path.endswith("receipt.txt"):
+            destination.write_text("Your symbol: THE SHRIEK\nA receipt from Firebase.\n", encoding="utf-8")
+        else:
+            destination.write_text(
+                '<svg width="100" height="100" viewBox="0 0 100 100"><line x1="0" y1="0" x2="100" y2="100"/></svg>',
+                encoding="utf-8",
+            )
+
+    service = ThermalAutoprintService(
+        settings,
+        http_get_json=lambda _url, _timeout: (_ for _ in ()).throw(RuntimeError("offline")),
+        print_receipt=lambda session_dir: printed.append(session_dir) or {"ok": True, "printed": True},
+        firebase_sessions=lambda: firebase_rows,
+        download_asset=download_asset,
+        now=lambda: now_value[0],
+    )
+
+    first = service.run_once()
+    assert first["observed_firebase"] == []
+    assert "firebase_latest_created_at" not in service.state
+
+    restarted = ThermalAutoprintService(
+        settings,
+        http_get_json=lambda _url, _timeout: (_ for _ in ()).throw(RuntimeError("offline")),
+        print_receipt=lambda session_dir: printed.append(session_dir) or {"ok": True, "printed": True},
+        firebase_sessions=lambda: firebase_rows,
+        download_asset=download_asset,
+        now=lambda: now_value[0],
+    )
+    second = restarted.run_once()
+
+    assert second["observed_firebase"] == ["session_003"]
+    assert second["printed"] == ["session_003"]
+    assert printed == [tmp_path / "thermal_sessions" / "session_003"]

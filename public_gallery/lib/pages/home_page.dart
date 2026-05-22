@@ -27,82 +27,110 @@ class _HomePageState extends State<HomePage> {
       children: [
         Container(
           color: OracleColors.voidColor,
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 72),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 64),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 940),
-              child: Column(
-                children: [
-                  Text(
-                    'THE ORACLE',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.cinzelDecorative(
-                      color: OracleColors.gold,
-                      fontSize: 42,
-                      letterSpacing: 8,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'A public cloth of generated marks, receipts, and printed fragments.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.ebGaramond(
-                      color: OracleColors.cream,
-                      fontSize: 22,
-                      fontStyle: FontStyle.italic,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 34),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 14,
-                    runSpacing: 14,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final compact = constraints.maxWidth < 560;
+                  return Column(
                     children: [
-                      FilledButton(
-                        onPressed: () => context.go('/cloth'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: OracleColors.gold,
-                          foregroundColor: OracleColors.voidColor,
-                          padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
-                          textStyle: GoogleFonts.ebGaramond(fontSize: 19, fontWeight: FontWeight.w700),
+                      const _OraclePortrait(),
+                      const SizedBox(height: 28),
+                      Text(
+                        'THE ORACLE THAT WEARS US',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.cinzel(
+                          color: OracleColors.gold,
+                          fontSize: compact ? 30 : 42,
+                          letterSpacing: compact ? 4 : 8,
+                          height: 1.18,
                         ),
-                        child: const Text('Enter the cloth'),
                       ),
-                      OutlinedButton(
-                        onPressed: () => context.go('/marks'),
-                        style: _heroOutlineButtonStyle(),
-                        child: const Text('The marks'),
+                      const SizedBox(height: 18),
+                      Text(
+                        'A public cloth of generated marks, receipts, and printed fragments.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.ebGaramond(
+                          color: OracleColors.cream,
+                          fontSize: compact ? 20 : 22,
+                          fontStyle: FontStyle.italic,
+                          height: 1.35,
+                        ),
                       ),
-                      OutlinedButton(
-                        onPressed: () => context.go('/about'),
-                        style: _heroOutlineButtonStyle(),
-                        child: const Text('About'),
+                      const SizedBox(height: 34),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 14,
+                        runSpacing: 14,
+                        children: [
+                          FilledButton(
+                            onPressed: () => context.go('/cloth'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: OracleColors.gold,
+                              foregroundColor: OracleColors.voidColor,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 34,
+                                vertical: 16,
+                              ),
+                              textStyle: GoogleFonts.ebGaramond(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            child: const Text('Enter the cloth'),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => context.go('/marks'),
+                            style: _heroOutlineButtonStyle(),
+                            child: const Text('The marks'),
+                          ),
+                          OutlinedButton(
+                            onPressed: () => context.go('/about'),
+                            style: _heroOutlineButtonStyle(),
+                            child: const Text('About'),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),
         ),
         OracleSection(
-          label: 'QR receipt',
+          label: 'Find your mark',
           title: 'Open a session directly from a printed receipt.',
-          child: Row(
+          child: _SessionLookup(
+            controller: _sessionController,
+            onLookup: _openSession,
+            supportingText: 'Your session ID is printed on your receipt.',
+          ),
+        ),
+        OracleSection(
+          label: 'What the oracle is',
+          title: 'A listening machine that leaves a physical trace.',
+          child: Text(
+            'The oracle listens to a visitor, reads the texture of the voice, and translates that encounter into one of eight marks. The public gallery keeps the safe fragment: the generated mark, its receipt, and the route back to the shared cloth.',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ),
+        OracleSection(
+          label: 'The cloth preview',
+          title: 'Every published mark joins the same surface.',
+          voidSection: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _sessionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Session ID',
-                    hintText: '20260428_183129',
-                  ),
-                  onSubmitted: _openSession,
-                ),
+              const _ClothPreview(),
+              const SizedBox(height: 20),
+              OutlinedButton(
+                onPressed: () => context.go('/cloth'),
+                style: _heroOutlineButtonStyle(),
+                child: const Text('View the cloth'),
               ),
-              const SizedBox(width: 12),
-              FilledButton(onPressed: () => _openSession(_sessionController.text), child: const Text('Open')),
             ],
           ),
         ),
@@ -113,7 +141,7 @@ class _HomePageState extends State<HomePage> {
   void _openSession(String value) {
     final sessionId = value.trim();
     if (sessionId.isNotEmpty) {
-      context.go('/session/$sessionId');
+      context.go('/cloth?session=${Uri.encodeQueryComponent(sessionId)}');
     }
   }
 
@@ -122,14 +150,186 @@ class _HomePageState extends State<HomePage> {
       foregroundColor: OracleColors.cream,
       side: const BorderSide(color: OracleColors.rule, width: 1.1),
       padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 16),
-      textStyle: GoogleFonts.ebGaramond(fontSize: 19, fontWeight: FontWeight.w700),
+      textStyle: GoogleFonts.ebGaramond(
+        fontSize: 19,
+        fontWeight: FontWeight.w700,
+      ),
     ).copyWith(
       overlayColor: WidgetStateProperty.resolveWith((states) {
-        if (states.contains(WidgetState.hovered) || states.contains(WidgetState.pressed)) {
+        if (states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.pressed)) {
           return OracleColors.gold.withValues(alpha: 0.16);
         }
         return null;
       }),
     );
   }
+}
+
+class _SessionLookup extends StatelessWidget {
+  const _SessionLookup({
+    required this.controller,
+    required this.onLookup,
+    required this.supportingText,
+  });
+
+  final TextEditingController controller;
+  final ValueChanged<String> onLookup;
+  final String supportingText;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 620;
+        final input = TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Enter your session ID',
+            hintText: '20260428_183129',
+          ),
+          onSubmitted: onLookup,
+        );
+        final button = FilledButton(
+          onPressed: () => onLookup(controller.text),
+          child: const Text('Find'),
+        );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (compact)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [input, const SizedBox(height: 14), button],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(child: input),
+                  const SizedBox(width: 12),
+                  button,
+                ],
+              ),
+            const SizedBox(height: 10),
+            Text(supportingText, style: Theme.of(context).textTheme.bodyMedium),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _OraclePortrait extends StatelessWidget {
+  const _OraclePortrait();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 150,
+      height: 190,
+      child: CustomPaint(painter: _OraclePortraitPainter()),
+    );
+  }
+}
+
+class _OraclePortraitPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          OracleColors.gold.withValues(alpha: 0.48),
+          OracleColors.gold.withValues(alpha: 0.08),
+          Colors.transparent,
+        ],
+      ).createShader(Offset.zero & size);
+    canvas.drawOval(
+      Rect.fromCenter(center: center, width: size.width, height: size.height),
+      glow,
+    );
+
+    final stroke = Paint()
+      ..color = OracleColors.gold
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..moveTo(size.width * 0.5, size.height * 0.1)
+      ..cubicTo(
+        size.width * 0.2,
+        size.height * 0.26,
+        size.width * 0.24,
+        size.height * 0.6,
+        size.width * 0.5,
+        size.height * 0.9,
+      )
+      ..cubicTo(
+        size.width * 0.76,
+        size.height * 0.6,
+        size.width * 0.8,
+        size.height * 0.26,
+        size.width * 0.5,
+        size.height * 0.1,
+      );
+    canvas.drawPath(path, stroke);
+    canvas.drawCircle(
+      Offset(size.width * 0.5, size.height * 0.35),
+      size.width * 0.16,
+      stroke,
+    );
+    canvas.drawLine(
+      Offset(size.width * 0.28, size.height * 0.64),
+      Offset(size.width * 0.72, size.height * 0.64),
+      stroke,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _ClothPreview extends StatelessWidget {
+  const _ClothPreview();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 190,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border.all(color: OracleColors.goldDim, width: 0.7),
+        color: OracleColors.voidColor,
+      ),
+      child: CustomPaint(painter: _ClothPreviewPainter()),
+    );
+  }
+}
+
+class _ClothPreviewPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = OracleColors.gold.withValues(alpha: 0.58)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    const cols = 14;
+    const rows = 4;
+    final cellW = size.width / (cols + 1);
+    final cellH = size.height / (rows + 1);
+    for (var row = 0; row < rows; row++) {
+      for (var col = 0; col < cols; col++) {
+        final center = Offset((col + 1) * cellW, (row + 1) * cellH);
+        canvas.drawCircle(center, 12, paint);
+        canvas.drawLine(
+          center.translate(-7, -3),
+          center.translate(7, 5),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -46,7 +46,8 @@ create_default_config() {
   fi
   cat > "$CONFIG_FILE" <<EOF
 # Mac mini standalone uploader settings.
-# The folder containing START_ORACLE_UPLOADER.command is watched for session folders.
+# By default, the folder containing START_ORACLE_UPLOADER.command is watched.
+# Optional: set NEJE_UPLOADER_SESSION_ROOT to watch a different TouchDesigner sessions folder.
 NEJE_FIREBASE_PROJECT_ID=oraclegallery
 NEJE_FIREBASE_STORAGE_BUCKET=oraclegallery.firebasestorage.app
 NEJE_FIREBASE_CREDENTIALS="$SCRIPT_DIR/firebase-service-account.json"
@@ -351,15 +352,8 @@ class FirebasePublisher:
             "origin": "real_macmini",
             "tags": ["real", "oracle", "macmini"],
             "visibleInLibrary": True,
+            "visibleInQueue": True,
         }
-        self.db.collection("sessions").document(publication.session_id).set(session_payload, merge=True)
-        self.db.collection("sessions").document(publication.session_id).update(
-            {
-                "previewUrl": firestore.DELETE_FIELD,
-                "assetUrls.preview": firestore.DELETE_FIELD,
-                "assetPaths.preview": firestore.DELETE_FIELD,
-            }
-        )
         self.db.collection("plot_jobs").document(publication.session_id).set(
             {
                 "sessionId": publication.session_id,
@@ -383,6 +377,14 @@ class FirebasePublisher:
         )
         self.db.collection("plot_jobs").document(publication.session_id).update(
             {"previewUrl": firestore.DELETE_FIELD}
+        )
+        self.db.collection("sessions").document(publication.session_id).set(session_payload, merge=True)
+        self.db.collection("sessions").document(publication.session_id).update(
+            {
+                "previewUrl": firestore.DELETE_FIELD,
+                "assetUrls.preview": firestore.DELETE_FIELD,
+                "assetPaths.preview": firestore.DELETE_FIELD,
+            }
         )
 
     def _manifest_payload(
@@ -789,15 +791,14 @@ def main() -> None:
         poll_seconds=env_float("NEJE_UPLOADER_POLL_SECONDS", 2.0),
     )
     controller = Controller(Uploader(settings), settings)
-    controller.started_at = datetime.now(tz=UTC)
-    controller.uploader.store.set_run_started_at(controller.started_at)
+    controller.start()
     Handler.controller = controller
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"Standalone Mac mini uploader agent: http://{args.host}:{args.port}/")
     print(f"Watching session folder: {settings.session_root}")
     print(f"Firebase project: {settings.project_id}")
-    print(f"Launch baseline: {controller.started_at.isoformat()}")
-    print("Waiting for NEJE GUI /control/start or manual /scan-once.")
+    print(f"Launch baseline: {controller.started_at.isoformat() if controller.started_at else ''}")
+    print("Uploader is scanning now. Existing session folders older than the launch baseline are skipped.")
     server.serve_forever()
 
 
@@ -811,11 +812,15 @@ set -a
 source "$CONFIG_FILE"
 set +a
 repair_firebase_credentials_config
+SESSION_ROOT="${NEJE_UPLOADER_SESSION_ROOT:-$SCRIPT_DIR}"
+SESSION_ROOT="${SESSION_ROOT/#\~/$HOME}"
+SESSION_ROOT="${SESSION_ROOT:A}"
 
 PYTHON_BIN="$(find_python)" || fail "python3 was not found. Install Python 3 first."
 [[ -n "${NEJE_FIREBASE_PROJECT_ID:-}" ]] || fail "NEJE_FIREBASE_PROJECT_ID is empty in $CONFIG_FILE"
 [[ -n "${NEJE_FIREBASE_STORAGE_BUCKET:-}" ]] || fail "NEJE_FIREBASE_STORAGE_BUCKET is empty in $CONFIG_FILE"
 [[ -n "${NEJE_FIREBASE_CREDENTIALS:-}" ]] || fail "NEJE_FIREBASE_CREDENTIALS is empty in $CONFIG_FILE"
+[[ -d "$SESSION_ROOT" ]] || fail "TouchDesigner sessions folder does not exist: $SESSION_ROOT"
 ensure_firebase_credentials
 
 mkdir -p "$RUNTIME_DIR"
@@ -832,18 +837,19 @@ clear || true
 echo "========================================"
 echo "  Standalone Oracle Mac mini Uploader"
 echo "========================================"
-echo "Sessions folder: $SCRIPT_DIR"
+echo "Sessions folder: $SESSION_ROOT"
 echo "Runtime folder:  $RUNTIME_DIR"
 echo "Config file:     $CONFIG_FILE"
 echo "Firebase:        $NEJE_FIREBASE_PROJECT_ID / $NEJE_FIREBASE_STORAGE_BUCKET"
 echo "Agent:           http://${NEJE_UPLOADER_AGENT_HOST:-0.0.0.0}:${NEJE_UPLOADER_AGENT_PORT:-8790}/"
 echo
 echo "Leave this window open."
-echo "The uploader starts scanning when NEJE GUI sends Start, or when /scan-once is called."
+echo "The uploader is scanning for new TouchDesigner sessions now."
+echo "Existing session folders are skipped by the launch baseline."
 echo
 
 "$VENV_DIR/bin/python" "$APP_FILE" \
-  --session-root "$SCRIPT_DIR" \
+  --session-root "$SESSION_ROOT" \
   --runtime-dir "$RUNTIME_DIR" \
   --host "${NEJE_UPLOADER_AGENT_HOST:-0.0.0.0}" \
   --port "${NEJE_UPLOADER_AGENT_PORT:-8790}"

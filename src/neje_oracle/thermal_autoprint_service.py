@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import socket
@@ -15,6 +16,9 @@ from datetime import UTC, datetime
 from ipaddress import ip_network
 from pathlib import Path
 from typing import Any, Callable
+
+from .config import FirebaseSettings
+from .firebase_io import FirebaseRemoteRepository, recorded_datetime
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -50,12 +54,14 @@ def _env_int(name: str, default: int) -> int:
 class ThermalAutoprintSettings:
     macmini_agent_url: str = os.getenv("NEJE_MACMINI_AGENT_URL", "")
     esp32_url: str = os.getenv("NEJE_THERMAL_ESP32_URL", "http://10.28.8.56")
+    firebase_limit: int = _env_int("NEJE_THERMAL_FIREBASE_LIMIT", 20)
     delay_seconds: float = _env_float("NEJE_THERMAL_DELAY_SECONDS", 60.0)
     poll_seconds: float = _env_float("NEJE_THERMAL_POLL_SECONDS", 10.0)
     retry_seconds: float = _env_float("NEJE_THERMAL_RETRY_SECONDS", 60.0)
     max_attempts: int = _env_int("NEJE_THERMAL_MAX_ATTEMPTS", 3)
     timeout_seconds: float = _env_float("NEJE_THERMAL_TIMEOUT_SECONDS", 90.0)
     state_path: Path = Path(os.getenv("NEJE_THERMAL_STATE_PATH", str(REPO_ROOT / "runtime" / "thermal_autoprint.json")))
+    cache_root: Path = Path(os.getenv("NEJE_THERMAL_CACHE_ROOT", str(REPO_ROOT / "runtime" / "thermal_sessions")))
     repo_root: Path = REPO_ROOT
 
 
@@ -66,34 +72,49 @@ class ThermalAutoprintService:
         *,
         http_get_json: Callable[[str, float], dict[str, Any]] | None = None,
         print_receipt: Callable[[Path], dict[str, Any]] | None = None,
+        firebase_sessions: Callable[[], list[dict[str, Any]]] | None = None,
+        download_asset: Callable[[str, Path], None] | None = None,
         now: Callable[[], float] | None = None,
     ) -> None:
         self.settings = settings
         self.http_get_json = http_get_json or get_json
         self.print_receipt = print_receipt or self._print_receipt
+        self.firebase_sessions = firebase_sessions or self._firebase_sessions
+        self.download_asset = download_asset or self._download_firebase_asset
         self.now = now or time.time
         self.macmini_agent_url = settings.macmini_agent_url.rstrip("/")
         self.state = self._load_state()
 
     def run_once(self) -> dict[str, Any]:
+        agent_error = ""
+        imported: list[str] = []
         if not self.macmini_agent_url:
             self.macmini_agent_url = discover_macmini_uploader_url(timeout_seconds=0.25)
-        if not self.macmini_agent_url:
-            return {"ok": False, "error": "Mac mini uploader agent was not found", "printed": []}
 
-        status = self.http_get_json(f"{self.macmini_agent_url}/status", self.settings.timeout_seconds)
-        watched_folder = Path(str(status.get("watched_folder") or "")).expanduser()
-        imported = [str(session_id) for session_id in status.get("last_imported", []) if str(session_id).strip()]
+        if self.macmini_agent_url:
+            try:
+                status = self.http_get_json(f"{self.macmini_agent_url}/status", self.settings.timeout_seconds)
+                watched_folder = Path(str(status.get("watched_folder") or "")).expanduser()
+                imported = [str(session_id) for session_id in status.get("last_imported", []) if str(session_id).strip()]
+            except Exception as exc:  # noqa: BLE001
+                agent_error = str(exc)
+                imported = []
+        else:
+            agent_error = "Mac mini uploader agent was not found"
 
         for session_id in imported:
             self._observe_session(session_id, watched_folder)
 
+        firebase_imported = [] if imported else self._observe_firebase_sessions()
         result = self._process_pending()
         self._save_state()
         return {
             "ok": True,
             "macmini_agent_url": self.macmini_agent_url,
-            "observed": imported,
+            "agent_error": agent_error,
+            "observed": imported + firebase_imported,
+            "observed_agent": imported,
+            "observed_firebase": firebase_imported,
             **result,
         }
 
@@ -115,6 +136,142 @@ class ThermalAutoprintService:
             sessions[session_id] = record
         record["session_dir"] = str(session_dir)
         record.setdefault("detected_at", now_iso)
+        record.setdefault("source", "macmini_agent")
+
+    def _observe_firebase_sessions(self) -> list[str]:
+        try:
+            payloads = self.firebase_sessions()
+        except Exception:  # noqa: BLE001
+            return []
+
+        candidates = [payload for payload in payloads if firebase_session_printable(payload)]
+        if not candidates:
+            return []
+
+        latest_seen = epoch_from_iso(str(self.state.get("firebase_latest_created_at") or ""))
+        if not latest_seen:
+            latest_seen = self._latest_firebase_record_epoch()
+        if latest_seen:
+            candidates = [
+                payload
+                for payload in candidates
+                if recorded_datetime(payload.get("createdAt")).timestamp() > latest_seen
+            ]
+        if not candidates:
+            self.state["firebase_observed_at"] = iso_from_epoch(self.now())
+            return []
+
+        first_firebase_scan = not self.state.get("firebase_observed_at")
+        if first_firebase_scan:
+            candidates = candidates[:1]
+        self.state["firebase_observed_at"] = iso_from_epoch(self.now())
+
+        observed: list[str] = []
+        processed_epochs: list[float] = []
+        for payload in candidates:
+            session_id = str(payload.get("sessionId") or payload.get("_id") or "").strip()
+            if not session_id:
+                continue
+            created_at = recorded_datetime(payload.get("createdAt")).timestamp()
+            sessions = self.state.setdefault("sessions", {})
+            record = sessions.get(session_id)
+            if record and record.get("status") == "printed":
+                processed_epochs.append(created_at)
+                continue
+            try:
+                session_dir = self._materialize_firebase_session(payload)
+            except Exception:  # noqa: BLE001
+                continue
+            if session_dir is None:
+                continue
+            detected_at = min(created_at, self.now()) if created_at else self.now()
+            if not record:
+                record = {
+                    "status": "pending",
+                    "detected_at": iso_from_epoch(detected_at),
+                    "firebase_created_at": payload.get("createdAt", ""),
+                    "attempts": 0,
+                    "last_attempt_at": "",
+                    "last_error": "",
+                    "source": "firebase",
+                }
+                sessions[session_id] = record
+            record["session_dir"] = str(session_dir)
+            record["firebase_created_at"] = payload.get("createdAt", "")
+            record.setdefault("detected_at", iso_from_epoch(detected_at))
+            record.setdefault("source", "firebase")
+            observed.append(session_id)
+            processed_epochs.append(created_at)
+        if processed_epochs:
+            self.state["firebase_latest_created_at"] = iso_from_epoch(max(max(processed_epochs), latest_seen))
+        return observed
+
+    def _latest_firebase_record_epoch(self) -> float:
+        values: list[float] = []
+        for session_id, record in self.state.get("sessions", {}).items():
+            if not isinstance(record, dict) or record.get("source") != "firebase":
+                continue
+            created_at = epoch_from_iso(str(record.get("firebase_created_at") or ""))
+            if not created_at:
+                created_at = epoch_from_session_id(str(session_id))
+            if not created_at:
+                created_at = epoch_from_iso(str(record.get("detected_at") or ""))
+            values.append(created_at)
+        return max(values) if values else 0.0
+
+    def _materialize_firebase_session(self, payload: dict[str, Any]) -> Path | None:
+        session_id = str(payload.get("sessionId") or payload.get("_id") or "").strip()
+        if not session_id:
+            return None
+        asset_paths = payload.get("assetPaths") if isinstance(payload.get("assetPaths"), dict) else {}
+        receipt_path = str(asset_paths.get("receipt") or "")
+        svg_path = str(asset_paths.get("svg") or "")
+        if not receipt_path or not svg_path:
+            return None
+
+        session_dir = self.settings.cache_root / session_id
+        session_dir.mkdir(parents=True, exist_ok=True)
+        local_receipt = session_dir / f"{session_id}_receipt.txt"
+        local_svg = session_dir / f"{session_id}_plotter.svg"
+        if not local_receipt.exists():
+            self.download_asset(receipt_path, local_receipt)
+        if not local_svg.exists():
+            self.download_asset(svg_path, local_svg)
+        self._write_firebase_csv(payload, session_dir)
+        return session_dir
+
+    def _write_firebase_csv(self, payload: dict[str, Any], session_dir: Path) -> None:
+        session_id = str(payload.get("sessionId") or payload.get("_id") or session_dir.name)
+        measures = payload.get("measures") if isinstance(payload.get("measures"), dict) else {}
+        themes = payload.get("themes") if isinstance(payload.get("themes"), list) else []
+        csv_path = session_dir / f"{session_id}_receipt.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "session_id",
+                    "date",
+                    "symbol",
+                    "reply_text",
+                    "keywords",
+                    "intensity",
+                    "instability",
+                    "confidence",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "session_id": session_id,
+                    "date": payload.get("createdAt", ""),
+                    "symbol": payload.get("markName", ""),
+                    "reply_text": payload.get("oracleText", ""),
+                    "keywords": repr(themes),
+                    "intensity": measures.get("intensity", ""),
+                    "instability": measures.get("instability", ""),
+                    "confidence": measures.get("confidence", ""),
+                }
+            )
 
     def _process_pending(self) -> dict[str, Any]:
         printed: list[str] = []
@@ -220,6 +377,15 @@ class ThermalAutoprintService:
         self.settings.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.settings.state_path.write_text(json.dumps(self.state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    def _firebase_sessions(self) -> list[dict[str, Any]]:
+        firebase_settings = FirebaseSettings()
+        if not firebase_settings.enabled:
+            return []
+        return FirebaseRemoteRepository(firebase_settings).iter_recent_sessions(limit=self.settings.firebase_limit)
+
+    def _download_firebase_asset(self, storage_path: str, destination: Path) -> None:
+        FirebaseRemoteRepository(FirebaseSettings()).download_asset(storage_path, destination)
+
 
 def printable_session(session_dir: Path) -> tuple[bool, str]:
     if not session_dir.exists():
@@ -229,6 +395,17 @@ def printable_session(session_dir: Path) -> tuple[bool, str]:
     if not list(session_dir.glob("*_plotter.svg")):
         return False, f"missing *_plotter.svg in {session_dir}"
     return True, ""
+
+
+def firebase_session_printable(payload: dict[str, Any]) -> bool:
+    if str(payload.get("status") or "") != "published":
+        return False
+    if str(payload.get("origin") or "") != "real_macmini":
+        return False
+    asset_paths = payload.get("assetPaths")
+    if not isinstance(asset_paths, dict):
+        return False
+    return bool(asset_paths.get("receipt") and asset_paths.get("svg"))
 
 
 def get_json(url: str, timeout_seconds: float) -> dict[str, Any]:
@@ -297,18 +474,27 @@ def epoch_from_iso(value: str) -> float:
         return 0.0
 
 
+def epoch_from_session_id(value: str) -> float:
+    try:
+        return datetime.strptime(value, "%Y%m%d_%H%M%S").replace(tzinfo=UTC).timestamp()
+    except ValueError:
+        return 0.0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Watch the Mac mini uploader and autoprint new thermal receipts.")
     parser.add_argument("--watch", action="store_true", help="Keep polling for new imported sessions.")
     parser.add_argument("--once", action="store_true", help="Run one poll/process pass and exit.")
     parser.add_argument("--macmini-agent-url", default=os.getenv("NEJE_MACMINI_AGENT_URL", ""))
     parser.add_argument("--esp32", default=os.getenv("NEJE_THERMAL_ESP32_URL", "http://10.28.8.56"))
+    parser.add_argument("--firebase-limit", type=int, default=_env_int("NEJE_THERMAL_FIREBASE_LIMIT", 20))
     parser.add_argument("--delay-seconds", type=float, default=_env_float("NEJE_THERMAL_DELAY_SECONDS", 60.0))
     parser.add_argument("--poll-seconds", type=float, default=_env_float("NEJE_THERMAL_POLL_SECONDS", 10.0))
     parser.add_argument("--retry-seconds", type=float, default=_env_float("NEJE_THERMAL_RETRY_SECONDS", 60.0))
     parser.add_argument("--max-attempts", type=int, default=_env_int("NEJE_THERMAL_MAX_ATTEMPTS", 3))
     parser.add_argument("--timeout", type=float, default=_env_float("NEJE_THERMAL_TIMEOUT_SECONDS", 90.0))
     parser.add_argument("--state-path", type=Path, default=Path(os.getenv("NEJE_THERMAL_STATE_PATH", str(REPO_ROOT / "runtime" / "thermal_autoprint.json"))))
+    parser.add_argument("--cache-root", type=Path, default=Path(os.getenv("NEJE_THERMAL_CACHE_ROOT", str(REPO_ROOT / "runtime" / "thermal_sessions"))))
     return parser
 
 
@@ -316,12 +502,14 @@ def settings_from_args(args: argparse.Namespace) -> ThermalAutoprintSettings:
     return ThermalAutoprintSettings(
         macmini_agent_url=args.macmini_agent_url,
         esp32_url=args.esp32,
+        firebase_limit=args.firebase_limit,
         delay_seconds=args.delay_seconds,
         poll_seconds=args.poll_seconds,
         retry_seconds=args.retry_seconds,
         max_attempts=args.max_attempts,
         timeout_seconds=args.timeout,
         state_path=args.state_path.expanduser(),
+        cache_root=args.cache_root.expanduser(),
         repo_root=REPO_ROOT,
     )
 

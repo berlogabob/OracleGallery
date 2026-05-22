@@ -96,6 +96,30 @@ class FirebaseRemoteRepository:
             content_type="application/json",
         )
 
+        plot_job_ref = self._db.collection("plot_jobs").document(record.session_id)
+        plot_job_ref.set(
+            {
+                "sessionId": record.session_id,
+                "title": record.title,
+                "summary": record.summary,
+                "createdAt": record.created_at.isoformat(),
+                "status": PlotStatus.PENDING.value,
+                "priority": priority,
+                "queue": queue,
+                "consumerId": "",
+                "sheetId": "",
+                "sheetIndex": -1,
+                "error": "",
+                "svgStoragePath": f"{remote_root}/artwork.svg",
+                "svgUrl": svg_url,
+                "origin": origin,
+                "tags": tags,
+                "visibleInQueue": visible_in_queue,
+            },
+            merge=True,
+        )
+        plot_job_ref.update({"previewUrl": firestore.DELETE_FIELD})
+
         session_ref = self._db.collection("sessions").document(record.session_id)
         session_ref.set(
             {
@@ -146,29 +170,6 @@ class FirebaseRemoteRepository:
                 "assetPaths.preview": firestore.DELETE_FIELD,
             }
         )
-        plot_job_ref = self._db.collection("plot_jobs").document(record.session_id)
-        plot_job_ref.set(
-            {
-                "sessionId": record.session_id,
-                "title": record.title,
-                "summary": record.summary,
-                "createdAt": record.created_at.isoformat(),
-                "status": PlotStatus.PENDING.value,
-                "priority": priority,
-                "queue": queue,
-                "consumerId": "",
-                "sheetId": "",
-                "sheetIndex": -1,
-                "error": "",
-                "svgStoragePath": f"{remote_root}/artwork.svg",
-                "svgUrl": svg_url,
-                "origin": origin,
-                "tags": tags,
-                "visibleInQueue": visible_in_queue,
-            },
-            merge=True,
-        )
-        plot_job_ref.update({"previewUrl": firestore.DELETE_FIELD})
 
         return PublicationResult(
             public_status=PublicStatus.PUBLISHED,
@@ -342,6 +343,15 @@ class FirebaseRemoteRepository:
         if limit:
             query = query.limit(limit)
         rows = []
+        for doc in query.stream():
+            payload = doc.to_dict() or {}
+            payload["_id"] = doc.id
+            rows.append(payload)
+        return rows
+
+    def iter_recent_sessions(self, *, limit: int = 20):
+        rows = []
+        query = self._db.collection("sessions").order_by("createdAt", direction=firestore.Query.DESCENDING).limit(limit)
         for doc in query.stream():
             payload = doc.to_dict() or {}
             payload["_id"] = doc.id

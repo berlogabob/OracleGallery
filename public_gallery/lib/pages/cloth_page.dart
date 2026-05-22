@@ -108,9 +108,16 @@ class _SessionStreamState extends State<_SessionStream> {
           );
         }
 
-        final highlighted =
-            widget.highlightSessionId != null &&
-            sessions.any((s) => s.sessionId == widget.highlightSessionId);
+        SessionData? highlightedSession;
+        if (widget.highlightSessionId != null) {
+          for (final session in sessions) {
+            if (session.sessionId == widget.highlightSessionId) {
+              highlightedSession = session;
+              break;
+            }
+          }
+        }
+        final highlighted = highlightedSession != null;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -129,6 +136,10 @@ class _SessionStreamState extends State<_SessionStream> {
                       'Direct receipt links can open hidden or unpublished sessions, but the cloth shows only public real sessions.',
                 ),
               ),
+            if (highlightedSession != null) ...[
+              _HighlightedSessionPanel(session: highlightedSession),
+              const SizedBox(height: 18),
+            ],
             _ClothSurface(
               sessions: sessions,
               highlightSessionId: widget.highlightSessionId,
@@ -188,6 +199,8 @@ class _ClothToolbar extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 lookup,
+                const SizedBox(height: 8),
+                const _BrowseMarksHint(),
               ],
             );
           }
@@ -198,6 +211,8 @@ class _ClothToolbar extends StatelessWidget {
               const _SecretDebugButton(),
               const SizedBox(width: 22),
               Expanded(child: lookup),
+              const SizedBox(width: 18),
+              const _BrowseMarksHint(),
             ],
           );
         },
@@ -227,6 +242,18 @@ class _CountPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BrowseMarksHint extends StatelessWidget {
+  const _BrowseMarksHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: () => context.go('/marks'),
+      child: const Text('Browse marks'),
     );
   }
 }
@@ -268,24 +295,137 @@ class _LookupPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Find session in the cloth',
-              hintText: '20260428_183129',
-            ),
-            onSubmitted: onLookup,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 420;
+        final input = TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Find session in the cloth',
+            hintText: '20260428_183129',
           ),
-        ),
-        const SizedBox(width: 12),
-        FilledButton(
+          onSubmitted: onLookup,
+        );
+        final button = FilledButton(
           onPressed: () => onLookup(controller.text),
           child: const Text('Find'),
-        ),
-      ],
+        );
+        if (compact) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [input, const SizedBox(height: 12), button],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: input),
+            const SizedBox(width: 12),
+            button,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HighlightedSessionPanel extends StatelessWidget {
+  const _HighlightedSessionPanel({required this.session});
+
+  final SessionData session;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: OracleColors.voidColor,
+        border: Border.all(color: OracleColors.gold, width: 0.8),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 640;
+          final mark = SymbolNetworkView(
+            svgUrl: session.svgUrl,
+            size: compact ? 96 : 132,
+          );
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                session.markName.isEmpty
+                    ? session.sessionId
+                    : session.markName.toUpperCase(),
+                style: GoogleFonts.cinzel(
+                  color: OracleColors.gold,
+                  fontSize: 14,
+                  letterSpacing: 2.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                session.oracleText.isEmpty
+                    ? 'The oracle has not spoken yet.'
+                    : session.oracleText,
+                style: GoogleFonts.ebGaramond(
+                  color: OracleColors.cream,
+                  fontSize: 18,
+                  fontStyle: FontStyle.italic,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => context.go(
+                      '/session/${Uri.encodeComponent(session.sessionId)}',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: OracleColors.gold,
+                      side: const BorderSide(color: OracleColors.goldDim),
+                    ),
+                    child: const Text('Open receipt'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Share card export is prepared for this mark.',
+                        ),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: OracleColors.gold,
+                      side: const BorderSide(color: OracleColors.goldDim),
+                    ),
+                    child: const Text('Share your mark'),
+                  ),
+                ],
+              ),
+            ],
+          );
+          if (compact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: mark),
+                const SizedBox(height: 16),
+                details,
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              mark,
+              const SizedBox(width: 22),
+              Expanded(child: details),
+            ],
+          );
+        },
+      ),
     );
   }
 }

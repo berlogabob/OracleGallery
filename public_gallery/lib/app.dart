@@ -7,6 +7,7 @@ import 'pages/debug_sessions_page.dart';
 import 'pages/home_page.dart';
 import 'pages/marks_page.dart';
 import 'pages/session_receipt_page.dart';
+import 'pages/team_page.dart';
 import 'theme/oracle_theme.dart';
 import 'widgets/oracle_shell.dart';
 
@@ -20,10 +21,8 @@ class OracleGalleryApp extends StatelessWidget {
     final router = GoRouter(
       routes: [
         ShellRoute(
-          builder: (context, state, child) => OracleShell(
-            currentPath: state.uri.path,
-            child: child,
-          ),
+          builder: (context, state, child) =>
+              OracleShell(currentPath: state.uri.path, child: child),
           routes: [
             GoRoute(path: '/', builder: (context, state) => const HomePage()),
             GoRoute(
@@ -36,10 +35,21 @@ class OracleGalleryApp extends StatelessWidget {
             GoRoute(path: '/library', redirect: (context, state) => '/cloth'),
             GoRoute(
               path: '/debug/sessions',
-              builder: (context, state) => DebugSessionsPage(firebaseReady: firebaseReady),
+              builder: (context, state) =>
+                  DebugSessionsPage(firebaseReady: firebaseReady),
             ),
-            GoRoute(path: '/marks', builder: (context, state) => const MarksPage()),
-            GoRoute(path: '/about', builder: (context, state) => const AboutPage()),
+            GoRoute(
+              path: '/marks',
+              builder: (context, state) => const MarksPage(),
+            ),
+            GoRoute(
+              path: '/about',
+              builder: (context, state) => const AboutPage(),
+            ),
+            GoRoute(
+              path: '/team',
+              builder: (context, state) => const TeamPage(),
+            ),
             GoRoute(
               path: '/session/:sessionId',
               builder: (context, state) => SessionReceiptPage(

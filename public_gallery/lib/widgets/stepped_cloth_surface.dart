@@ -29,40 +29,56 @@ class SteppedClothSurface extends StatelessWidget {
           side: layout.side,
         );
 
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: geometry.surfaceWidth,
-            height: geometry.surfaceHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xFFE6DCC7),
-                border: Border.all(color: OracleColors.rule, width: 0.8),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _SteppedClothPainter(
-                        layout: layout,
-                        sessions: orderedSessions,
-                        highlightSessionId: highlightSessionId,
-                      ),
-                    ),
-                  ),
-                  for (final placement in layout.placements)
-                    _ClothHitTarget(
-                      geometry: geometry,
-                      placement: placement,
-                      session: orderedSessions[placement.index],
-                      highlighted:
-                          orderedSessions[placement.index].sessionId ==
-                          highlightSessionId,
-                    ),
-                ],
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Drag horizontally or pinch to inspect the cloth. Tap a mark to open its receipt.',
               ),
             ),
-          ),
+            InteractiveViewer(
+              minScale: 0.75,
+              maxScale: 2.4,
+              boundaryMargin: const EdgeInsets.all(60),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: geometry.surfaceWidth,
+                  height: geometry.surfaceHeight,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE6DCC7),
+                      border: Border.all(color: OracleColors.rule, width: 0.8),
+                    ),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: CustomPaint(
+                            painter: _SteppedClothPainter(
+                              layout: layout,
+                              sessions: orderedSessions,
+                              highlightSessionId: highlightSessionId,
+                            ),
+                          ),
+                        ),
+                        for (final placement in layout.placements)
+                          _ClothHitTarget(
+                            geometry: geometry,
+                            placement: placement,
+                            session: orderedSessions[placement.index],
+                            highlighted:
+                                orderedSessions[placement.index].sessionId ==
+                                highlightSessionId,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );

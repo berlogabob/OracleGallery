@@ -26,6 +26,7 @@ sessions_public/
 spool/
 assets/sessions/*
 !assets/sessions/START_ORACLE_UPLOADER.command
+!assets/sessions/README_MACMINI_UPLOADER.md
 assets/generated_idle_symbols/
 assets/generated_filler_sessions/
 public_gallery/build/

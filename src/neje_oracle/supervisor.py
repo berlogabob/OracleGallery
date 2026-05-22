@@ -461,12 +461,14 @@ class SupervisorService:
             return self.runtime_store.load_component_state("fluidnc")
         label = f"Home {axis or 'all'}"
         result = self.transport_factory(self.plotter_settings).home(axis)
+        if not result.ok:
+            result = _enrich_fluidnc_error(result)
         if result.ok or _homing_disconnect_is_recoverable(result):
             return self._record_homing_result(result, label)
         return self._record_fluidnc_command(result, label)
 
     def home_xy_fluidnc(self) -> ComponentState:
-        return self.home_fluidnc("XY")
+        return self.home_fluidnc()
 
     def jog_fluidnc(self, axis: str, distance: float, feed: float) -> ComponentState:
         if not self._manual_control_allowed("jog"):
@@ -479,13 +481,10 @@ class SupervisorService:
             return self.runtime_store.load_component_state("fluidnc")
         config = self.runtime_store.load_plotter_config()
         if config.use_z_servo or self.plotter_settings.use_z_servo:
-            command = "$H=Z"
-            result = self.transport_factory(self.plotter_settings).send_command(
-                command,
-                wait_for_ok=True,
-                timeout_seconds=max(self.plotter_settings.fluidnc_ack_timeout_seconds, 60.0),
-            )
-            return self._record_fluidnc_command(result, f"Z home / pen up {command}")
+            z_up = config.z_up_mm if config.use_z_servo else self.plotter_settings.z_up_mm
+            command = f"G0 Z{z_up:.3f}"
+            result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
+            return self._record_fluidnc_command(result, f"Z up servo {command}")
         result = self.transport_factory(self.plotter_settings).pen_up()
         return self._record_fluidnc_command(result, f"Pen up {self.plotter_settings.pen_up_command}")
 
@@ -501,10 +500,11 @@ class SupervisorService:
         return self._record_fluidnc_command(result, f"Pen down {self.plotter_settings.pen_down_command}")
 
     def unlock_fluidnc_alarm(self) -> ComponentState:
-        probe = self.probe_fluidnc()
-        if not probe.controller.is_alarm:
-            return self.runtime_store.set_component("fluidnc", ComponentStatus.WARNING, message=f"Unlock skipped: FluidNC state is {probe.controller.state.value}")
+        if not self._manual_control_allowed("unlock alarm"):
+            return self.runtime_store.load_component_state("fluidnc")
         result = self.transport_factory(self.plotter_settings).unlock_alarm()
+        if not result.ok:
+            result = _enrich_fluidnc_error(result)
         return self._record_fluidnc_command(result, "Unlock alarm")
 
     def emergency_stop_fluidnc(self) -> ComponentState:
@@ -850,4 +850,29 @@ def _homing_disconnect_is_recoverable(result: FluidNCCommandResult) -> bool:
         or "timed out" in message
         or "connection" in message
         or "broken pipe" in message
+    )
+
+
+def _enrich_fluidnc_error(result: FluidNCCommandResult) -> FluidNCCommandResult:
+    message = result.message.lower()
+    if "error:5" in message:
+        return FluidNCCommandResult(
+            ok=False,
+            command=result.command,
+            response_lines=result.response_lines,
+            error=(
+                f"{result.message} - FluidNC homing is not enabled/configured. "
+                "Skip homing for this setup, jog to the physical origin, lift the pen, then set work zero."
+            ),
+        )
+    if "error:152" not in message:
+        return result
+    return FluidNCCommandResult(
+        ok=False,
+        command=result.command,
+        response_lines=result.response_lines,
+        error=(
+            f"{result.message} - FluidNC reports an invalid configuration. "
+            "Open the FluidNC WebUI/serial boot messages and fix config.yaml before unlock, homing, or jogging will work."
+        ),
     )
