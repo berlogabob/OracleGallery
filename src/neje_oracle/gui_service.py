@@ -1201,6 +1201,26 @@ def _workspace_name(value: Any) -> str:
 
 
 def main() -> None:
+    # Role-based access control: prevent GUI from running on wrong machines
+    allowed_roles = os.getenv("NEJE_ALLOWED_ROLES", "gui_only").split(",")
+    if "gui_only" not in allowed_roles:
+        print("\n" + "="*70)
+        print("ERROR: GUI not allowed on this machine")
+        print("="*70)
+        print()
+        print("This error occurs when:")
+        print("  1. You're on Mac mini (should only run: nje-uploader-agent)")
+        print("  2. You set NEJE_ALLOWED_ROLES to restrict this machine")
+        print()
+        print("To fix:")
+        print("  - On MacBook: Use launcher: start_oracle_gui.command")
+        print("  - On MacBook: Or run: uv run nje-gui")
+        print("  - On Mac mini: Use launcher: start_uploader_agent.command")
+        print()
+        print("For documentation, see: README.md 'Entry Points & Launchers' section")
+        print("="*70 + "\n")
+        sys.exit(1)
+    
     ui.page("/")(build_page)
     host = os.getenv("NEJE_GUI_HOST", "127.0.0.1")
     port = int(os.getenv("NEJE_GUI_PORT", "8787"))

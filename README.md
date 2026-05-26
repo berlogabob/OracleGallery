@@ -157,10 +157,18 @@ Deploy is manual by pushing `main`; GitHub Pages serves from `main` branch `/doc
 - `runtime/`, `spool/`, `sessions_public/`, logs, caches, audio, and zip files are local generated data and are ignored.
 - `assets/generated_filler_sessions/`: optional local filler packages with session-folder shape; ignored.
 
-Legacy backup paths:
+## Entry Points & Launchers
 
-- `neje-plotter`, `start_plotter_daemon.*`, and `src/neje_oracle/plotter_service.py` remain backup/debug entrypoints. Exhibition operation should start from `neje-gui`.
-- `neje-uploader` and `src/neje_oracle/uploader_service.py` remain backup/debug entrypoints. The Mac mini should use `assets/sessions/START_ORACLE_UPLOADER.command`.
+**Active entry points:**
+- `nje-gui` → MacBook operator GUI
+- `nje-uploader-agent` → Mac mini uploader  
+- `nje-generate-sessions` → Generate test sessions
+- `nje-thermal-autoprint` → Thermal printer control
+- `nje-normalize-firebase-sessions` → Firebase normalization
+
+**Removed in Phase 1:**
+- ~~`nje-uploader`~~ → Use `nje-uploader-agent` instead
+- ~~`nje-plotter`~~ → Runs embedded in GUI, not standalone
 
 ## Operating Modes
 

@@ -45,3 +45,10 @@ __pycache__/
 hermes_conversation_*.json
 macos_launchers/
 ESP32-BTN_Printer/**/config.local.h
+
+# IDE and editor folders
+.hermes/
+.obsidian/
+.tangent/
+.vscode/
+.idea/

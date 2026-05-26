@@ -27,8 +27,6 @@ dev = [
 ]
 
 [project.scripts]
-neje-uploader = "neje_oracle.uploader_service:main"
-neje-plotter = "neje_oracle.plotter_service:main"
 neje-generate-sessions = "neje_oracle.session_generator:main"
 neje-gui = "neje_oracle.gui_service:main"
 neje-normalize-firebase-sessions = "neje_oracle.firebase_svg_normalizer:main"
