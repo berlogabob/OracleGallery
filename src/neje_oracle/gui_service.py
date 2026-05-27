@@ -983,12 +983,7 @@ def build_page() -> None:
                             system_check_label = ui.label("System check runs automatically when print starts.").classes("text-xs text-[#8f4f2b]")
 
                 with ui.tab_panel(exhibition_tab).classes("p-0"):
-                    with ui.column().classes("workspace-scroll gap-2"):
-                        with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("Exhibition controls").classes("text-sm font-bold")
-                            ui.label("Minimal live-print controls. No layout, jog, scale or test generation here.").classes("text-xs text-[#8f4f2b]")
-                            with ui.column().classes("gap-2"):
-                                start_print_button = ui.button("START PRINT", on_click=start_print).props("dense color=positive").classes("w-full")
+                    build_exhibition_workspace(supervisor)
 
             with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
                 with ui.row().classes("w-full items-center justify-between"):
