@@ -869,38 +869,7 @@ def build_page() -> None:
         with ui.grid(columns="360px minmax(420px, 0.9fr) 460px").classes("w-full gap-2 min-h-0 workspace-panel workspace-grid"):
             with ui.tab_panels(workspace_tabs, value=active_workspace["value"]).classes("w-full h-full"):
                 with ui.tab_panel(connection_tab).classes("p-0"):
-                    with ui.column().classes("workspace-scroll gap-2"):
-                        with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("Connection").classes("text-sm font-bold")
-                            ui.label("Network/controller checks only. No motion except emergency, unlock, resume and reset.").classes("text-xs text-[#8f4f2b]")
-                            with ui.row().classes("gap-2"):
-                                ui.button("CONNECT", on_click=check_fluidnc).props("dense color=positive")
-                                ui.button("SCAN LAN", on_click=scan_fluidnc).props("dense flat")
-                            with ui.grid(columns=2).classes("w-full gap-1"):
-                                with ui.element("div").classes("mini-metric"):
-                                    ui.label("WebUI").classes("label")
-                                    fluidnc_labels["webui"] = ui.label("-").classes("value")
-                                with ui.element("div").classes("mini-metric"):
-                                    ui.label("Telnet").classes("label")
-                                    fluidnc_labels["telnet"] = ui.label("-").classes("value")
-                                with ui.element("div").classes("mini-metric"):
-                                    ui.label("State").classes("label")
-                                    fluidnc_labels["state"] = ui.label("-").classes("value")
-                                with ui.element("div").classes("mini-metric"):
-                                    ui.label("MPos").classes("label")
-                                    fluidnc_labels["mpos"] = ui.label("-").classes("value")
-                                with ui.element("div").classes("mini-metric"):
-                                    ui.label("Inputs").classes("label")
-                                    fluidnc_labels["pins"] = ui.label("-").classes("value")
-                            fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
-                            fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
-                            fluidnc_labels["modal"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
-                        with ui.card().classes("oracle-card compact-card w-full"):
-                            ui.label("Controller recovery").classes("text-sm font-bold")
-                            with ui.row().classes("gap-2"):
-                                ui.button("UNLOCK", on_click=unlock_alarm).props("dense color=warning")
-                                ui.button("Resume", on_click=resume_after_hold).props("dense flat")
-                                ui.button("RESET / ABORT", on_click=soft_reset).props("dense color=negative")
+                    build_connection_workspace(supervisor)
 
                 with ui.tab_panel(calibration_tab).classes("p-0"):
                     with ui.column().classes("workspace-scroll gap-2"):
