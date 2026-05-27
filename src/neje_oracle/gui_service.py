@@ -9,6 +9,11 @@ from typing import Any, cast
 from nicegui import run, ui
 
 from .gui_modes import mode_policy
+from .gui_workspaces.connection import build_connection_workspace
+from .gui_workspaces.calibration import build_calibration_workspace
+from .gui_workspaces.tests import build_tests_workspace
+from .gui_workspaces.work import build_work_workspace
+from .gui_workspaces.exhibition import build_exhibition_workspace
 from .gui_ui import (
     danger_action_button,
     log_viewer,
