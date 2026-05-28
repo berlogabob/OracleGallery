@@ -12,41 +12,79 @@ The Calibration workspace handles grid configuration and layout tuning:
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Callable
 
 from nicegui import ui
 
-from ..gui_support import (
-    GUI_DEFAULTS,
-    build_preview_svg,
-    build_realtime_preview_svg,
-    compute_effective_sample_step,
-    list_base_symbols,
-    read_plotter_status,
-    read_queue_status,
-    save_gui_settings,
-    save_oracle_plotter_config,
-    save_symbol_scales,
-)
-from ..models import GUISettings, Symbol
+from ..gui_support import GUI_DEFAULTS, GuiSettings, list_base_symbols
+from ..gui_ui import number_control
 from ..origin_markers import ALL_ORIGINS, ORIGIN_LABELS
-from ..supervisor import SupervisorService
+
+
+def build_calibration_motion_workspace(
+    settings: GuiSettings,
+    fields: dict[str, Any],
+    *,
+    persist_and_refresh: Callable[..., Any],
+    home_xy: Callable[..., Any],
+    jog_y_positive: Callable[..., Any],
+    jog_x_negative: Callable[..., Any],
+    jog_y_negative: Callable[..., Any],
+    jog_x_positive: Callable[..., Any],
+    pen_up: Callable[..., Any],
+    pen_down: Callable[..., Any],
+    home_axis: Callable[[str], Any],
+) -> None:
+    """Build setup motion and speed controls for the left column."""
+    with ui.column().classes("workspace-scroll gap-2"):
+        with ui.card().classes("oracle-card compact-card w-full"):
+            ui.label("Manual motion").classes("text-sm font-bold")
+            ui.label("Jog and homing for setup. Manual movement is blocked while G-code streams.").classes("text-xs text-[#8f4f2b]")
+            with ui.row().classes("gap-2 items-end"):
+                fields["jog_step"] = ui.select(
+                    {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},
+                    value=1.0,
+                    label="Step mm",
+                ).props("dense outlined").classes("w-24")
+                fields["jog_feed"] = ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
+                ui.button("Home all", on_click=home_xy).props("dense color=warning")
+            with ui.grid(columns=3).classes("w-full gap-1 jog-pad"):
+                ui.label("")
+                ui.button("Y+", on_click=jog_y_positive).props("dense")
+                ui.label("")
+                ui.button("X-", on_click=jog_x_negative).props("dense")
+                ui.button("Y-", on_click=jog_y_negative).props("dense")
+                ui.button("X+", on_click=jog_x_positive).props("dense")
+            with ui.row().classes("gap-1"):
+                ui.button("Z up / Pen up", on_click=pen_up).props("dense flat")
+                ui.button("Z- / Pen down", on_click=pen_down).props("dense flat")
+                ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
+                ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
+
+        with ui.card().classes("oracle-card compact-card w-full"):
+            ui.label("Motion speed").classes("text-sm font-bold")
+            ui.label("XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings.").classes("text-xs text-[#8f4f2b]")
+            with ui.grid(columns=2).classes("w-full gap-2"):
+                number_control(fields, "travel_rate", label="Travel mm/min", value=settings.travel_rate, default=5000, min_value=1, width_class="w-full", tooltip="Pen-up movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
+                number_control(fields, "draw_rate", label="Draw mm/min", value=settings.draw_rate, default=1800, min_value=1, width_class="w-full", tooltip="Drawing movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
+                number_control(fields, "xy_acceleration_mm_s2", label="XY accel mm/s^2", value=settings.xy_acceleration_mm_s2, default=float(GUI_DEFAULTS["xy_acceleration_mm_s2"]), min_value=0, width_class="w-full", tooltip="Recorded in manifests only. Print G-code uses the controller's saved acceleration settings.", on_change=persist_and_refresh)
+                number_control(fields, "z_up_mm", label="Z up legacy", value=settings.z_up_mm, default=0, min_value=-25, width_class="w-full", tooltip="Legacy absolute Z-up value; current pen-up behavior uses Z homing.", on_change=persist_and_refresh)
+                number_control(fields, "z_down_mm", label="Z down legacy", value=settings.z_down_mm, default=-25, min_value=-25, width_class="w-full", tooltip="Legacy value; current pen-down behavior is fixed at absolute G0 Z-25.", on_change=persist_and_refresh)
+                number_control(fields, "z_feed_mm_min", label="Z mm/min", value=settings.z_feed_mm_min, default=1000, min_value=1, width_class="w-full", tooltip="Z servo axis feed rate. FluidNC maps this Z axis to PWM.", on_change=persist_and_refresh)
 
 
 def build_calibration_workspace(
-    supervisor: SupervisorService,
-    settings: GUISettings,
+    settings: GuiSettings,
     scales: dict[str, float],
     preview_mode_value: dict[str, str],
-    persist_and_refresh: Callable,
-    update_scales_from_fields: Callable,
-    update_preview: Callable,
-    preview_elem: Any,
-    capacity_label: Any,
-    gcode_labels: dict[str, Any],
     fields: dict[str, Any],
-) -> None:
+    gcode_labels: dict[str, Any],
+    *,
+    persist_and_refresh: Callable[..., Any],
+    preview_mode_changed: Callable[[Any], Any],
+    update_scales_from_fields: Callable[..., Any],
+    update_gcode_detail_labels: Callable[..., Any],
+) -> Any:
     """Build the Calibration workspace UI.
     
     This workspace handles all grid configuration, layout tuning, G-code
@@ -137,41 +175,6 @@ def build_calibration_workspace(
             fields[key] = control
             return control
     
-    def preview_mode_changed(value: Any) -> None:
-        """Handle preview mode change (preview vs printing)."""
-        preview_mode_value["value"] = value
-        save_gui_settings(settings)
-        update_preview()
-    
-    def update_gcode_detail_labels() -> None:
-        """Update G-code detail display (spacing, load, etc.)."""
-        if not gcode_labels:
-            return
-        
-        effective_step = compute_effective_sample_step(
-            sample_step_mm=settings.sample_step_mm,
-            cell_diameter_mm=settings.cell_diameter_mm,
-            sample_reference_cell_mm=settings.sample_reference_cell_mm,
-            sample_density_exponent=settings.sample_density_exponent,
-            sample_min_step_mm=settings.sample_min_step_mm,
-            sample_max_step_mm=settings.sample_max_step_mm,
-        )
-        points_per_100mm = 100.0 / max(effective_step, 0.001)
-        
-        if effective_step <= 0.25:
-            load = "VERY FINE"
-        elif effective_step <= 0.75:
-            load = "FINE"
-        elif effective_step <= 1.5:
-            load = "NORMAL"
-        else:
-            load = "LIGHT"
-        
-        gcode_labels["effective"].set_text(f"{effective_step:.2f} mm")
-        gcode_labels["points"].set_text(f"{points_per_100mm:.0f} pts / 100 mm")
-        gcode_labels["load"].set_text(load)
-        gcode_labels["limits"].set_text(f"{settings.sample_min_step_mm:g} to {settings.sample_max_step_mm:g} mm")
-    
     # ========== UI RENDERING ==========
     
     with ui.column().classes("workspace-scroll gap-2"):
@@ -179,7 +182,7 @@ def build_calibration_workspace(
         with ui.card().classes("oracle-card compact-card w-full"):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("Layout").classes("text-sm font-bold")
-                capacity_label.classes("status-pill text-xs font-bold")
+                capacity_label = ui.label("-").classes("status-pill text-xs font-bold")
             
             # Preview mode selection
             ui.select(
@@ -215,8 +218,8 @@ def build_calibration_workspace(
                 fields["organic_enabled"] = ui.switch("Organic / Voronoi", value=settings.organic_enabled).on_value_change(persist_and_refresh)
             
             with ui.grid(columns=2).classes("w-full gap-2"):
-                _number_control_wrapper(fields, "organic_cell_size_mm", "Voronoi cell", settings.organic_cell_size_mm, 0, persist_and_refresh, "Maximum organic position drift in mm.")
-                _number_control_wrapper(fields, "organic_seed", "Seed", settings.organic_seed, 1, persist_and_refresh, "Repeats the same organic layout for preview and print.")
+                _number_control_wrapper(fields, "organic_cell_size_mm", "Voronoi cell", settings.organic_cell_size_mm, 0, persist_and_refresh, "Maximum organic position drift in mm.", step=1)
+                _number_control_wrapper(fields, "organic_seed", "Seed", settings.organic_seed, 1, persist_and_refresh, "Repeats the same organic layout for preview and print.", step=1)
             
             calibration_slider_row(
                 "Rotation ramp",
@@ -261,13 +264,13 @@ def build_calibration_workspace(
             ui.label("Main detail").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
             _number_control_wrapper(
                 fields, "sample_step_mm", "Spacing at normal cell size (mm)", settings.sample_step_mm, 0.05, persist_and_refresh,
-                "Distance between sampled points for an 80 mm reference cell."
+                "Distance between sampled points for an 80 mm reference cell.", step=0.05
             )
             
             ui.label("Auto-adjust for cell size").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
             _number_control_wrapper(
                 fields, "sample_density_exponent", "Auto density strength", settings.sample_density_exponent, 0.0, persist_and_refresh,
-                "0 disables cell-size compensation. 1 is normal. Higher values make large cells denser."
+                "0 disables cell-size compensation. 1 is normal. Higher values make large cells denser.", step=0.1
             )
             
             # Clamping limits
@@ -278,11 +281,11 @@ def build_calibration_workspace(
             with ui.grid(columns=2).classes("w-full gap-2"):
                 _number_control_wrapper(
                     fields, "sample_min_step_mm", "Finest allowed spacing", settings.sample_min_step_mm, 0.01, persist_and_refresh,
-                    "Lower safety limit. Prevents extremely dense G-code."
+                    "Lower safety limit. Prevents extremely dense G-code.", step=0.01
                 )
                 _number_control_wrapper(
                     fields, "sample_max_step_mm", "Coarsest allowed spacing", settings.sample_max_step_mm, 0.05, persist_and_refresh,
-                    "Upper safety limit. Prevents overly simplified curves."
+                    "Upper safety limit. Prevents overly simplified curves.", step=0.05
                 )
             
             # Streaming mode
@@ -344,6 +347,8 @@ def build_calibration_workspace(
                         on_change=update_scales_from_fields,
                     )
 
+    return capacity_label
+
 
 def _number_control_wrapper(
     fields: dict[str, Any],
@@ -353,6 +358,8 @@ def _number_control_wrapper(
     min_value: float,
     on_change: Callable,
     tooltip: str,
+    *,
+    step: float = 1.0,
 ) -> None:
     """Helper to create number_control inputs with consistent formatting.
     
@@ -370,6 +377,6 @@ def _number_control_wrapper(
     gui_number_control(
         fields, key, label=label, value=value,
         default=float(GUI_DEFAULTS.get(key, min_value)),
-        min_value=min_value, width_class="w-full", tooltip=tooltip,
+        min_value=min_value, step=step, width_class="w-full", tooltip=tooltip,
         on_change=on_change
     )

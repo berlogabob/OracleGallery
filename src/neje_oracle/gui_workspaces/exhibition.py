@@ -1,82 +1,37 @@
-"""Exhibition workspace for the Oracle GUI.
-
-The Exhibition workspace provides a minimal, focused interface for
-live exhibitions and demonstrations:
-- Large, clear status display
-- Minimal control surfaces (start/stop only)
-- Full-screen capable
-- High visibility, low distraction
-"""
+"""Exhibition workspace for the Oracle GUI."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from nicegui import ui
 
-from ..gui_components import (
-    danger_action_button,
-    primary_action_button,
-    section,
-    status_pill,
-)
-from ..supervisor import SupervisorService
+
+def build_exhibition_workspace(*, start_print: Callable[..., Any]) -> Any:
+    """Build minimal live-print controls and return the start-print button."""
+    with ui.column().classes("workspace-scroll gap-2"):
+        with ui.card().classes("oracle-card compact-card w-full"):
+            ui.label("Exhibition controls").classes("text-sm font-bold")
+            ui.label("Minimal live-print controls. No layout, jog, scale or test generation here.").classes("text-xs text-[#8f4f2b]")
+            with ui.column().classes("gap-2"):
+                return ui.button("START PRINT", on_click=start_print).props("dense color=positive").classes("w-full")
 
 
-def build_exhibition_workspace(supervisor: SupervisorService) -> None:
-    """Build the Exhibition workspace UI (minimal, focused display).
-    
-    Args:
-        supervisor: The SupervisorService instance for system operations
-    """
-    with ui.column().classes("workspace-scroll items-center justify-center"):
-        # Large Status Display
-        with ui.card().classes("w-full"):
-            ui.label("ORACLE OPERATOR").classes("text-4xl font-bold text-center")
-            
-            # Main status
-            with ui.row().classes("w-full items-center justify-center gap-4 mt-8"):
-                ui.label("Status:").classes("text-2xl font-semibold")
-                status_pill(
-                    status_enum=None,  # Will be updated
-                    label="READY",
-                    size="lg",
-                )
-            
-            # Progress display
-            with ui.row().classes("w-full mt-6"):
-                ui.linear_progress(value=0).classes("flex-1")
-            
-            with ui.row().classes("w-full justify-between items-center mt-2"):
-                ui.label("Progress:").classes("font-semibold")
-                ui.label("0 / 100 symbols").classes("text-right")
-        
-        # Minimal Controls
-        with ui.row().classes("w-full gap-4 mt-8"):
-            primary_action_button(
-                "START PRINTING",
-                lambda: None,  # Placeholder
-                icon="play_arrow",
-                size="lg",
-            ).classes("flex-1")
-            
-            danger_action_button(
-                "STOP",
-                lambda: None,  # Placeholder
-                icon="stop",
-                size="lg",
-            ).classes("flex-1")
-        
-        # Live metrics (minimal)
-        with ui.row().classes("w-full gap-2 mt-6"):
-            with ui.card().classes("flex-1"):
-                ui.label("Speed").classes("text-sm text-grey-7")
-                ui.label("100%").classes("text-lg font-semibold")
-            
-            with ui.card().classes("flex-1"):
-                ui.label("Symbols").classes("text-sm text-grey-7")
-                ui.label("0/100").classes("text-lg font-semibold")
-            
-            with ui.card().classes("flex-1"):
-                ui.label("Time").classes("text-sm text-grey-7")
-                ui.label("--:--").classes("text-lg font-semibold")
+def build_exhibition_status_workspace(plotter_labels: dict[str, Any]) -> Any:
+    """Build live print status and return the progress bar."""
+    with ui.column().classes("workspace-scroll gap-2"):
+        with ui.card().classes("oracle-card compact-card w-full"):
+            ui.label("Live print state").classes("text-sm font-bold")
+            with ui.grid(columns=2).classes("w-full gap-1"):
+                with ui.element("div").classes("mini-metric"):
+                    ui.label("Print").classes("label")
+                    plotter_labels["state"] = ui.label("-").classes("value")
+                with ui.element("div").classes("mini-metric"):
+                    ui.label("Mode").classes("label")
+                    plotter_labels["mode"] = ui.label("-").classes("value")
+            plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
+            plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+            progress = ui.linear_progress(value=0).classes("w-full")
+            plotter_labels["progress"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+            plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
+            return progress

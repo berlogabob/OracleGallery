@@ -275,8 +275,18 @@ def build_connection_workspace(supervisor: SupervisorService) -> None:
                 ui.button("Home X", on_click=lambda: home_axis("X")).props("dense flat")
                 ui.button("Home Y", on_click=lambda: home_axis("Y")).props("dense flat")
         
-        # Initial status check
-        refresh_fluidnc_status()
+        # Defer the initial async probe until the page event loop is running.
+        ui.timer(0.1, refresh_fluidnc_status, once=True)
+
+
+def build_connection_notes() -> None:
+    """Build the right-column checklist for the Connection workspace."""
+    with ui.column().classes("workspace-scroll gap-2"):
+        with ui.card().classes("oracle-card compact-card w-full"):
+            ui.label("Connection checklist").classes("text-sm font-bold")
+            ui.label("1. Join the plotter Wi-Fi or hotspot.").classes("text-xs text-[#8f4f2b]")
+            ui.label("2. Press CONNECT and verify WebUI, Telnet, and Idle.").classes("text-xs text-[#8f4f2b]")
+            ui.label("3. Use recovery only for a known alarm or hold state.").classes("text-xs text-[#8f4f2b]")
 
 
 def _format_gui_tuple(value: Any) -> str:

@@ -13,24 +13,22 @@ from ...models import ComponentStatus
 
 # Color mapping for component statuses
 STATUS_COLORS: dict[ComponentStatus, str] = {
-    ComponentStatus.UNKNOWN: "grey",
-    ComponentStatus.INITIALIZING: "blue",
-    ComponentStatus.IDLE: "positive",
+    ComponentStatus.STOPPED: "grey",
+    ComponentStatus.STARTING: "blue",
     ComponentStatus.RUNNING: "info",
-    ComponentStatus.PAUSED: "warning",
+    ComponentStatus.OFFLINE: "grey",
+    ComponentStatus.WARNING: "warning",
     ComponentStatus.ERROR: "negative",
-    ComponentStatus.SHUTDOWN: "grey",
 }
 
 # Display labels for statuses
 STATUS_LABELS: dict[ComponentStatus, str] = {
-    ComponentStatus.UNKNOWN: "Unknown",
-    ComponentStatus.INITIALIZING: "Initializing...",
-    ComponentStatus.IDLE: "Ready",
+    ComponentStatus.STOPPED: "Stopped",
+    ComponentStatus.STARTING: "Starting...",
     ComponentStatus.RUNNING: "Running",
-    ComponentStatus.PAUSED: "Paused",
+    ComponentStatus.OFFLINE: "Offline",
+    ComponentStatus.WARNING: "Warning",
     ComponentStatus.ERROR: "Error",
-    ComponentStatus.SHUTDOWN: "Offline",
 }
 
 
