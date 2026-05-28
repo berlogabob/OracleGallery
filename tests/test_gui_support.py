@@ -789,7 +789,7 @@ def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
 
 
 def test_batch_generation_controls_are_not_operator_facing() -> None:
-    source = Path("src/neje_oracle/gui_service.py").read_text(encoding="utf-8")
+    source = Path("src/neje_oracle/blocks/gui/service.py").read_text(encoding="utf-8")
     work_panel = source.split("with ui.tab_panel(work_tab)", 1)[1].split("with ui.tab_panel(exhibition_tab)", 1)[0]
     exhibition_panel = source.split("with ui.tab_panel(exhibition_tab)", 1)[1]
     assert "Generate next filler" not in work_panel

@@ -1,1 +1,1 @@
-"""GUI component modules."""
+"""Compatibility wrapper for GUI component modules."""

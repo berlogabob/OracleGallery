@@ -1,1 +1,1 @@
-"""GUI workspace modules."""
+"""Compatibility wrapper for GUI workspaces."""
