@@ -20,6 +20,7 @@ def build_hex_layout(
 
     radius = diameter_mm / 2.0
     pitch = max(diameter_mm + gap_mm, diameter_mm)
+    pitch = max(pitch, 0.01)
     horizontal_step = pitch
     vertical_step = math.sqrt(3.0) * pitch / 2.0
     printable_width = max(sheet_width_mm - (margin_mm * 2.0), 0.0)
@@ -72,6 +73,7 @@ def build_grid_layout(
 
     radius = diameter_mm / 2.0
     pitch = max(diameter_mm + gap_mm, diameter_mm)
+    pitch = max(pitch, 0.01)
     printable_width = max(sheet_width_mm - (margin_mm * 2.0), 0.0)
     columns = max(int((printable_width + gap_mm) // pitch), 0)
     if columns <= 0:

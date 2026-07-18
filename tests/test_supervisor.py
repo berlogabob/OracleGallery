@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
-from neje_oracle.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
-from neje_oracle.gui_support import GuiSettings
-from neje_oracle.models import (
+from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
+from neje_oracle.blocks.gui.support import GuiSettings
+from neje_oracle.shared.models import (
     ComponentStatus,
     FluidNCCommandResult,
     FluidNCControllerState,
@@ -18,8 +19,8 @@ from neje_oracle.models import (
     RuntimeStatus,
     SystemMode,
 )
-from neje_oracle.store import OracleRuntimeStore, PlotterStore
-from neje_oracle.supervisor import SupervisorService
+from neje_oracle.shared.store import OracleRuntimeStore, PlotterStore
+from neje_oracle.app.supervisor import SupervisorService
 
 
 class EmptyRemote:
@@ -211,7 +212,7 @@ def test_oracle_runtime_store_roundtrip(tmp_path: Path) -> None:
 
 def test_supervisor_starts_and_stops_local_plotter_once(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
-    plotter_settings = _plotter_settings(tmp_path)
+    plotter_settings = replace(_plotter_settings(tmp_path), poll_seconds=0.01)
     supervisor = SupervisorService(
         settings=settings,
         plotter_settings=plotter_settings,
@@ -229,6 +230,54 @@ def test_supervisor_starts_and_stops_local_plotter_once(tmp_path: Path) -> None:
     stopped = supervisor.stop_plotter()
 
     assert stopped.status == ComponentStatus.STOPPED
+
+
+def test_stop_plotter_keeps_still_running_daemon_references(tmp_path: Path) -> None:
+    class StuckDaemon:
+        stop_requested = False
+
+        def stop(self) -> None:
+            self.stop_requested = True
+
+    class StuckThread:
+        def join(self, *, timeout: float | None = None) -> None:
+            assert timeout == 5.0
+
+        def is_alive(self) -> bool:
+            return True
+
+    supervisor = _supervisor(tmp_path)
+    daemon = StuckDaemon()
+    thread = StuckThread()
+    supervisor._plotter_daemon = daemon  # type: ignore[assignment]
+    supervisor._plotter_thread = thread  # type: ignore[assignment]
+
+    stopped = supervisor.stop_plotter()
+
+    assert stopped.status == ComponentStatus.WARNING
+    assert daemon.stop_requested is True
+    assert supervisor._plotter_thread is thread
+    assert supervisor._plotter_daemon is daemon
+
+    restarted = supervisor.start_plotter()
+
+    assert restarted.status == ComponentStatus.RUNNING
+    assert "already running" in restarted.message.lower()
+    assert supervisor._plotter_thread is thread
+
+
+def test_refresh_all_status_preserves_plotter_error(tmp_path: Path) -> None:
+    class LiveThread:
+        def is_alive(self) -> bool:
+            return True
+
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.set_component("plotter", ComponentStatus.ERROR, message="Plotter failed")
+    supervisor._plotter_thread = LiveThread()  # type: ignore[assignment]
+
+    states = supervisor.refresh_all_status()
+
+    assert states["plotter"].status == ComponentStatus.ERROR
 
 
 def test_start_system_uses_local_idle_remote_when_firebase_missing_in_dry_run(tmp_path: Path) -> None:

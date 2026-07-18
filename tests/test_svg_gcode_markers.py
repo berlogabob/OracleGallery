@@ -2,8 +2,8 @@
 from pathlib import Path
 from random import Random
 
-from neje_oracle.models import SheetItem, SheetPlacement
-from neje_oracle.svg_gcode import generate_sheet_gcode
+from neje_oracle.shared.models import SheetItem, SheetPlacement
+from neje_oracle.blocks.gcode.svg_gcode import generate_sheet_gcode
 
 def test_gcode_contains_cell_markers(tmp_path: Path) -> None:
     """Проверяем, что G-code содержит маркеры cell-start и cell-end."""

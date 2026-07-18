@@ -159,6 +159,8 @@ def post_json(base_url: str, path: str, payload: dict[str, Any] | None, *, timeo
         raise SystemExit(f"ESP32 returned HTTP {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
         raise SystemExit(f"Could not reach ESP32 at {base_url.rstrip('/') + path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"ESP32 returned an invalid response: {exc}") from exc
 
 
 def print_json(data: dict[str, Any]) -> None:

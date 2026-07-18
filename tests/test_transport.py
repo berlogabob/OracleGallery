@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from neje_oracle.config import PlotterSettings
-from neje_oracle.models import FluidNCState
-from neje_oracle.transport import FluidNCTransport, discover_fluidnc, parse_status_response, settings_for_fluidnc_host
+from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.shared.models import FluidNCState
+from neje_oracle.blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, parse_status_response, settings_for_fluidnc_host
 
 
 class FakeFluidNCServer:

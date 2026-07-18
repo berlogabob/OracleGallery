@@ -115,6 +115,8 @@ def generate_absolute_svg_gcode(
     origin_x_mm: float = 0.0,
     origin_y_mm: float = 0.0,
     keep_non_negative: bool = False,
+    max_x_mm: float | None = None,
+    max_y_mm: float | None = None,
 ) -> str:
     pen_up = _pen_up_command(pen_up_command, use_z_servo=use_z_servo, z_up_mm=z_up_mm)
     pen_down = _pen_down_command(pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min)
@@ -125,6 +127,19 @@ def generate_absolute_svg_gcode(
         polylines = _offset_polylines(polylines, origin_x_mm, origin_y_mm)
     if keep_non_negative:
         polylines, safety_shift_x, safety_shift_y = _shift_polylines_non_negative(polylines)
+    if max_x_mm is not None or max_y_mm is not None:
+        points = [point for polyline in polylines for point in polyline]
+        if points:
+            actual_x = max(x for x, _ in points)
+            actual_y = max(y for _, y in points)
+            if max_x_mm is not None and actual_x > max_x_mm:
+                raise ValueError(
+                    f"SVG extends to {actual_x:.1f}mm which exceeds the configured sheet width of {max_x_mm:.1f}mm"
+                )
+            if max_y_mm is not None and actual_y > max_y_mm:
+                raise ValueError(
+                    f"SVG extends to {actual_y:.1f}mm which exceeds the configured sheet height of {max_y_mm:.1f}mm"
+                )
     lines = [
         f"; Neje Oracle {title}",
         "; absolute SVG coordinates: origin is upper-left, +X right, +Y down",
@@ -153,7 +168,7 @@ def _pen_up_command(command: str, *, use_z_servo: bool, z_up_mm: float) -> str:
 
 
 def _pen_down_command(command: str, *, use_z_servo: bool, z_down_mm: float, z_feed_mm_min: float) -> str:
-    return f"G0 Z{z_down_mm:.3f}" if use_z_servo else command
+    return f"G1 Z{z_down_mm:.3f} F{z_feed_mm_min:.2f}" if use_z_servo else command
 
 
 def _xy_acceleration_comment(xy_acceleration_mm_s2: float) -> str:
@@ -250,7 +265,7 @@ def _svg_to_polylines(
         path_points: list[tuple[float, float]] = []
         for segment in path:
             segment_length = max(float(segment.length(error=1e-4)), sample_step_mm)
-            sample_count = max(2, int(segment_length / sample_step_mm))
+            sample_count = max(2, int(segment_length / max(sample_step_mm, 0.001)))
             for index in range(sample_count + 1):
                 point = segment.point(index / sample_count)
                 local_x = (point.real - mid_x) * scale * placement_scale

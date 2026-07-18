@@ -239,8 +239,16 @@ def probe_host(host: str, port: int, timeout: float) -> str | None:
 
 
 def get_json(base_url: str, path: str, *, timeout: float) -> dict[str, Any]:
-    with urllib.request.urlopen(base_url.rstrip("/") + path, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8", errors="replace"))
+    try:
+        with urllib.request.urlopen(base_url.rstrip("/") + path, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"ESP32 returned HTTP {exc.code}: {body}") from exc
+    except urllib.error.URLError as exc:
+        raise SystemExit(f"Could not reach ESP32 at {base_url.rstrip('/') + path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"ESP32 returned an invalid response: {exc}") from exc
 
 
 def post_json(base_url: str, path: str, payload: dict[str, Any] | None, *, timeout: float) -> dict[str, Any]:
@@ -259,6 +267,8 @@ def post_json(base_url: str, path: str, payload: dict[str, Any] | None, *, timeo
         raise SystemExit(f"ESP32 returned HTTP {exc.code}: {body}") from exc
     except urllib.error.URLError as exc:
         raise SystemExit(f"Could not reach ESP32 at {base_url.rstrip('/') + path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"ESP32 returned an invalid response: {exc}") from exc
 
 
 def query_path(path: str, params: dict[str, str | None]) -> str:

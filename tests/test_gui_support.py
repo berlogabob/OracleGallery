@@ -9,10 +9,12 @@ from types import SimpleNamespace
 import pytest
 from nicegui.elements.upload_files import SmallFileUpload
 
-from neje_oracle.config import PlotterSettings
-from neje_oracle.gui_support import (
+from neje_oracle.blocks.gui import support as gui_support
+from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.blocks.gui.support import (
     GUI_DEFAULTS,
     GuiSettings,
+    _field_or_default,
     build_preview_svg,
     build_realtime_preview_svg,
     create_idle_bank_from_gui,
@@ -30,7 +32,7 @@ from neje_oracle.gui_support import (
     save_gui_settings,
     save_symbol_scales,
 )
-from neje_oracle.models import RuntimeStatus, SystemMode
+from neje_oracle.shared.models import RuntimeStatus, SystemMode
 
 
 SIMPLE_SYMBOL = (
@@ -48,6 +50,19 @@ def _symbol_root(tmp_path: Path) -> Path:
     for index in range(2):
         (root / f"symbol_{index}.svg").write_text(SIMPLE_SYMBOL, encoding="utf-8")
     return root
+
+
+def test_field_or_default_uses_gui_defaults_for_cleared_fields() -> None:
+    expected_defaults = {
+        "cell_diameter_mm": 80.0,
+        "sheet_width_mm": 250.0,
+        "sheet_height_mm": 440.0,
+        "randomness": 35.0,
+    }
+
+    for key, expected in expected_defaults.items():
+        assert _field_or_default({key: SimpleNamespace(value=None)}, key) == GUI_DEFAULTS[key] == expected
+    assert GuiSettings().dry_run is False
 
 
 def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
@@ -343,7 +358,7 @@ def test_realtime_preview_uses_queue_before_filler_for_unmaterialized_next(tmp_p
 
 
 def test_symbol_preview_randomness_visibly_changes_svg(tmp_path: Path) -> None:
-    from neje_oracle.gui_support import build_symbol_preview_svg
+    from neje_oracle.blocks.gui.support import build_symbol_preview_svg
 
     root = _symbol_root(tmp_path)
     stable = build_symbol_preview_svg(
@@ -367,7 +382,7 @@ def test_symbol_preview_randomness_visibly_changes_svg(tmp_path: Path) -> None:
 
 
 def test_effective_randomness_combines_coarse_and_fine() -> None:
-    from neje_oracle.gui_support import effective_randomness
+    from neje_oracle.blocks.gui.support import effective_randomness
 
     assert effective_randomness(GuiSettings(randomness=20, randomness_fine=2.5)) == 12.5
     assert effective_randomness(GuiSettings(randomness=98, randomness_fine=10)) == 59
@@ -502,6 +517,7 @@ def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
         svg_bytes=SIMPLE_SYMBOL.encode("utf-8"),
         original_name="label-test.svg",
         output_root=tmp_path / "uploaded_svg",
+        plotter_settings=PlotterSettings(sheet_width_mm=800, sheet_height_mm=800),
     )
 
     assert job.sheet_id.startswith("testsvg_")
@@ -606,8 +622,23 @@ def test_read_status_does_not_create_runtime_db(tmp_path: Path) -> None:
     assert not db_path.exists()
 
 
+def test_read_queue_status_fetches_on_cold_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {"online": True, "total": 3}
+    remote = SimpleNamespace(get_plot_job_counts=lambda *, run_started_at: payload)
+    store = SimpleNamespace(load_run_started_at=lambda: None)
+    monkeypatch.setattr(gui_support, "_QUEUE_STATUS_CACHE", None)
+    monkeypatch.setattr(gui_support, "FirebaseSettings", lambda: SimpleNamespace(enabled=True))
+    monkeypatch.setattr(gui_support, "OracleSupervisorSettings", lambda: SimpleNamespace(runtime_db_path=Path("unused")))
+    monkeypatch.setattr(gui_support, "OracleRuntimeStore", lambda _: store)
+    monkeypatch.setattr(gui_support, "FirebaseRemoteRepository", lambda _: remote)
+
+    result = gui_support.read_queue_status()
+
+    assert result == {"online": True, "total": 3, "runStartedAt": ""}
+
+
 def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter():
-    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
     result = fn(
         sample_step_mm=1.0,
         cell_diameter_mm=80.0,
@@ -620,7 +651,7 @@ def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter()
 
 
 def test_compute_effective_sample_step_bigger_cell_denser_gcode():
-    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
     ref_result = fn(
         sample_step_mm=1.0,
         cell_diameter_mm=80.0,
@@ -642,7 +673,7 @@ def test_compute_effective_sample_step_bigger_cell_denser_gcode():
 
 
 def test_compute_effective_sample_step_clamps_to_min():
-    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
     result = fn(
         sample_step_mm=0.1,
         cell_diameter_mm=200.0,
@@ -655,7 +686,7 @@ def test_compute_effective_sample_step_clamps_to_min():
 
 
 def test_compute_effective_sample_step_clamps_to_max():
-    from neje_oracle.gui_support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
     result = fn(
         sample_step_mm=5.0,
         cell_diameter_mm=20.0,
@@ -668,7 +699,7 @@ def test_compute_effective_sample_step_clamps_to_max():
 
 
 def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
-    from neje_oracle.gui_support import GuiSettings, load_gui_settings, save_gui_settings
+    from neje_oracle.blocks.gui.support import GuiSettings, load_gui_settings, save_gui_settings
     settings_path = tmp_path / "gui_settings.json"
     settings = GuiSettings(
         cell_diameter_mm=160.0,
@@ -712,8 +743,8 @@ def test_gui_optimisation_settings_preserve_zero_xy_acceleration(tmp_path: Path)
 
 
 def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
-    from neje_oracle.gui_support import GuiSettings, gui_settings_to_plotter_config
-    from neje_oracle.models import PlotterRuntimeConfig
+    from neje_oracle.blocks.gui.support import GuiSettings, gui_settings_to_plotter_config
+    from neje_oracle.shared.models import PlotterRuntimeConfig
     settings = GuiSettings(
         cell_diameter_mm=160.0,
         organic_enabled=True,
@@ -746,7 +777,7 @@ def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
 
 
 def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
-    from neje_oracle.gui_support import (
+    from neje_oracle.blocks.gui.support import (
         GuiSettings, generate_dry_run_sheet, latest_spool_manifest,
         compute_effective_sample_step,
     )

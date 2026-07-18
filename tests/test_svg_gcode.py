@@ -1,10 +1,12 @@
 from pathlib import Path
 from random import Random
 
-from neje_oracle.models import SheetItem, SheetPlacement
-from neje_oracle.session_generator import build_variant_svg
-from neje_oracle.svg_gcode import generate_absolute_svg_gcode, generate_sheet_gcode
-from neje_oracle.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
+import pytest
+
+from neje_oracle.shared.models import SheetItem, SheetPlacement
+from neje_oracle.blocks.symbols.session_generator import build_variant_svg
+from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode, generate_sheet_gcode
+from neje_oracle.blocks.symbols.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
 
 
 def test_gcode_fits_symbol_inside_cell_with_internal_safety_ratio(tmp_path: Path) -> None:
@@ -97,6 +99,30 @@ def test_kind_soul_normalized_symbol_has_upward_center_correction(tmp_path: Path
     assert (min(ys) + max(ys)) / 2 < 100
 
 
+def test_sheet_gcode_accepts_zero_sample_step(tmp_path: Path) -> None:
+    svg_path = tmp_path / "mark.svg"
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'>"
+        "<path d='M0,0 L0.001,0' stroke='black' fill='none'/>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    gcode = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="a", title="A", svg_path=svg_path)],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)],
+        sample_step_mm=0,
+        cell_diameter_mm=40,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+    )
+
+    assert gcode
+
+
 def test_z_servo_gcode_uses_z_commands_instead_of_spindle(tmp_path: Path) -> None:
     svg_path = tmp_path / "mark.svg"
     svg_path.write_text(
@@ -119,13 +145,14 @@ def test_z_servo_gcode_uses_z_commands_instead_of_spindle(tmp_path: Path) -> Non
         use_z_servo=True,
         z_down_mm=-25,
         z_up_mm=0,
-        z_feed_mm_min=1000,
+        z_feed_mm_min=750.0,
     )
 
     assert "M3" not in gcode
     assert "M5" not in gcode
     assert "G0 Z0.000" in gcode
-    assert "G0 Z-25.000" in gcode
+    assert "G1 Z-25.000 F750.00" in gcode
+    assert "G0 Z-25.000" not in gcode
 
 
 def test_xy_acceleration_setting_does_not_write_fluidnc_axis_settings(tmp_path: Path) -> None:
@@ -257,6 +284,51 @@ def test_absolute_svg_gcode_preserves_inkscape_mm_page_coordinates(tmp_path: Pat
     assert max(xs) == 105.0
     assert min(ys) == 5.0
     assert max(ys) == 155.0
+
+
+def test_absolute_svg_gcode_rejects_coordinates_outside_configured_sheet(tmp_path: Path) -> None:
+    svg_path = tmp_path / "oversized.svg"
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='2000mm' height='2000mm' viewBox='0 0 2000 2000'>"
+        "<path d='M 0,0 L 2000,2000' stroke='black' fill='none'/>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="exceeds the configured sheet width"):
+        generate_absolute_svg_gcode(
+            svg_path,
+            sample_step_mm=2000,
+            travel_rate=5000,
+            draw_rate=1800,
+            pen_up_command="M5",
+            pen_down_command="M3 S15",
+            keep_non_negative=True,
+            max_x_mm=250.0,
+            max_y_mm=440.0,
+        )
+
+
+def test_absolute_svg_gcode_accepts_coordinates_inside_configured_sheet(tmp_path: Path) -> None:
+    svg_path = tmp_path / "in_bounds.svg"
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='100mm' height='100mm' viewBox='0 0 100 100'>"
+        "<path d='M 0,0 L 100,100' stroke='black' fill='none'/>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    generate_absolute_svg_gcode(
+        svg_path,
+        sample_step_mm=100,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        keep_non_negative=True,
+        max_x_mm=250.0,
+        max_y_mm=440.0,
+    )
 
 
 def test_absolute_svg_gcode_can_offset_negative_reference_artwork(tmp_path: Path) -> None:

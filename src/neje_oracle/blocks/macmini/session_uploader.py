@@ -13,6 +13,7 @@ from urllib.parse import quote
 import qrcode
 
 from ...shared.config import FirebaseSettings, UploaderSettings, _repo_root, ensure_dir
+from ...shared.logging import append_log
 from ..firebase.repository import FirebaseRemoteRepository, record_to_json
 from ...shared.models import PlotStatus, PublicStatus, SessionRecord
 from ...shared.store import UploaderStore
@@ -43,9 +44,13 @@ class SessionUploader:
                 continue
             if run_started_at is not None and self._session_folder_timestamp(session_dir) < run_started_at:
                 continue
-            if not self._is_ready(session_dir):
+            try:
+                if not self._is_ready(session_dir):
+                    continue
+                imported.append(self.process_session(session_dir))
+            except Exception as exc:  # noqa: BLE001
+                append_log("uploader", f"Skipping session {session_dir.name}: {exc}", level="warning")
                 continue
-            imported.append(self.process_session(session_dir))
         return imported
 
     def process_session(self, session_dir: Path) -> str:
@@ -92,7 +97,10 @@ class SessionUploader:
             return False
         if not self._has_required_assets(session_dir):
             return False
-        newest_mtime = max(path.stat().st_mtime for path in session_dir.rglob("*") if path.is_file())
+        try:
+            newest_mtime = max(path.stat().st_mtime for path in session_dir.rglob("*") if path.is_file())
+        except (FileNotFoundError, ValueError):
+            return False
         return (time.time() - newest_mtime) >= self.settings.stability_seconds
 
     def _has_required_assets(self, session_dir: Path) -> bool:

@@ -185,6 +185,10 @@ class PlotterDaemon:
             for row_index, row_placements in enumerate(layout_rows, start=1):
                 if self.stop_event.is_set():
                     return
+                control = self._load_control_state()
+                if not control.print_enabled:
+                    self._set_state(RuntimeStatus.OPERATOR_PAUSED, "Print paused by operator mid-sheet")
+                    return
                 row_limit = len(row_placements)
                 try:
                     user_jobs = self._claim_user_jobs(row_limit)
@@ -382,6 +386,10 @@ class PlotterDaemon:
             row_had_printed_cell = False
             for cell_offset, placement in enumerate(row_placements):
                 if self.stop_event.is_set():
+                    return None
+                control = self._load_control_state()
+                if not control.print_enabled:
+                    self._set_state(RuntimeStatus.OPERATOR_PAUSED, "Print paused by operator mid-sheet")
                     return None
                 try:
                     user_jobs = self._claim_user_jobs(1)
@@ -722,7 +730,9 @@ class PlotterDaemon:
         self._write_manifest(path, manifest)
 
     def _write_manifest(self, path: Path, manifest: dict[str, object]) -> None:
-        path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp_path.replace(path)
 
     def _build_cell_progress_markers(
         self,

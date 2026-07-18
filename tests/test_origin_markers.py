@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from neje_oracle.models import SheetPlacement
-from neje_oracle.origin_markers import (
+from neje_oracle.shared.models import SheetPlacement
+from neje_oracle.shared.origin_markers import (
     ORIGIN_FILLER_MACBOOK,
     ORIGIN_REAL_MACMINI,
     ORIGIN_TEST_MACBOOK,

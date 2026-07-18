@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from neje_oracle.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
-from neje_oracle.gui_support import GuiSettings
-from neje_oracle.models import (
+from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
+from neje_oracle.blocks.gui.support import GuiSettings
+from neje_oracle.shared.models import (
     ComponentStatus,
     FluidNCCommandResult,
     FluidNCControllerState,
@@ -12,7 +12,7 @@ from neje_oracle.models import (
     PlotterReadinessState,
     SystemMode,
 )
-from neje_oracle.supervisor import SupervisorService
+from neje_oracle.app.supervisor import SupervisorService
 
 
 class EmptyRemote:

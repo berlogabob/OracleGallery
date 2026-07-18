@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from neje_oracle.thermal_autoprint_service import ThermalAutoprintService, ThermalAutoprintSettings
+from neje_oracle.blocks.thermal_printer.autoprint_service import ThermalAutoprintService, ThermalAutoprintSettings
 
 
 def make_session(root: Path, session_id: str) -> Path:
