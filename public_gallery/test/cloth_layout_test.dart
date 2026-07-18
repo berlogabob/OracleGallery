@@ -2,59 +2,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:public_gallery/widgets/cloth_layout.dart';
 
 void main() {
-  test('cloth layout advances in square capacities', () {
+  test('grid side is the smallest square that fits every mark', () {
     final expectations = <int, int>{
       0: 0,
       1: 1,
-      3: 1,
+      3: 2,
       4: 2,
-      5: 2,
-      8: 2,
+      5: 3,
+      8: 3,
       9: 3,
-      10: 3,
+      10: 4,
       16: 4,
-      159: 12,
-      168: 12,
+      159: 13,
+      168: 13,
       169: 13,
     };
 
     for (final entry in expectations.entries) {
       final layout = buildClothGridLayout(entry.key);
       expect(layout.side, entry.value, reason: 'count ${entry.key}');
-      expect(
-        layout.capacity,
-        entry.value * entry.value,
-        reason: 'count ${entry.key}',
-      );
+      // No mark is ever dropped: every source count is fully placed.
       expect(
         layout.placements.length,
-        layout.capacity,
+        entry.key,
         reason: 'count ${entry.key}',
       );
       expect(
-        layout.hiddenRemainder,
-        entry.key - layout.capacity,
+        layout.placements.map((p) => p.index),
+        List.generate(entry.key, (i) => i),
         reason: 'count ${entry.key}',
       );
     }
   });
 
-  test('cloth fills row by row inside the current square', () {
-    final nine = buildClothGridLayout(9);
+  test('cloth fills row by row, last row may be partial', () {
+    final five = buildClothGridLayout(5);
+    expect(five.side, 3);
     expect(
-      nine.placements.map((placement) => (placement.row, placement.column)),
-      [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (2, 0), (2, 1), (2, 2)],
+      five.placements.map((placement) => (placement.row, placement.column)),
+      [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1)],
     );
   });
-
-  test(
-    'partial squares hold the previous full square until enough symbols arrive',
-    () {
-      final five = buildClothGridLayout(5);
-      expect(five.side, 2);
-      expect(five.capacity, 4);
-      expect(five.hiddenRemainder, 1);
-      expect(five.placements.map((placement) => placement.index), [0, 1, 2, 3]);
-    },
-  );
 }

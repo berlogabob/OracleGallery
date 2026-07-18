@@ -2,7 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /sessions/{sessionId} {
-      allow read: if true;
+      // get: direct receipt/QR links may open any session by its known id.
+      allow get: if true;
+      // list: queries only return published, library-visible marks, so the
+      // cloth cannot enumerate hidden/unpublished/test sessions.
+      allow list: if resource.data.status == 'published'
+                  && resource.data.visibleInLibrary == true;
       allow write: if false;
     }
 

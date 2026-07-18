@@ -45,6 +45,8 @@ class _SessionStream extends StatefulWidget {
 
 class _SessionStreamState extends State<_SessionStream> {
   late final TextEditingController _lookupController;
+  final Stream<List<SessionData>> _sessions = SessionRepository()
+      .watchVisibleSessions();
 
   @override
   void initState() {
@@ -71,7 +73,7 @@ class _SessionStreamState extends State<_SessionStream> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<SessionData>>(
-      stream: SessionRepository().watchVisibleSessions(),
+      stream: _sessions,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return StatusPanel(
@@ -140,7 +142,7 @@ class _SessionStreamState extends State<_SessionStream> {
               _HighlightedSessionPanel(session: highlightedSession),
               const SizedBox(height: 18),
             ],
-            _ClothSurface(
+            SteppedClothSurface(
               sessions: sessions,
               highlightSessionId: widget.highlightSessionId,
             ),
@@ -191,12 +193,7 @@ class _ClothToolbar extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(child: count),
-                    const _SecretDebugButton(),
-                  ],
-                ),
+                count,
                 const SizedBox(height: 14),
                 lookup,
                 const SizedBox(height: 8),
@@ -207,8 +204,6 @@ class _ClothToolbar extends StatelessWidget {
           return Row(
             children: [
               count,
-              const SizedBox(width: 10),
-              const _SecretDebugButton(),
               const SizedBox(width: 22),
               Expanded(child: lookup),
               const SizedBox(width: 18),
@@ -254,35 +249,6 @@ class _BrowseMarksHint extends StatelessWidget {
     return TextButton(
       onPressed: () => context.go('/marks'),
       child: const Text('Browse marks'),
-    );
-  }
-}
-
-class _SecretDebugButton extends StatelessWidget {
-  const _SecretDebugButton();
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Debug sessions',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onLongPress: () => context.go('/debug/sessions'),
-        onDoubleTap: () => context.go('/debug/sessions'),
-        child: const SizedBox(
-          width: 22,
-          height: 22,
-          child: Center(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: OracleColors.rule,
-                shape: BoxShape.circle,
-              ),
-              child: SizedBox(width: 6, height: 6),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -374,35 +340,15 @@ class _HighlightedSessionPanel extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 14),
-              Wrap(
-                spacing: 10,
-                runSpacing: 8,
-                children: [
-                  OutlinedButton(
-                    onPressed: () => context.go(
-                      '/session/${Uri.encodeComponent(session.sessionId)}',
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: OracleColors.gold,
-                      side: const BorderSide(color: OracleColors.goldDim),
-                    ),
-                    child: const Text('Open receipt'),
-                  ),
-                  OutlinedButton(
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Share card export is prepared for this mark.',
-                        ),
-                      ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: OracleColors.gold,
-                      side: const BorderSide(color: OracleColors.goldDim),
-                    ),
-                    child: const Text('Share your mark'),
-                  ),
-                ],
+              OutlinedButton(
+                onPressed: () => context.go(
+                  '/session/${Uri.encodeComponent(session.sessionId)}',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: OracleColors.gold,
+                  side: const BorderSide(color: OracleColors.goldDim),
+                ),
+                child: const Text('Open receipt'),
               ),
             ],
           );
@@ -430,20 +376,3 @@ class _HighlightedSessionPanel extends StatelessWidget {
   }
 }
 
-class _ClothSurface extends StatelessWidget {
-  const _ClothSurface({
-    required this.sessions,
-    required this.highlightSessionId,
-  });
-
-  final List<SessionData> sessions;
-  final String? highlightSessionId;
-
-  @override
-  Widget build(BuildContext context) {
-    return SteppedClothSurface(
-      sessions: sessions,
-      highlightSessionId: highlightSessionId,
-    );
-  }
-}

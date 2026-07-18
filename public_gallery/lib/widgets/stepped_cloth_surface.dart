@@ -57,6 +57,7 @@ class SteppedClothSurface extends StatelessWidget {
                         Positioned.fill(
                           child: CustomPaint(
                             painter: _SteppedClothPainter(
+                              geometry: geometry,
                               layout: layout,
                               sessions: orderedSessions,
                               highlightSessionId: highlightSessionId,
@@ -134,18 +135,19 @@ class _ClothHitTarget extends StatelessWidget {
 
 class _SteppedClothPainter extends CustomPainter {
   const _SteppedClothPainter({
+    required this.geometry,
     required this.layout,
     required this.sessions,
     required this.highlightSessionId,
   });
 
+  final _ClothGridGeometry geometry;
   final ClothGridLayout layout;
   final List<SessionData> sessions;
   final String? highlightSessionId;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final geometry = _ClothGridGeometry.fromSize(size, side: layout.side);
     _paintFabric(canvas, size);
 
     if (layout.side == 0) {
@@ -323,7 +325,9 @@ class _SteppedClothPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _SteppedClothPainter oldDelegate) {
     return oldDelegate.sessions != sessions ||
-        oldDelegate.highlightSessionId != highlightSessionId;
+        oldDelegate.highlightSessionId != highlightSessionId ||
+        oldDelegate.geometry.cell != geometry.cell ||
+        oldDelegate.geometry.origin != geometry.origin;
   }
 }
 
@@ -364,25 +368,6 @@ class _ClothGridGeometry {
       origin: Offset(
         (surfaceWidth - gridWidth) / 2,
         (surfaceHeight - gridWidth) / 2,
-      ),
-    );
-  }
-
-  static _ClothGridGeometry fromSize(Size size, {required int side}) {
-    final normalizedSide = math.max(1, side);
-    const horizontalPadding = 34.0;
-    const maxCell = 128.0;
-
-    final availableWidth = math.max(0.0, size.width - horizontalPadding * 2);
-    final cell = math.min(maxCell, availableWidth / normalizedSide);
-    final gridWidth = cell * normalizedSide;
-    return _ClothGridGeometry(
-      surfaceWidth: size.width,
-      surfaceHeight: size.height,
-      cell: cell,
-      origin: Offset(
-        (size.width - gridWidth) / 2,
-        (size.height - gridWidth) / 2,
       ),
     );
   }
