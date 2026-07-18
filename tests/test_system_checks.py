@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from neje_oracle.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
-from neje_oracle.gui_support import GuiSettings
-from neje_oracle.models import SystemCheckLevel, SystemMode
-from neje_oracle.system_checks import SystemCheckService
+from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
+from neje_oracle.blocks.gui.support import GuiSettings
+from neje_oracle.shared.models import SystemCheckLevel, SystemMode
+from neje_oracle.app.system_checks import SystemCheckService
 
 
 def _plotter_settings(tmp_path: Path) -> PlotterSettings:

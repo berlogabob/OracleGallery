@@ -89,10 +89,19 @@ GUI_DEFAULTS = {
     "sample_min_step_mm": 0.25,
     "sample_max_step_mm": 3.0,
     "streaming_mode": "row",
+    "travel_rate": 5000.0,
+    "draw_rate": 1800.0,
     "xy_acceleration_mm_s2": 1000.0,
+    "z_down_mm": -25.0,
+    "z_up_mm": 0.0,
+    "z_feed_mm_min": 1000.0,
     "direct_svg_origin_x_mm": 25.0,
     "direct_svg_origin_y_mm": 25.0,
 }
+
+
+def _field_or_default(fields: dict[str, Any], key: str) -> float:
+    return float(fields[key].value or GUI_DEFAULTS[key])
 
 
 @dataclass
@@ -110,7 +119,8 @@ class GuiSettings:
     organic_scale_ramp: float = GUI_DEFAULTS["organic_scale_ramp"]
     organic_seed: int = GUI_DEFAULTS["organic_seed"]
     run_mode: str = "exhibition"
-    dry_run: bool = True
+    # apply_system_mode() always resolves this from mode_policy(); keep the default in sync with that reality.
+    dry_run: bool = False
     global_scale: float = GUI_DEFAULTS["global_scale"]
     randomness: float = GUI_DEFAULTS["randomness"]
     randomness_fine: float = GUI_DEFAULTS["randomness_fine"]
@@ -840,6 +850,8 @@ def create_direct_svg_print_job_from_gui(
         origin_x_mm=settings.direct_svg_origin_x_mm,
         origin_y_mm=settings.direct_svg_origin_y_mm,
         keep_non_negative=True,
+        max_x_mm=resolved_plotter_settings.sheet_width_mm,
+        max_y_mm=resolved_plotter_settings.sheet_height_mm,
     )
     return DirectSvgPrintJob(
         sheet_id=sheet_id,
@@ -1016,9 +1028,6 @@ def read_queue_status(*, force: bool = False, ttl_seconds: float = 10.0) -> dict
         cached_at, cached_payload = _QUEUE_STATUS_CACHE
         if (now - cached_at).total_seconds() < ttl_seconds:
             return cached_payload
-    if not force and _QUEUE_STATUS_CACHE is None:
-        return _queue_status_offline("Queue status not loaded yet")
-
     firebase_settings = FirebaseSettings()
     if not firebase_settings.enabled:
         payload = _queue_status_offline("Firebase is not configured")

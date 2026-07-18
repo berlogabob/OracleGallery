@@ -177,10 +177,11 @@ class UploaderStore(_SQLiteStore):
         return datetime.fromisoformat(str(row["value"]))
 
     def _ensure_columns(self, table: str, columns: dict[str, str]) -> None:
-        existing = {
-            row["name"]
-            for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
-        }
+        with self._lock:
+            existing = {
+                row["name"]
+                for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
+            }
         for name, definition in columns.items():
             if name not in existing:
                 self._execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")

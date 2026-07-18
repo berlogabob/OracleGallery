@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from neje_oracle.models import SheetItem, SheetPlacement
-from neje_oracle.svg_gcode import generate_sheet_gcode, parse_cell_progress_markers
+from neje_oracle.shared.models import SheetItem, SheetPlacement
+from neje_oracle.blocks.gcode.svg_gcode import generate_sheet_gcode, parse_cell_progress_markers
 
 
 def _svg(path: Path) -> Path:

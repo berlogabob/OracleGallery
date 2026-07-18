@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import subprocess
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
@@ -389,6 +390,12 @@ class SupervisorService:
                 daemon.stop()
             if thread is not None:
                 thread.join(timeout=5.0)
+                if thread.is_alive():
+                    return self.runtime_store.set_component(
+                        "plotter",
+                        ComponentStatus.WARNING,
+                        message="Stop requested; daemon still finishing current motion",
+                    )
             self._plotter_daemon = None
             self._plotter_thread = None
         return self.runtime_store.set_component("plotter", ComponentStatus.STOPPED, message="Local plotter daemon stopped")
@@ -634,11 +641,55 @@ class SupervisorService:
             heartbeat=True,
         )
 
+    # Thermal printer control. ponytail: still shells out to printer_connect.py — this just
+    # relocates the existing subprocess behind the supervisor so the GUI has one facade. Inline
+    # the BLE/ESP32 path only if the subprocess boundary ever actually hurts.
+    _THERMAL_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+    def save_thermal_printer_url(self, url: str) -> None:
+        self.runtime_store.save_json("thermal_printer", {"url": url.strip()})
+
+    def _run_thermal(self, action: str, *, esp32_url: str = "", extra_args: tuple[str, ...] = (), timeout: float = 90.0) -> tuple[bool, str]:
+        script = self._THERMAL_REPO_ROOT / "ESP32-BTN_Printer" / "tools" / "printer_connect.py"
+        url_args = ["--esp32", esp32_url] if esp32_url.strip() else []
+        command = [sys.executable, str(script), action, *url_args, *extra_args]
+        try:
+            result = subprocess.run(command, cwd=self._THERMAL_REPO_ROOT, text=True, capture_output=True, timeout=timeout, check=False)
+        except Exception as exc:  # noqa: BLE001
+            return False, str(exc)
+        output = (result.stdout + "\n" + result.stderr).strip()
+        return result.returncode == 0, output
+
+    def thermal_status(self, *, esp32_url: str = "") -> tuple[bool, str]:
+        return self._run_thermal("status", esp32_url=esp32_url, timeout=20.0)
+
+    def thermal_connect(self, *, esp32_url: str = "") -> tuple[bool, str]:
+        return self._run_thermal("connect", esp32_url=esp32_url, timeout=45.0)
+
+    def thermal_test(self, *, message: str = "ORACLE THERMAL TEST", esp32_url: str = "") -> tuple[bool, str]:
+        return self._run_thermal("test", esp32_url=esp32_url, extra_args=("--message", message), timeout=60.0)
+
+    def thermal_print_receipt(self, session_dir: Path, *, esp32_url: str = "") -> tuple[bool, str]:
+        preview_png = self._THERMAL_REPO_ROOT / "reports" / f"{session_dir.name}_thermal_preview.png"
+        return self._run_thermal(
+            "receipt",
+            esp32_url=esp32_url,
+            extra_args=(str(session_dir), "--preview-png", str(preview_png)),
+            timeout=120.0,
+        )
+
+    def latest_receipt_session_dir(self) -> Path | None:
+        session_root = self._THERMAL_REPO_ROOT / "assets" / "sessions"
+        if not session_root.exists():
+            return None
+        candidates = [path for path in session_root.iterdir() if path.is_dir() and any(path.glob("*_receipt.txt"))]
+        return max(candidates, key=lambda path: path.stat().st_mtime) if candidates else None
+
     def refresh_all_status(self) -> dict[str, ComponentState]:
         states = self.runtime_store.load_all_component_states()
         for name in ("system", "macmini_uploader", "firebase", "plotter", "fluidnc", "queue", "print", "ready", "live_generator"):
             states.setdefault(name, self.runtime_store.load_component_state(name))
-        if self._plotter_thread and self._plotter_thread.is_alive():
+        if self._plotter_thread and self._plotter_thread.is_alive() and states["plotter"].status not in (ComponentStatus.ERROR, ComponentStatus.WARNING):
             states["plotter"] = self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message=states["plotter"].message or "Local plotter daemon running", heartbeat=True)
         return states
 

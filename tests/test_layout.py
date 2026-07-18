@@ -1,6 +1,6 @@
 import pytest
 
-from neje_oracle.layout import build_grid_layout, build_hex_layout, build_sheet_layout, group_layout_rows
+from neje_oracle.blocks.gcode.layout import build_grid_layout, build_hex_layout, build_sheet_layout, group_layout_rows
 
 
 def test_hex_layout_stays_within_sheet() -> None:
@@ -38,6 +38,32 @@ def test_grid_layout_stays_within_sheet() -> None:
         assert placement.center_y_mm - radius >= 24
         assert placement.center_x_mm + radius <= 594 - 24
         assert placement.center_y_mm + radius <= 841 - 24
+
+
+def test_grid_layout_accepts_zero_diameter() -> None:
+    placements = build_grid_layout(
+        count=5,
+        sheet_width_mm=100,
+        sheet_height_mm=100,
+        margin_mm=0,
+        diameter_mm=0,
+        gap_mm=0,
+    )
+
+    assert isinstance(placements, list)
+
+
+def test_hex_layout_accepts_zero_diameter() -> None:
+    placements = build_hex_layout(
+        count=5,
+        sheet_width_mm=100,
+        sheet_height_mm=100,
+        margin_mm=0,
+        diameter_mm=0,
+        gap_mm=0,
+    )
+
+    assert isinstance(placements, list)
 
 
 def test_hex_layout_offsets_odd_rows_inside_bounds() -> None:

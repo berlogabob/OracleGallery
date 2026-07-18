@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from neje_oracle.firebase_svg_normalizer import normalize_firebase_sessions
+from neje_oracle.blocks.firebase.svg_normalizer import normalize_firebase_sessions
 
 
 class FakeFirebaseRepository:

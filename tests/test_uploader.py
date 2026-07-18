@@ -3,13 +3,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from neje_oracle.config import FirebaseSettings, UploaderSettings
+from neje_oracle.shared.config import FirebaseSettings, UploaderSettings
 from datetime import UTC, datetime
 
-from neje_oracle.firebase_io import FirebaseRemoteRepository
-from neje_oracle.models import PlotStatus, PublicationResult, PublicStatus, SessionRecord
-from neje_oracle.session_uploader import SessionUploader
-from neje_oracle.store import UploaderStore
+from neje_oracle.blocks.firebase.repository import FirebaseRemoteRepository
+from neje_oracle.shared.models import PlotStatus, PublicationResult, PublicStatus, SessionRecord
+from neje_oracle.blocks.macmini.session_uploader import SessionUploader
+from neje_oracle.shared.store import UploaderStore
 
 
 class FakeRemoteRepository:
@@ -407,6 +407,40 @@ def test_session_dir_needs_stability_window_or_ready_marker(tmp_path: Path) -> N
     assert remote.publish_calls == ["20260426_120000"]
     assert (session_dir / "20260426_120000_qr.png").read_bytes() == b"firebase:sessions/20260426_120000/qr.png"
     assert remote.download_calls == [("sessions/20260426_120000/qr.png", session_dir / ".20260426_120000_qr.png.tmp")]
+
+
+def test_scan_continues_after_malformed_session_metadata(tmp_path: Path) -> None:
+    session_root = tmp_path / "sessions_raw"
+    public_root = tmp_path / "sessions_public"
+    session_ids = ["20260426_120000", "20260426_120001", "20260426_120002"]
+    for session_id in session_ids:
+        session_dir = session_root / session_id
+        session_dir.mkdir(parents=True)
+        _write_svg(session_dir / f"{session_id}_plotter.svg")
+        _write_receipt(session_dir / f"{session_id}_receipt.txt")
+        (session_dir / "READY").write_text("", encoding="utf-8")
+    (session_root / session_ids[1] / "metadata.json").write_text("{", encoding="utf-8")
+
+    settings = UploaderSettings(
+        session_root=session_root,
+        public_root=public_root,
+        db_path=tmp_path / "runtime" / "uploader.sqlite3",
+        poll_seconds=0.0,
+        stability_seconds=0.0,
+        ready_marker_name="READY",
+        require_ready_marker=False,
+    )
+    firebase_settings = FirebaseSettings(
+        project_id="demo",
+        storage_bucket="demo.appspot.com",
+        credentials_path=tmp_path / "missing.json",
+        gallery_base_url="https://example.github.io/gallery",
+    )
+    store = UploaderStore(settings.db_path)
+    remote = FakeRemoteRepository()
+    uploader = SessionUploader(settings, firebase_settings, store, remote)
+
+    assert uploader.scan_once() == [session_ids[0], session_ids[2]]
 
 
 def test_qr_download_failure_does_not_mark_session_published(tmp_path: Path) -> None:

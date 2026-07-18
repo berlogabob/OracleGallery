@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from neje_oracle.gui_modes import mode_policy, mode_to_control
-from neje_oracle.models import SystemMode
+from neje_oracle.blocks.gui.modes import mode_policy, mode_to_control
+from neje_oracle.shared.models import SystemMode
 
 
 def test_system_modes_map_to_safe_internal_control() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from neje_oracle.firebase_io import summarize_plot_job_counts
+from neje_oracle.blocks.firebase.repository import summarize_plot_job_counts
 
 
 def test_summarize_plot_job_counts_separates_baseline_and_hidden_jobs() -> None:

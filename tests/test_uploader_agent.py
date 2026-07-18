@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from neje_oracle.uploader_agent_service import UploaderAgentController
+from neje_oracle.blocks.macmini.uploader_agent_service import UploaderAgentController
 
 
 class FakeUploader:

@@ -5,14 +5,8 @@ import importlib
 
 def test_gui_entrypoint_and_workspace_modules_import() -> None:
     modules = [
-        "neje_oracle.gui_components.components.status",
-        "neje_oracle.gui_workspaces.connection",
-        "neje_oracle.gui_workspaces.calibration",
-        "neje_oracle.gui_workspaces.tests",
-        "neje_oracle.gui_workspaces.work",
-        "neje_oracle.gui_workspaces.exhibition",
-        "neje_oracle.gui_service",
-        "neje_oracle.blocks.gui.components.components.status",
+        "neje_oracle.blocks.gui.context",
+        "neje_oracle.blocks.gui.workspaces.motion",
         "neje_oracle.blocks.gui.workspaces.connection",
         "neje_oracle.blocks.gui.workspaces.calibration",
         "neje_oracle.blocks.gui.workspaces.tests",
@@ -23,3 +17,8 @@ def test_gui_entrypoint_and_workspace_modules_import() -> None:
 
     for module in modules:
         importlib.import_module(module)
+
+    # Every workspace exposes a single build(ctx) entry point.
+    for name in ("connection", "calibration", "tests", "work", "exhibition"):
+        workspace = importlib.import_module(f"neje_oracle.blocks.gui.workspaces.{name}")
+        assert callable(workspace.build)

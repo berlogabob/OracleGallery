@@ -5,12 +5,12 @@ import re
 from random import Random
 from pathlib import Path
 
-from neje_oracle.config import FirebaseSettings, UploaderSettings
-from neje_oracle.models import PublicationResult, PublicStatus, SheetItem, SheetPlacement
-from neje_oracle.session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
-from neje_oracle.session_uploader import SessionUploader
-from neje_oracle.store import UploaderStore
-from neje_oracle.svg_gcode import generate_sheet_gcode
+from neje_oracle.shared.config import FirebaseSettings, UploaderSettings
+from neje_oracle.shared.models import PublicationResult, PublicStatus, SheetItem, SheetPlacement
+from neje_oracle.blocks.symbols.session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
+from neje_oracle.blocks.macmini.session_uploader import SessionUploader
+from neje_oracle.shared.store import UploaderStore
+from neje_oracle.blocks.gcode.svg_gcode import generate_sheet_gcode
 
 
 SIMPLE_SYMBOL = (

@@ -35,17 +35,3 @@ def test_non_gui_blocks_do_not_import_gui_block() -> None:
         targets = _import_targets(path)
         assert not any("neje_oracle.blocks.gui" in target for target in targets), path
         assert not any(target.startswith("..gui") for target in targets), path
-
-
-def test_legacy_entrypoint_modules_still_import() -> None:
-    import importlib
-
-    modules = [
-        "neje_oracle.gui_service",
-        "neje_oracle.session_generator",
-        "neje_oracle.uploader_agent_service",
-        "neje_oracle.thermal_autoprint_service",
-        "neje_oracle.firebase_svg_normalizer",
-    ]
-    for module in modules:
-        assert importlib.import_module(module)

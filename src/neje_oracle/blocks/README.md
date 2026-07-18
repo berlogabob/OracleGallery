@@ -12,9 +12,9 @@ and exposes a small import surface through its package and service modules.
 - Non-GUI blocks must not import `neje_oracle.blocks.gui`.
 - `neje_oracle.app` composes blocks into runnable applications and may import
   any block.
-- Top-level modules such as `neje_oracle.transport` and `neje_oracle.gui_service`
-  are temporary compatibility wrappers for existing launchers, tests, and
-  external scripts.
+- There are no top-level compatibility wrappers; launchers, tests, and external
+  scripts import directly from `neje_oracle.shared`, `neje_oracle.blocks.*`,
+  or `neje_oracle.app`.
 
 ## Block Ownership
 

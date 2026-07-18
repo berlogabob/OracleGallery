@@ -5,14 +5,14 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from neje_oracle.config import PlotterSettings
-from neje_oracle.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
-from neje_oracle.origin_markers import origin_allowed
+from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.shared.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
+from neje_oracle.shared.origin_markers import origin_allowed
 from unittest.mock import patch
-from neje_oracle.plotter_daemon import PlotterDaemon, _apply_current_mark_scale, _materialize_scaled_placeholder
-from neje_oracle.store import OracleRuntimeStore, PlotterStore
-from neje_oracle.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
-from neje_oracle.transport import FluidNCTransport
+from neje_oracle.blocks.plotter.daemon import PlotterDaemon, _apply_current_mark_scale, _materialize_scaled_placeholder
+from neje_oracle.shared.store import OracleRuntimeStore, PlotterStore
+from neje_oracle.blocks.symbols.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
+from neje_oracle.blocks.fluidnc.transport import FluidNCTransport
 
 
 SVG = (
@@ -89,7 +89,7 @@ def test_materialize_scaled_placeholder_applies_symbol_scale_config(tmp_path: Pa
     symbol_path.write_text(SVG, encoding="utf-8")
     scale_path = _write_scale_config(symbol_root, {"kind.svg": 1.75})
 
-    with patch("neje_oracle.plotter_daemon._scale_config_path", return_value=scale_path):
+    with patch("neje_oracle.blocks.plotter.daemon._scale_config_path", return_value=scale_path):
         cached = _materialize_scaled_placeholder(symbol_path, tmp_path / "cache")
 
     metadata = read_normalized_svg_metadata(cached)
@@ -107,8 +107,8 @@ def test_apply_current_mark_scale_overrides_downloaded_normalized_svg(tmp_path: 
     downloaded_svg.write_text(normalize_svg_file(symbol_path, scale=1.0), encoding="utf-8")
 
     with (
-        patch("neje_oracle.plotter_daemon._symbol_root", return_value=symbol_root),
-        patch("neje_oracle.plotter_daemon._scale_config_path", return_value=scale_path),
+        patch("neje_oracle.blocks.plotter.daemon._symbol_root", return_value=symbol_root),
+        patch("neje_oracle.blocks.plotter.daemon._scale_config_path", return_value=scale_path),
     ):
         _apply_current_mark_scale(downloaded_svg, "THE KIND SOUL")
 
@@ -428,6 +428,44 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
     assert any(update[0] == "late_user" and update[1] == PlotStatus.PRINTED.value for update in remote.updates)
 
 
+def test_plotter_stops_sending_rows_when_operator_pauses_mid_sheet(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+        sheet_width_mm=80,
+        sheet_height_mm=160,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="grid",
+    )
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    remote = FakeRemoteRepository()
+
+    class PausingTransport:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback):
+            self.calls += 1
+            path = settings.spool_root / f"{sheet_id}.gcode"
+            path.write_text(gcode, encoding="utf-8")
+            oracle_store.save_print_control(PlotterControlState(print_enabled=False, operator_paused=True, run_mode="test", dry_run=True))
+            return path
+
+    transport = PausingTransport()
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)  # type: ignore[arg-type]
+
+    daemon.run_cycle()
+
+    assert transport.calls == 1
+    assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
+
+
 def test_plotter_origin_filter_leaves_disallowed_job_pending_and_fills_row(tmp_path: Path) -> None:
     placeholder_root = tmp_path / "placeholders"
     placeholder_root.mkdir(parents=True)
@@ -588,7 +626,7 @@ def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
         sample_steps.append(kwargs["sample_step_mm"])
         return "G21\n; cell-start 0/1\nG0 X0 Y0\n"
 
-    with patch("neje_oracle.plotter_daemon.generate_sheet_gcode", side_effect=fake_generate_sheet_gcode):
+    with patch("neje_oracle.blocks.plotter.daemon.generate_sheet_gcode", side_effect=fake_generate_sheet_gcode):
         daemon.run_cycle()
 
     assert sample_steps
