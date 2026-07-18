@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -194,12 +193,7 @@ class _ClothToolbar extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Expanded(child: count),
-                    const _SecretDebugButton(),
-                  ],
-                ),
+                count,
                 const SizedBox(height: 14),
                 lookup,
                 const SizedBox(height: 8),
@@ -210,8 +204,6 @@ class _ClothToolbar extends StatelessWidget {
           return Row(
             children: [
               count,
-              const SizedBox(width: 10),
-              const _SecretDebugButton(),
               const SizedBox(width: 22),
               Expanded(child: lookup),
               const SizedBox(width: 18),
@@ -257,39 +249,6 @@ class _BrowseMarksHint extends StatelessWidget {
     return TextButton(
       onPressed: () => context.go('/marks'),
       child: const Text('Browse marks'),
-    );
-  }
-}
-
-class _SecretDebugButton extends StatelessWidget {
-  const _SecretDebugButton();
-
-  @override
-  Widget build(BuildContext context) {
-    // ponytail: hidden debug entry, present only in debug builds.
-    if (!kDebugMode) {
-      return const SizedBox.shrink();
-    }
-    return Tooltip(
-      message: 'Debug sessions',
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onLongPress: () => context.go('/debug/sessions'),
-        onDoubleTap: () => context.go('/debug/sessions'),
-        child: const SizedBox(
-          width: 22,
-          height: 22,
-          child: Center(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: OracleColors.rule,
-                shape: BoxShape.circle,
-              ),
-              child: SizedBox(width: 6, height: 6),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

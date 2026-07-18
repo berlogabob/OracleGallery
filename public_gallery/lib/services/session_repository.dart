@@ -45,14 +45,4 @@ class SessionRepository {
               .toList();
         });
   }
-
-  Stream<List<SessionData>> watchAllSessions({int limit = 300}) {
-    return _firestore.collection('sessions').limit(limit).snapshots().map((
-      snapshot,
-    ) {
-      final sessions = snapshot.docs.map(SessionData.fromDoc).toList();
-      sessions.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return sessions;
-    });
-  }
 }
