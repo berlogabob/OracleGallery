@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -33,11 +34,13 @@ class OracleGalleryApp extends StatelessWidget {
               ),
             ),
             GoRoute(path: '/library', redirect: (context, state) => '/cloth'),
-            GoRoute(
-              path: '/debug/sessions',
-              builder: (context, state) =>
-                  DebugSessionsPage(firebaseReady: firebaseReady),
-            ),
+            // ponytail: debug-only route, stripped from release builds.
+            if (kDebugMode)
+              GoRoute(
+                path: '/debug/sessions',
+                builder: (context, state) =>
+                    DebugSessionsPage(firebaseReady: firebaseReady),
+              ),
             GoRoute(
               path: '/marks',
               builder: (context, state) => const MarksPage(),

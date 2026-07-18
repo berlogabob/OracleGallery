@@ -46,11 +46,13 @@ class _DebugSessionStream extends StatefulWidget {
 class _DebugSessionStreamState extends State<_DebugSessionStream> {
   final Set<String> _selectedOrigins = {..._debugOrigins};
   final Set<String> _selectedTags = {};
+  final Stream<List<SessionData>> _sessions = SessionRepository()
+      .watchAllSessions();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<SessionData>>(
-      stream: SessionRepository().watchAllSessions(),
+      stream: _sessions,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return StatusPanel(

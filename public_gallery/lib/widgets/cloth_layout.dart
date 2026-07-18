@@ -1,19 +1,10 @@
 import 'dart:math' as math;
 
 class ClothGridLayout {
-  const ClothGridLayout({
-    required this.side,
-    required this.placements,
-    required this.sourceCount,
-  });
+  const ClothGridLayout({required this.side, required this.placements});
 
   final int side;
   final List<ClothGridPlacement> placements;
-  final int sourceCount;
-
-  int get capacity => side * side;
-
-  int get hiddenRemainder => sourceCount - capacity;
 }
 
 class ClothGridPlacement {
@@ -28,23 +19,16 @@ class ClothGridPlacement {
   final int column;
 }
 
+/// Smallest square grid that holds every mark. The last row may be partial so
+/// that newly published marks appear immediately instead of waiting for the
+/// next perfect square to fill.
 ClothGridLayout buildClothGridLayout(int filledCount) {
-  final normalizedCount = math.max(0, filledCount);
-  final side = normalizedCount == 0 ? 0 : math.sqrt(normalizedCount).floor();
-  if (side == 0) {
-    return const ClothGridLayout(
-      side: 0,
-      placements: <ClothGridPlacement>[],
-      sourceCount: 0,
-    );
-  }
-
-  final capacity = side * side;
+  final count = math.max(0, filledCount);
+  final side = count == 0 ? 0 : math.sqrt(count).ceil();
   return ClothGridLayout(
     side: side,
-    sourceCount: normalizedCount,
     placements: [
-      for (var index = 0; index < capacity; index++)
+      for (var index = 0; index < count; index++)
         ClothGridPlacement(
           index: index,
           row: index ~/ side,
