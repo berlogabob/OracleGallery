@@ -1,0 +1,78 @@
+board: MKS TinyBee V1.0
+name: NEJE Master 2S Plus - echodraw
+meta: Adapted for 255x420mm area, Andrey @berlogabob
+
+wifi:
+  mode: ap  # пока AP от телефона, потом можно переключить на sta и твой домашний Wi-Fi
+  ssid: Nothing32
+  password: CHANGE_ME  # set your own hotspot password
+  # или mode: sta + ssid/password твоей домашней сети, когда будешь готов
+
+stepping:
+  engine: I2S_STATIC
+  idle_ms: 255
+  pulse_us: 4
+  dir_delay_us: 1
+  disable_delay_us: 0
+
+axes:
+  x:
+    steps_per_mm: 80.0          # Стандарт для GT2 + 20 зубьев pulley + 1/8 microstep (TMC2209). Если движение в 2 раза меньше — поставь 160
+    max_rate_mm_per_min: 6000
+    acceleration_mm_per_sec2: 300
+    max_travel_mm: 255          # ← твоя реальная ширина (X)
+
+    homing:
+      cycle: 0
+      positive_direction: false   # Обычно X home влево (минус)
+      mpos_mm: 0.0
+      seek_mm_per_min: 2000
+      feed_mm_per_min: 300
+      seek_mm: 280                # запас
+
+    motor0:
+      standard_stepper:
+        step_pin: I2SO.1          # типичный для TinyBee X
+        direction_pin: I2SO.2
+        disable_pin: I2SO.0
+      pulloff_mm: 3
+      hard_limits: false          # если нет концевиков — false
+
+  y:
+    steps_per_mm: 80.0
+    max_rate_mm_per_min: 6000
+    acceleration_mm_per_sec2: 300
+    max_travel_mm: 420          # ← твоя длина (Y)
+
+    homing:
+      cycle: 0
+      positive_direction: true    # Обычно Y home вверх (максимум)
+      mpos_mm: 420.0              # ← критично! home = max Y
+      seek_mm_per_min: 2000
+      feed_mm_per_min: 300
+      seek_mm: 450
+
+    motor0:
+      standard_stepper:
+        step_pin: I2SO.4          # типичный Y на TinyBee
+        direction_pin: I2SO.5
+        disable_pin: I2SO.3
+      pulloff_mm: 3
+      hard_limits: false
+
+spindle:
+  laser:
+    pwm_hz: 5000
+    output_pin: gpio.2          # часто PWM лазера на GPIO2 у NEJE-совместимых
+    enable_pin: no_pin
+    disable_with_s0: true
+    s0_with_disable: true
+    speed_map: 0=0.000% 1000=100.000%  # S0..S1000
+
+start:
+  must_home: false              # пока false, потом true когда homing настроен
+
+macros:
+  Home:
+    label: Home
+    gcode: $H
