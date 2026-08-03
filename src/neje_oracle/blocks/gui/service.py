@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 from nicegui import ui
 
 from .context import GuiContext
 from .ui import warning_banner
-from .workspaces import calibration, connection, exhibition, tests, work
+from .workspaces import calibration, connection, exhibition, generative, tests, work
 from ...shared.origin_markers import (
     ALL_ORIGINS,
     ORIGIN_LABELS,
@@ -148,6 +149,7 @@ def build_page() -> None:
                 tests_tab = ui.tab("tests", label="3 TESTS")
                 work_tab = ui.tab("work", label="4 WORK")
                 exhibition_tab = ui.tab("exhibition", label="5 EXHIBITION")
+                generative_tab = ui.tab("generative", label="6 GENERATIVE")
             workspace_tabs.value = ctx.active_workspace["value"]
             ctx.workspace_tabs = workspace_tabs
             ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
@@ -180,6 +182,8 @@ def build_page() -> None:
                     work.build(ctx)
                 with ui.tab_panel(exhibition_tab).classes("p-0"):
                     exhibition.build(ctx)
+                with ui.tab_panel(generative_tab).classes("p-0"):
+                    generative.build(ctx)
 
             with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
                 with ui.row().classes("w-full items-center justify-between"):
@@ -212,6 +216,12 @@ def main() -> None:
         print("For documentation, see: README.md 'Entry Points & Launchers' section")
         print("=" * 70 + "\n")
         sys.exit(1)
+
+    from nicegui import app
+
+    web_root = Path(__file__).resolve().parents[4] / "echodraw" / "generative-core" / "web"
+    app.add_static_files("/generative", str(web_root))
+    generative.register_routes()
 
     ui.page("/")(build_page)
     host = os.getenv("NEJE_GUI_HOST", "127.0.0.1")

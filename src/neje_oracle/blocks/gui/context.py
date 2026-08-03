@@ -42,7 +42,7 @@ from ...shared.origin_markers import ALL_ORIGINS
 from ...app.supervisor import SupervisorService
 
 
-VALID_WORKSPACES = {"connection", "calibration", "tests", "work", "exhibition"}
+VALID_WORKSPACES = {"connection", "calibration", "tests", "work", "exhibition", "generative"}
 
 
 class GuiContext:
@@ -208,6 +208,30 @@ class GuiContext:
             self.uploaded_svg["bytes"] = b""
             self.uploaded_svg["name"] = ""
             self.uploaded_svg_label.set_text("No SVG selected")
+            ui.notify(state.message, color="positive")
+        else:
+            ui.notify(state.last_error or state.message, color="negative" if state.status == ComponentStatus.ERROR else "warning")
+        self.refresh_status()
+        self.refresh_logs()
+
+    async def print_generative_svg(self) -> None:
+        from .workspaces.generative import LATEST
+
+        if not LATEST["bytes"]:
+            ui.notify("Capture a pattern in the sketch first", color="warning")
+            return
+        self.pull_settings_from_fields()
+        self._save_settings()
+        ui.notify("Printing SVG...", color="info")
+        state = await run.io_bound(
+            self.supervisor.print_uploaded_svg,
+            self.settings,
+            svg_bytes=LATEST["bytes"],
+            original_name=str(LATEST["name"] or "generative.svg"),
+        )
+        if state.status == ComponentStatus.STOPPED:
+            LATEST["bytes"] = b""
+            LATEST["name"] = ""
             ui.notify(state.message, color="positive")
         else:
             ui.notify(state.last_error or state.message, color="negative" if state.status == ComponentStatus.ERROR else "warning")
@@ -385,7 +409,7 @@ class GuiContext:
         if workspace in VALID_WORKSPACES:
             self.active_workspace["value"] = workspace
             self.supervisor.runtime_store.save_json("gui_workspace", {"tab": workspace})
-        if workspace == "tests":
+        if workspace in ("tests", "generative"):
             if self.settings.mode != SystemMode.TEST:
                 self.set_system_mode(SystemMode.TEST, notify=False)
             return
