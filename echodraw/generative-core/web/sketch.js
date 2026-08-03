@@ -21,6 +21,7 @@ const SCATTER_CIRCLES = 15; // Additional random circles
 let currentSeed = 12345;
 let currentSvgString = '';
 let shapes = []; // For building SVG
+let streamTimer = null; // Interval handle while streaming
 
 // ============================================================================
 // Simple seeded random number generator (Mulberry32)
@@ -122,6 +123,20 @@ function setup() {
   });
 
   document.getElementById('send-btn').addEventListener('click', sendToPlotter);
+
+  document.getElementById('stream-checkbox').addEventListener('change', (e) => {
+    if (e.target.checked) {
+      startStreaming();
+    } else {
+      stopStreaming();
+    }
+  });
+
+  document.getElementById('stream-interval').addEventListener('change', () => {
+    if (document.getElementById('stream-checkbox').checked) {
+      startStreaming(); // restart with new interval
+    }
+  });
 }
 
 function draw() {
@@ -170,6 +185,31 @@ function sendToPlotter() {
     .catch(e => {
       statusEl.textContent = 'Send failed: ' + e.message;
     });
+}
+
+// ============================================================================
+// Stream mode: regenerate + send on a repeating interval
+// ============================================================================
+function startStreaming() {
+  stopStreaming(); // clear any existing interval first
+
+  const intervalInput = document.getElementById('stream-interval');
+  const seconds = Math.max(5, parseInt(intervalInput.value, 10) || 15);
+  intervalInput.value = seconds;
+
+  streamTimer = setInterval(() => {
+    currentSeed = Math.floor(Math.random() * 1000000);
+    generatePattern(currentSeed);
+    redraw();
+    sendToPlotter();
+  }, seconds * 1000);
+}
+
+function stopStreaming() {
+  if (streamTimer !== null) {
+    clearInterval(streamTimer);
+    streamTimer = null;
+  }
 }
 
 // ============================================================================

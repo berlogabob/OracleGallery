@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode
+from neje_oracle.blocks.gui.workspaces.generative import should_send_frame
 
 
 SAMPLE_SVG = (
@@ -54,3 +55,20 @@ def test_generative_svg_coordinates_within_bounds(tmp_path: Path) -> None:
     for x, y in points:
         assert 0 <= x <= 200, f"X coordinate {x} outside [0, 200] mm"
         assert 0 <= y <= 200, f"Y coordinate {y} outside [0, 200] mm"
+
+
+def test_should_send_frame_combinations() -> None:
+    ready = {"name": "generative_test.svg", "bytes": b"<svg/>"}
+    empty = {"name": "", "bytes": b""}
+
+    # Disabled: never send, even with a frame ready.
+    assert should_send_frame({"enabled": False, "busy": False}, ready) is False
+
+    # Busy: don't send while a previous frame is still plotting.
+    assert should_send_frame({"enabled": True, "busy": True}, ready) is False
+
+    # Empty bytes: nothing captured yet.
+    assert should_send_frame({"enabled": True, "busy": False}, empty) is False
+
+    # All-go: enabled, idle, and a frame is waiting.
+    assert should_send_frame({"enabled": True, "busy": False}, ready) is True

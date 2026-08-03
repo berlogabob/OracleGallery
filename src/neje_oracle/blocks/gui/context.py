@@ -214,7 +214,7 @@ class GuiContext:
         self.refresh_status()
         self.refresh_logs()
 
-    async def print_generative_svg(self) -> None:
+    async def print_generative_svg(self, quiet: bool = False) -> None:
         from .workspaces.generative import LATEST
 
         if not LATEST["bytes"]:
@@ -222,7 +222,8 @@ class GuiContext:
             return
         self.pull_settings_from_fields()
         self._save_settings()
-        ui.notify("Printing SVG...", color="info")
+        if not quiet:
+            ui.notify("Printing SVG...", color="info")
         state = await run.io_bound(
             self.supervisor.print_uploaded_svg,
             self.settings,

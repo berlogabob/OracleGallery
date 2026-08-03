@@ -12,7 +12,13 @@ from ..context import GuiContext
 
 
 LATEST: dict = {"name": "", "bytes": b""}
+STREAM: dict = {"enabled": False, "busy": False}
 _ROUTES_REGISTERED = False
+
+
+def should_send_frame(stream: dict, latest: dict) -> bool:
+    """Whether the stream tick should hand the current LATEST frame to the plotter."""
+    return stream["enabled"] and not stream["busy"] and bool(latest["bytes"])
 
 
 async def _handle_generative_svg(request: Request) -> JSONResponse:
@@ -69,4 +75,27 @@ def build(ctx: GuiContext) -> None:
             ui.timer(1.0, update_capture_label)
 
             with ui.row().classes("items-center gap-2"):
-                ui.button("START PRINT", on_click=ctx.print_generative_svg).props("dense color=positive")
+                ui.button("START PRINT", on_click=lambda: ctx.print_generative_svg()).props("dense color=positive")
+
+            def stream_toggled(event) -> None:
+                STREAM["enabled"] = bool(event.value)
+                if not STREAM["enabled"]:
+                    ui.notify("Stream stopped", color="info")
+
+            ui.switch(
+                "Stream to plotter (auto-print each captured frame)",
+                value=STREAM["enabled"],
+                on_change=stream_toggled,
+            )
+
+            async def _stream_tick() -> None:
+                if not should_send_frame(STREAM, LATEST):
+                    return
+                STREAM["busy"] = True
+                try:
+                    await ctx.print_generative_svg(quiet=True)   # pops LATEST on success; blocks (io_bound) while plotting
+                finally:
+                    STREAM["busy"] = False
+            # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; char-counting GRBL streaming if frames lag
+
+            ui.timer(3.0, _stream_tick)

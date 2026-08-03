@@ -59,6 +59,20 @@
       min-width: 200px;
       text-align: center;
     }
+    .stream-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+    #stream-interval {
+      width: 55px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background-color: #2a2a2a;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -66,6 +80,15 @@
   <div class="controls">
     <button id="regenerate-btn">Regenerate</button>
     <button id="send-btn">Send to plotter</button>
+    <label class="stream-controls">
+      <input type="checkbox" id="stream-checkbox">
+      Stream
+    </label>
+    <label class="stream-controls">
+      every
+      <input type="number" id="stream-interval" value="15" min="5" step="1">
+      s
+    </label>
     <span id="status">Ready</span>
   </div>
 
