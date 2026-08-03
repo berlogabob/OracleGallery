@@ -16,6 +16,7 @@ from neje_oracle.blocks.gui.support import (
     GuiSettings,
     _field_or_default,
     build_preview_svg,
+    PREVIEW_PX_PER_MM,
     build_realtime_preview_svg,
     create_idle_bank_from_gui,
     create_filler_packages_from_gui,
@@ -313,6 +314,107 @@ def test_realtime_preview_shows_drawn_current_and_next_from_manifest(tmp_path: P
     assert 'data-preview-state="drawing"' in preview
     assert 'data-preview-state="next"' in preview
     assert preview.count("data:image/svg+xml;base64") == 3
+
+
+def test_realtime_preview_renders_only_manifest_geometry(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    manifest = tmp_path / "spool" / "sheet.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "session_id": "done",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_0.svg"),
+                        "sheet_index": 0,
+                        "center_x_mm": 37.0,
+                        "center_y_mm": 37.0,
+                        "cell_diameter_mm": 42.0,
+                    },
+                    {
+                        "session_id": "drawing",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_1.svg"),
+                        "sheet_index": 1,
+                        "center_x_mm": 82.0,
+                        "center_y_mm": 37.0,
+                        "cell_diameter_mm": 42.0,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = GuiSettings(
+        sheet_width_mm=200,
+        sheet_height_mm=200,
+        cell_diameter_mm=42,
+        organic_enabled=True,
+        organic_cell_size_mm=18.0,
+        organic_seed=1011,
+    )
+    status = {
+        "latest_manifest": str(manifest),
+        "status": RuntimeStatus.PRINTING.value,
+        "cells_completed": 1,
+        "current_cell_in_row": 2,
+    }
+
+    preview = build_realtime_preview_svg(settings, status, {"pendingAfterBaseline": 0})
+
+    # Cells never materialized in the manifest must not be invented from the
+    # current-settings layout: mixing frozen manifest geometry with a freshly
+    # generated organic layout draws incoherent overlapping circles.
+    assert 'data-preview-state="empty"' not in preview
+    assert f'cx="{37.0 * PREVIEW_PX_PER_MM:.2f}" cy="{37.0 * PREVIEW_PX_PER_MM:.2f}"' in preview
+    assert 'data-preview-state="drawn"' in preview
+    assert 'data-preview-state="drawing"' in preview
+
+
+def test_realtime_preview_frame_contains_oversized_manifest_geometry(tmp_path: Path) -> None:
+    root = _symbol_root(tmp_path)
+    manifest = tmp_path / "spool" / "sheet.json"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "session_id": "done",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_0.svg"),
+                        "sheet_index": 0,
+                        # Laid out for a bigger sheet than the current settings.
+                        "center_x_mm": 205.0,
+                        "center_y_mm": 400.0,
+                        "cell_diameter_mm": 80.0,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = GuiSettings(sheet_width_mm=200, sheet_height_mm=200, cell_diameter_mm=42)
+    status = {
+        "latest_manifest": str(manifest),
+        "status": RuntimeStatus.PRINTING.value,
+        "cells_completed": 0,
+        "current_cell_in_row": 1,
+    }
+
+    preview = build_realtime_preview_svg(settings, status, {"pendingAfterBaseline": 0})
+
+    import re
+
+    vb = re.search(r'viewBox="0 0 ([\d.]+) ([\d.]+)"', preview)
+    width, height = float(vb.group(1)), float(vb.group(2))
+    assert width >= (205.0 + 40.0) * PREVIEW_PX_PER_MM
+    assert height >= (400.0 + 40.0) * PREVIEW_PX_PER_MM
 
 
 def test_realtime_preview_uses_queue_before_filler_for_unmaterialized_next(tmp_path: Path) -> None:

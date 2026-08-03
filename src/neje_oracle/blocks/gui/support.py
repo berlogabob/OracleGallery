@@ -522,18 +522,34 @@ def _build_live_preview_svg(settings: GuiSettings, items: list[LivePreviewItem])
         return _empty_preview_svg(settings, "No printable cells")
     placements = _build_layout_for_settings(settings, capacity)
     scale = _preview_scale(settings)
-    width = settings.sheet_width_mm * scale
-    height = settings.sheet_height_mm * scale
-    item_by_index = {item.sheet_index: item for item in items}
+    # A stale manifest may have been laid out for a bigger sheet than the
+    # current settings; grow the frame so its cells stay visible instead of
+    # spilling out of the viewBox.
+    content_x_mm = max(
+        (item.center_x_mm + (item.cell_diameter_mm or 0.0) / 2.0 for item in items if item.center_x_mm is not None),
+        default=0.0,
+    )
+    content_y_mm = max(
+        (item.center_y_mm + (item.cell_diameter_mm or 0.0) / 2.0 for item in items if item.center_y_mm is not None),
+        default=0.0,
+    )
+    width = max(settings.sheet_width_mm, content_x_mm) * scale
+    height = max(settings.sheet_height_mm, content_y_mm) * scale
+    # Only draw cells the manifest actually materialized: inventing the missing
+    # cells from the current-settings layout mixes two geometries (frozen
+    # manifest positions vs. a fresh organic layout) into overlapping nonsense.
+    placement_by_index = {placement.index: placement for placement in placements}
     elements: list[str] = []
-    for base_placement in placements:
-        item = item_by_index.get(base_placement.index)
+    for item in sorted(items, key=lambda entry: entry.sheet_index):
+        base_placement = placement_by_index.get(
+            item.sheet_index, placements[min(item.sheet_index, len(placements) - 1)]
+        )
         placement = _preview_item_placement(item, base_placement)
         cx = placement.center_x_mm * scale
         cy = placement.center_y_mm * scale
         cell_radius = placement.diameter_mm * scale / 2.0
         mark_size = symbol_diameter_for_cell(placement.diameter_mm) * scale
-        state = item.state if item else "empty"
+        state = item.state
         fill = {
             "drawn": "#fffdf8",
             "drawing": "#fff0d4",
@@ -552,8 +568,6 @@ def _build_live_preview_svg(settings: GuiSettings, items: list[LivePreviewItem])
             f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{cell_radius:.2f}" fill="{fill}" '
             f'stroke="{stroke}" stroke-width="{stroke_width}" data-preview-state="{state}"{dash}/>'
         )
-        if not item:
-            continue
         if item.origin not in settings.show_origins:
             continue
         if settings.include_rings:
