@@ -52,3 +52,5 @@ ESP32-BTN_Printer/**/config.local.h
 .tangent/
 .vscode/
 .idea/
+graphify-out/
+/2026-*.txt
