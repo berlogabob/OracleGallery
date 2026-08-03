@@ -58,7 +58,7 @@ def build(ctx: GuiContext) -> None:
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Generative sketch").classes("text-sm font-bold")
-            ui.element("iframe").props('src="/generative/"').style("width:100%; height:640px; border:0; background:#1a1a1a; border-radius:10px;")
+            ui.element("iframe").props('src="/generative/index.html"').style("width:100%; height:900px; border:0; background:#1a1a1a; border-radius:10px;")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Send to plotter").classes("text-sm font-bold")
