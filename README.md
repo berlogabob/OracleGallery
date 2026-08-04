@@ -14,6 +14,8 @@ Local exhibition system for TouchDesigner session folders, Firebase publication,
 
 EchoDraw (by Andrey Dyakov) and Neje Oracle are now one project. EchoDraw contributed the NEJE→FluidNC hardware documentation and the real-time generative vision. Curated content lives in `echodraw/` (see `echodraw/README.md`); photo archives and vendored libraries remain in the [original repo](https://github.com/berlogabob/echodraw-project).
 
+Machine geometry source of truth: [echodraw/hardware/GEOMETRY.md](echodraw/hardware/GEOMETRY.md).
+
 - **Module 1 — Hardware/FluidNC plotter:** superseded by the working plotter stack here; hardware docs, FluidNC config, pen-holder designs and BOM are in `echodraw/hardware/` and `echodraw/bom/`.
 - **Module 2 — Generative core** (p5.js + ml5.js, webcam → ML → patterns → real-time G-code): roadmap item; reserved block in `src/neje_oracle/blocks/realtime_preview/`. Existing generator sketches in `echodraw/generative-core/`.
 - **Module 3 — Flutter wrapper:** covered by the existing `public_gallery/` Flutter app.
