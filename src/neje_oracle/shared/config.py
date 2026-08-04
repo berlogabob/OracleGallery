@@ -24,6 +24,14 @@ def _env_int(name: str, default: int) -> int:
     return int(value) if value is not None else default
 
 
+def _env_choice(name: str, default: str, choices: set[str]) -> str:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    value = value.strip()
+    return value if value in choices else default
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
@@ -139,6 +147,9 @@ class PlotterSettings:
     fluidnc_connect_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_CONNECT_TIMEOUT_SECONDS", 3.0)
     fluidnc_ack_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_ACK_TIMEOUT_SECONDS", 10.0)
     fluidnc_idle_timeout_seconds: float = _env_float("NEJE_PLOTTER_FLUIDNC_IDLE_TIMEOUT_SECONDS", 600.0)
+    # "ok_wait" (default) sends one line at a time; "char_count" streams with a sliding
+    # RX-buffer window (GRBL character-counting protocol) for higher throughput.
+    fluidnc_streaming: str = _env_choice("NEJE_FLUIDNC_STREAMING", "ok_wait", {"ok_wait", "char_count"})
     fluidnc_host: str = fluidnc_telnet_host
     fluidnc_port: int = fluidnc_telnet_port
     operator_host: str = os.getenv("NEJE_PLOTTER_OPERATOR_HOST", "0.0.0.0")

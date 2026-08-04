@@ -17,6 +17,11 @@ from ...shared.models import FluidNCCommandResult, FluidNCControllerState, Fluid
 
 STATUS_RE = re.compile(r"<([^|>]+)(?:\|([^>]*))?>")
 
+# GRBL/FluidNC serial RX ring-buffer size in bytes; the char-counting streaming
+# protocol keeps the sum of unacked line bytes (including trailing newline)
+# under this ceiling at all times.
+RX_BUFFER = 128
+
 
 def settings_for_fluidnc_host(settings: PlotterSettings, host: str) -> PlotterSettings:
     return replace(
@@ -233,19 +238,97 @@ class FluidNCTransport:
         with self._connect(self.settings.fluidnc_connect_timeout_seconds) as conn:
             self._drain(conn, timeout_seconds=0.2)
             total = len(commands)
-            for index, line in enumerate(commands, start=1):
-                result = self._send_regular_command_on_connection(
-                    conn,
-                    line,
-                    timeout_seconds=self.settings.fluidnc_ack_timeout_seconds,
-                )
-                if not result.ok:
-                    raise RuntimeError(f"FluidNC rejected line {index}: {line} :: {result.message}")
-                if progress_callback:
-                    progress_callback(index, total)
+            if self.settings.fluidnc_streaming == "char_count":
+                if commands:
+                    self._stream_char_counting(
+                        conn,
+                        commands,
+                        sheet_id=sheet_id,
+                        progress_callback=progress_callback,
+                    )
+            else:
+                for index, line in enumerate(commands, start=1):
+                    result = self._send_regular_command_on_connection(
+                        conn,
+                        line,
+                        timeout_seconds=self.settings.fluidnc_ack_timeout_seconds,
+                    )
+                    if not result.ok:
+                        raise RuntimeError(f"FluidNC rejected line {index}: {line} :: {result.message}")
+                    if progress_callback:
+                        progress_callback(index, total)
             if commands:
                 self._wait_until_idle(conn, sheet_id=sheet_id)
         return gcode_path
+
+    def _stream_char_counting(
+        self,
+        conn: socket.socket,
+        lines: list[str],
+        *,
+        sheet_id: str,
+        progress_callback: Callable[[int, int], None] | None,
+    ) -> None:
+        """GRBL character-counting protocol: keep a sliding window of unacked
+        lines whose combined byte size (line + newline) never exceeds
+        RX_BUFFER, instead of waiting for "ok" after every single line.
+        """
+        total = len(lines)
+        timeout = self.settings.fluidnc_ack_timeout_seconds
+        outstanding_bytes: list[int] = []
+        next_to_send = 0
+        acked = 0
+        buffer = ""
+
+        def pending_bytes() -> int:
+            return sum(outstanding_bytes)
+
+        def fill_window() -> None:
+            nonlocal next_to_send
+            while next_to_send < total:
+                frame_bytes = len(lines[next_to_send]) + 1
+                if outstanding_bytes and pending_bytes() + frame_bytes > RX_BUFFER:
+                    break
+                conn.sendall((lines[next_to_send] + "\n").encode("utf-8"))
+                outstanding_bytes.append(frame_bytes)
+                next_to_send += 1
+
+        fill_window()
+        while acked < total:
+            deadline = time.monotonic() + timeout
+            response_line: str | None = None
+            while time.monotonic() < deadline:
+                if "\n" in buffer:
+                    raw_line, buffer = buffer.split("\n", 1)
+                    candidate = raw_line.strip()
+                    if not candidate:
+                        continue
+                    response_line = candidate
+                    break
+                chunk = self._recv_text(conn, timeout_seconds=max(0.1, min(0.5, deadline - time.monotonic())))
+                if chunk:
+                    buffer += chunk.replace("\r", "\n")
+
+            if response_line is None:
+                failing_index = acked + 1
+                failing_line = lines[failing_index - 1]
+                raise RuntimeError(
+                    f"FluidNC rejected line {failing_index}: {failing_line} :: "
+                    f"Timed out waiting for ok after {failing_line}"
+                )
+
+            lower = response_line.lower()
+            if lower == "ok":
+                outstanding_bytes.pop(0)
+                acked += 1
+                if progress_callback:
+                    progress_callback(acked, total)
+                fill_window()
+            elif lower.startswith("error") or "alarm" in lower:
+                failing_index = acked + 1
+                failing_line = lines[failing_index - 1]
+                raise RuntimeError(f"FluidNC rejected line {failing_index}: {failing_line} :: {response_line}")
+            # else: ignore unrelated chatter (e.g. status pushes) and keep waiting
 
     def _wait_until_idle(self, conn: socket.socket, *, sheet_id: str) -> None:
         timeout = self.settings.fluidnc_idle_timeout_seconds

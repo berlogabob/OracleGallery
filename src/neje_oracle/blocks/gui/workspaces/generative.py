@@ -96,6 +96,6 @@ def build(ctx: GuiContext) -> None:
                     await ctx.print_generative_svg(quiet=True)   # pops LATEST on success; blocks (io_bound) while plotting
                 finally:
                     STREAM["busy"] = False
-            # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; char-counting GRBL streaming if frames lag
+            # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; set NEJE_FLUIDNC_STREAMING=char_count for char-counting GRBL streaming if frames lag
 
             ui.timer(3.0, _stream_tick)
