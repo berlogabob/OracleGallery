@@ -69,8 +69,7 @@ class GuiContext:
         store = self.supervisor.runtime_store
         saved_workspace = str(store.load_json("gui_workspace", {"tab": "connection"}).get("tab", "connection"))
         self.active_workspace = {"value": saved_workspace if saved_workspace in VALID_WORKSPACES else "connection"}
-        saved_preview_mode = str(store.load_json("gui_preview_mode", {"mode": "preview"}).get("mode", "preview"))
-        self.preview_mode = {"value": saved_preview_mode if saved_preview_mode in {"preview", "printing"} else "preview"}
+        self.preview_mode = {"value": "preview"}
 
         # Element handles assigned during layout / workspace build.
         self.preview: Any = None
