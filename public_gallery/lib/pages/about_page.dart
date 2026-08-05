@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
@@ -22,16 +21,13 @@ class AboutPage extends StatelessWidget {
         OracleSection(
           label: 'Video',
           title: 'Inside the installation.',
-          child: Container(
+          child: OracleCard(
             height: 360,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: OracleColors.paper,
-              border: Border.all(color: OracleColors.rule, width: 0.7),
-            ),
+            padding: EdgeInsets.zero,
             child: Text(
               'VIDEO DOCUMENTATION',
-              style: GoogleFonts.cinzel(
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: OracleColors.inkMuted,
                 fontSize: 12,
                 letterSpacing: 3,
@@ -102,7 +98,7 @@ class _ProcessSteps extends StatelessWidget {
                   width: 48,
                   child: Text(
                     step.$1,
-                    style: GoogleFonts.cinzel(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: OracleColors.rust,
                       fontSize: 12,
                       letterSpacing: 2,
@@ -116,11 +112,12 @@ class _ProcessSteps extends StatelessWidget {
                       children: [
                         TextSpan(
                           text: '${step.$2}: ',
-                          style: GoogleFonts.cinzel(
-                            color: OracleColors.ink,
-                            fontSize: 13,
-                            letterSpacing: 1.4,
-                          ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
+                                color: OracleColors.ink,
+                                fontSize: 13,
+                                letterSpacing: 1.4,
+                              ),
                         ),
                         TextSpan(text: step.$3),
                       ],
@@ -154,12 +151,12 @@ class _SystemPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return OracleCard(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(border: Border.all(color: OracleColors.rule)),
+      color: Colors.transparent,
       child: Text(
         label.toUpperCase(),
-        style: GoogleFonts.cinzel(
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
           color: OracleColors.inkMuted,
           fontSize: 10,
           letterSpacing: 1.8,

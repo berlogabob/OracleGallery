@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../models/session_data.dart';
 import '../theme/oracle_theme.dart';
 import 'cloth_layout.dart';
+import 'oracle_primitives.dart';
 
 class SteppedClothSurface extends StatelessWidget {
   const SteppedClothSurface({
@@ -47,11 +48,12 @@ class SteppedClothSurface extends StatelessWidget {
                 child: SizedBox(
                   width: geometry.surfaceWidth,
                   height: geometry.surfaceHeight,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE6DCC7),
-                      border: Border.all(color: OracleColors.rule, width: 0.8),
-                    ),
+                  child: OracleCard(
+                    padding: EdgeInsets.zero,
+                    color: const Color(0xFFE6DCC7),
+                    // Heavier than the standard 0.7 card rule: this large
+                    // surface reads better with a bolder containing edge.
+                    borderWidth: 0.8,
                     child: Stack(
                       children: [
                         Positioned.fill(
@@ -109,13 +111,10 @@ class _ClothHitTarget extends StatelessWidget {
       width: targetSize,
       height: targetSize,
       child: Tooltip(
-        message: session.markName.isEmpty
-            ? session.sessionId
-            : session.markName,
+        message: session.displayName,
         child: Semantics(
           button: true,
-          label:
-              'Open ${session.markName.isEmpty ? session.sessionId : session.markName}',
+          label: 'Open ${session.displayName}',
           selected: highlighted,
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
@@ -198,9 +197,7 @@ class _SteppedClothPainter extends CustomPainter {
   ) {
     final center = geometry.centerFor(placement);
     final radius = geometry.cell * (highlighted ? 0.48 : 0.46);
-    final hash = _stableHash(
-      session.markName.isNotEmpty ? session.markName : session.sessionId,
-    );
+    final hash = _stableHash(session.displayName);
     final accent = highlighted ? OracleColors.rust : OracleColors.goldDim;
     final outlinePaint = Paint()
       ..color = accent.withValues(alpha: highlighted ? 0.88 : 0.54)

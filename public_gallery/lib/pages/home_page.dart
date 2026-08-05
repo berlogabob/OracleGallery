@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
+import '../widgets/session_lookup_field.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -41,18 +42,19 @@ class _HomePageState extends State<HomePage> {
                       Text(
                         'THE ORACLE THAT WEARS US',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.cinzel(
-                          color: OracleColors.gold,
-                          fontSize: compact ? 30 : 42,
-                          letterSpacing: compact ? 4 : 8,
-                          height: 1.18,
-                        ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(
+                              color: OracleColors.gold,
+                              fontSize: compact ? 30 : 42,
+                              letterSpacing: compact ? 4 : 8,
+                              height: 1.18,
+                            ),
                       ),
                       const SizedBox(height: 18),
                       Text(
                         'A public cloth of generated marks, receipts, and printed fragments.',
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.ebGaramond(
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: OracleColors.cream,
                           fontSize: compact ? 20 : 22,
                           fontStyle: FontStyle.italic,
@@ -103,9 +105,10 @@ class _HomePageState extends State<HomePage> {
         OracleSection(
           label: 'Find your mark',
           title: 'Open a session directly from a printed receipt.',
-          child: _SessionLookup(
+          child: SessionLookupField(
             controller: _sessionController,
             onLookup: _openSession,
+            labelText: 'Enter your session ID',
             supportingText: 'Your session ID is printed on your receipt.',
           ),
         ),
@@ -162,59 +165,6 @@ class _HomePageState extends State<HomePage> {
         }
         return null;
       }),
-    );
-  }
-}
-
-class _SessionLookup extends StatelessWidget {
-  const _SessionLookup({
-    required this.controller,
-    required this.onLookup,
-    required this.supportingText,
-  });
-
-  final TextEditingController controller;
-  final ValueChanged<String> onLookup;
-  final String supportingText;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 620;
-        final input = TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Enter your session ID',
-            hintText: '20260428_183129',
-          ),
-          onSubmitted: onLookup,
-        );
-        final button = FilledButton(
-          onPressed: () => onLookup(controller.text),
-          child: const Text('Find'),
-        );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (compact)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [input, const SizedBox(height: 14), button],
-              )
-            else
-              Row(
-                children: [
-                  Expanded(child: input),
-                  const SizedBox(width: 12),
-                  button,
-                ],
-              ),
-            const SizedBox(height: 10),
-            Text(supportingText, style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        );
-      },
     );
   }
 }
@@ -294,13 +244,12 @@ class _ClothPreview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return OracleCard.accent(
       height: 190,
       width: double.infinity,
-      decoration: BoxDecoration(
-        border: Border.all(color: OracleColors.goldDim, width: 0.7),
-        color: OracleColors.voidColor,
-      ),
+      borderColor: OracleColors.goldDim,
+      borderWidth: 0.7,
+      padding: EdgeInsets.zero,
       child: CustomPaint(painter: _ClothPreviewPainter()),
     );
   }

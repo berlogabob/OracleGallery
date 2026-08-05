@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 
@@ -58,7 +57,7 @@ class _OracleNav extends StatelessWidget {
             onTap: () => context.go('/'),
             child: Text(
               'ORACLE',
-              style: GoogleFonts.cinzelDecorative(
+              style: Theme.of(context).textTheme.displayLarge?.copyWith(
                 color: OracleColors.ink,
                 fontSize: compact ? 15 : 18,
                 letterSpacing: compact ? 3 : 5,
@@ -79,7 +78,7 @@ class _OracleNav extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
                     link.label.toUpperCase(),
-                    style: GoogleFonts.cinzel(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: active ? OracleColors.rust : OracleColors.inkMuted,
                       fontSize: compact ? 8 : 10,
                       letterSpacing: compact ? 1.6 : 2.4,

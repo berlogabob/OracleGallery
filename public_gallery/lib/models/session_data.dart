@@ -41,6 +41,9 @@ class SessionData {
 
   bool get isPublished => status == 'published';
 
+  /// The mark name when present, otherwise the session ID.
+  String get displayName => markName.isEmpty ? sessionId : markName;
+
   bool get isPublicInLibrary {
     final lowerTags = tags.map((tag) => tag.toLowerCase()).toSet();
     return visibleInLibrary &&

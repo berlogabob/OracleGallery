@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
@@ -66,25 +65,19 @@ class _TeamCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: OracleColors.paper,
-        border: Border.all(color: OracleColors.rule, width: 0.7),
-      ),
+    final textTheme = Theme.of(context).textTheme;
+    return OracleCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
+          OracleCard(
             height: 120,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: OracleColors.cream,
-              border: Border.all(color: OracleColors.rule, width: 0.7),
-            ),
+            color: OracleColors.cream,
+            padding: EdgeInsets.zero,
             child: Text(
               'ORACLE',
-              style: GoogleFonts.cinzelDecorative(
+              style: textTheme.displayLarge?.copyWith(
                 color: OracleColors.goldDim,
                 fontSize: 16,
                 letterSpacing: 4,
@@ -94,19 +87,19 @@ class _TeamCard extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             member.name.toUpperCase(),
-            style: Theme.of(context).textTheme.titleMedium,
+            style: textTheme.titleMedium,
           ),
           const SizedBox(height: 6),
           Text(
             member.role,
-            style: GoogleFonts.ebGaramond(
+            style: textTheme.bodyMedium?.copyWith(
               color: OracleColors.rust,
               fontSize: 16,
               fontStyle: FontStyle.italic,
             ),
           ),
           const SizedBox(height: 12),
-          Text(member.bio, style: Theme.of(context).textTheme.bodyMedium),
+          Text(member.bio, style: textTheme.bodyMedium),
         ],
       ),
     );

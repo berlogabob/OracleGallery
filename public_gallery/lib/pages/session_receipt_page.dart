@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../models/session_data.dart';
 import '../services/session_repository.dart';
@@ -107,22 +106,22 @@ class _Receipt extends StatelessWidget {
     final dateLine =
         '${created.day.toString().padLeft(2, '0')} · ${created.month.toString().padLeft(2, '0')} · ${created.year} · ${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
 
+    final textTheme = Theme.of(context).textTheme;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
-        child: Container(
+        child: OracleCard(
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 34),
-          decoration: BoxDecoration(
-            color: OracleColors.paper,
-            border: Border.all(color: OracleColors.rule, width: 0.8),
-          ),
+          // Slightly heavier rule than the standard 0.7 card border: this
+          // is the primary receipt artifact and reads intentionally bolder.
+          borderWidth: 0.8,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
                 'THE ORACLE',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(
+                style: textTheme.titleMedium?.copyWith(
                   color: OracleColors.gold,
                   fontSize: 20,
                   letterSpacing: 5,
@@ -132,7 +131,7 @@ class _Receipt extends StatelessWidget {
               Text(
                 dateLine,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(
+                style: textTheme.titleMedium?.copyWith(
                   color: OracleColors.inkMuted,
                   fontSize: 11,
                   letterSpacing: 4,
@@ -154,7 +153,7 @@ class _Receipt extends StatelessWidget {
                     ? 'THE UNNAMED MARK'
                     : session.markName.toUpperCase(),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(
+                style: textTheme.titleMedium?.copyWith(
                   color: OracleColors.ink,
                   fontSize: 22,
                   letterSpacing: 3,
@@ -168,7 +167,7 @@ class _Receipt extends StatelessWidget {
                     ? 'The oracle has not spoken yet.'
                     : session.oracleText,
                 textAlign: TextAlign.center,
-                style: GoogleFonts.ebGaramond(
+                style: textTheme.bodyLarge?.copyWith(
                   color: OracleColors.inkMid,
                   fontSize: 18,
                   fontStyle: FontStyle.italic,
@@ -187,7 +186,7 @@ class _Receipt extends StatelessWidget {
                     ? 'UNSPECIFIED'
                     : session.themes.map((t) => t.toUpperCase()).join(' · '),
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(
+                style: textTheme.titleMedium?.copyWith(
                   color: OracleColors.ink,
                   fontSize: 15,
                   letterSpacing: 2.5,
@@ -197,7 +196,7 @@ class _Receipt extends StatelessWidget {
               Text(
                 'PRINT STATUS · ${session.plotStatus.toUpperCase()}',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.cinzel(
+                style: textTheme.titleMedium?.copyWith(
                   color: OracleColors.goldDim,
                   fontSize: 10,
                   letterSpacing: 2.4,
@@ -245,7 +244,7 @@ class _Receipt extends StatelessWidget {
               child: Text(
                 entry.key.toUpperCase(),
                 textAlign: TextAlign.right,
-                style: GoogleFonts.cinzel(
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: OracleColors.inkMid,
                   fontSize: 12,
                   letterSpacing: 1.6,
@@ -257,7 +256,7 @@ class _Receipt extends StatelessWidget {
               width: 54,
               child: Text(
                 entry.value.toStringAsFixed(2),
-                style: GoogleFonts.cinzel(
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: OracleColors.ink,
                   fontSize: 12,
                   letterSpacing: 1.6,
@@ -278,19 +277,16 @@ class _QrImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return OracleCard(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: OracleColors.cream,
-        border: Border.all(color: OracleColors.rule, width: 0.7),
-      ),
+      color: OracleColors.cream,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             'QR RECEIPT',
             textAlign: TextAlign.center,
-            style: GoogleFonts.cinzel(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: OracleColors.rust,
               fontSize: 10,
               letterSpacing: 3,
@@ -354,7 +350,7 @@ class _Rule extends StatelessWidget {
         Text(
           label,
           textAlign: TextAlign.center,
-          style: GoogleFonts.cinzel(
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
             color: OracleColors.rust,
             fontSize: 11,
             letterSpacing: 4,

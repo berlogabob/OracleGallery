@@ -31,7 +31,6 @@ class OracleGalleryApp extends StatelessWidget {
                 highlightSessionId: state.uri.queryParameters['session'],
               ),
             ),
-            GoRoute(path: '/library', redirect: (context, state) => '/cloth'),
             GoRoute(
               path: '/marks',
               builder: (context, state) => const MarksPage(),

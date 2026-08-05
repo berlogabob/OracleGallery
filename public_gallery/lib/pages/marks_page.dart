@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
@@ -129,11 +128,8 @@ class _MarkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: OracleColors.paper,
-        border: Border.all(color: OracleColors.rule, width: 0.7),
-      ),
+    return OracleCard(
+      padding: EdgeInsets.zero,
       child: LayoutBuilder(
         builder: (context, constraints) {
           final stacked = constraints.maxWidth < 520;
@@ -187,7 +183,7 @@ class _MarkVisual extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             mark.emotion.toUpperCase(),
-            style: GoogleFonts.cinzel(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: OracleColors.goldDim,
               fontSize: 10,
               letterSpacing: 2.4,
@@ -197,7 +193,7 @@ class _MarkVisual extends StatelessWidget {
           Text(
             mark.name,
             textAlign: TextAlign.center,
-            style: GoogleFonts.cinzel(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: OracleColors.gold,
               fontSize: 13,
               letterSpacing: 2,
@@ -226,7 +222,7 @@ class _MarkCopy extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             mark.reading,
-            style: GoogleFonts.ebGaramond(
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
               color: OracleColors.inkMid,
               fontSize: 17,
               fontStyle: FontStyle.italic,

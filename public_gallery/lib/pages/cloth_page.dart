@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../models/session_data.dart';
 import '../services/session_repository.dart';
 import '../theme/oracle_theme.dart';
 import '../widgets/oracle_primitives.dart';
+import '../widgets/session_lookup_field.dart';
 import '../widgets/stepped_cloth_surface.dart';
 
 class ClothPage extends StatelessWidget {
@@ -175,19 +175,16 @@ class _ClothToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return OracleCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: OracleColors.paper,
-        border: Border.all(color: OracleColors.rule, width: 0.7),
-      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final narrow = constraints.maxWidth < 680;
           final count = _CountPanel(visibleCount: visibleCount);
-          final lookup = _LookupPanel(
+          final lookup = SessionLookupField(
             controller: controller,
             onLookup: onLookup,
+            labelText: 'Find session in the cloth',
           );
           if (narrow) {
             return Column(
@@ -230,7 +227,7 @@ class _CountPanel extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           visibleCount.toString().padLeft(3, '0'),
-          style: GoogleFonts.cinzelDecorative(
+          style: Theme.of(context).textTheme.displayLarge?.copyWith(
             color: OracleColors.gold,
             fontSize: 34,
             letterSpacing: 4,
@@ -253,47 +250,6 @@ class _BrowseMarksHint extends StatelessWidget {
   }
 }
 
-class _LookupPanel extends StatelessWidget {
-  const _LookupPanel({required this.controller, required this.onLookup});
-
-  final TextEditingController controller;
-  final ValueChanged<String> onLookup;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final compact = constraints.maxWidth < 420;
-        final input = TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Find session in the cloth',
-            hintText: '20260428_183129',
-          ),
-          onSubmitted: onLookup,
-        );
-        final button = FilledButton(
-          onPressed: () => onLookup(controller.text),
-          child: const Text('Find'),
-        );
-        if (compact) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [input, const SizedBox(height: 12), button],
-          );
-        }
-        return Row(
-          children: [
-            Expanded(child: input),
-            const SizedBox(width: 12),
-            button,
-          ],
-        );
-      },
-    );
-  }
-}
-
 class _HighlightedSessionPanel extends StatelessWidget {
   const _HighlightedSessionPanel({required this.session});
 
@@ -301,12 +257,7 @@ class _HighlightedSessionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: OracleColors.voidColor,
-        border: Border.all(color: OracleColors.gold, width: 0.8),
-      ),
+    return OracleCard.accent(
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 640;
@@ -318,10 +269,8 @@ class _HighlightedSessionPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                session.markName.isEmpty
-                    ? session.sessionId
-                    : session.markName.toUpperCase(),
-                style: GoogleFonts.cinzel(
+                session.displayName.toUpperCase(),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: OracleColors.gold,
                   fontSize: 14,
                   letterSpacing: 2.2,
@@ -332,7 +281,7 @@ class _HighlightedSessionPanel extends StatelessWidget {
                 session.oracleText.isEmpty
                     ? 'The oracle has not spoken yet.'
                     : session.oracleText,
-                style: GoogleFonts.ebGaramond(
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: OracleColors.cream,
                   fontSize: 18,
                   fontStyle: FontStyle.italic,

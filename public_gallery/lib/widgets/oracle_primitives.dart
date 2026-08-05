@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/oracle_theme.dart';
 
@@ -42,6 +41,7 @@ class OracleSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = voidSection ? OracleColors.cream : OracleColors.ink;
+    final textTheme = Theme.of(context).textTheme;
     return Container(
       color: voidSection ? OracleColors.voidColor : OracleColors.cream,
       padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 48),
@@ -53,7 +53,7 @@ class OracleSection extends StatelessWidget {
             children: [
               Text(
                 label.toUpperCase(),
-                style: GoogleFonts.cinzel(
+                style: textTheme.titleMedium?.copyWith(
                   color: voidSection ? OracleColors.gold : OracleColors.rust,
                   fontSize: 10,
                   letterSpacing: 3,
@@ -67,7 +67,7 @@ class OracleSection extends StatelessWidget {
               const SizedBox(height: 22),
               Text(
                 title,
-                style: GoogleFonts.ebGaramond(
+                style: textTheme.bodyLarge?.copyWith(
                   color: foreground,
                   fontSize: 34,
                   fontStyle: FontStyle.italic,
@@ -80,6 +80,63 @@ class OracleSection extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Shared paper-card decoration: a flat color fill with a thin rule border.
+///
+/// Use [OracleCard] for the default paper/rule treatment used across
+/// content cards, and [OracleCard.accent] for the void-background,
+/// gold-family border treatment used on the two "highlighted" surfaces
+/// (the cloth's highlighted session panel and the home page cloth
+/// preview).
+class OracleCard extends StatelessWidget {
+  const OracleCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(22),
+    this.color = OracleColors.paper,
+    this.borderColor = OracleColors.rule,
+    this.borderWidth = 0.7,
+    this.width,
+    this.height,
+    this.alignment,
+  });
+
+  const OracleCard.accent({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+    this.color = OracleColors.voidColor,
+    this.borderColor = OracleColors.gold,
+    this.borderWidth = 0.8,
+    this.width,
+    this.height,
+    this.alignment,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final Color color;
+  final Color borderColor;
+  final double borderWidth;
+  final double? width;
+  final double? height;
+  final AlignmentGeometry? alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      alignment: alignment,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: color,
+        border: Border.all(color: borderColor, width: borderWidth),
+      ),
+      child: child,
     );
   }
 }
@@ -105,12 +162,7 @@ class StatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: OracleColors.paper,
-        border: Border.all(color: OracleColors.rule, width: 0.7),
-      ),
+    return OracleCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -132,7 +184,7 @@ class SymbolNetworkView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (svgUrl.isEmpty) {
-      return _placeholder();
+      return _placeholder(context);
     }
     return SizedBox(
       width: size,
@@ -151,15 +203,16 @@ class SymbolNetworkView extends StatelessWidget {
     );
   }
 
-  Widget _placeholder() {
-    return Container(
+  Widget _placeholder(BuildContext context) {
+    return OracleCard(
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: BoxDecoration(border: Border.all(color: OracleColors.rule)),
+      color: Colors.transparent,
+      padding: EdgeInsets.zero,
       child: Text(
         'MARK',
-        style: GoogleFonts.cinzel(
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
           color: OracleColors.gold,
           fontSize: 11,
           letterSpacing: 2,
