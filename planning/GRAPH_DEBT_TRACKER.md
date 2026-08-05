@@ -61,3 +61,17 @@ The W1 split reduced *file-level* debt (support.py −500 LOC) but, as expected 
 1. **sev-4 F-001**: FluidNC offline toast — raw `IP:port`, no retry, not dismissible, inconsistent across tabs.
 2. **sev-3**: no success feedback after action buttons (jog/home/start).
 3. **sev-3**: operator-facing jargon ("Z up legacy") + remaining button-style inconsistency (5 styles → consolidate to 2).
+
+---
+
+# Round 4 (2026-08-05): top audit findings fixed
+
+| Finding | Fix | Evidence | Status |
+|---|---|---|---|
+| F-001 sev-4 — raw IP:port offline toast, no recovery, not dismissible, inconsistent | One friendly sticky toast per offline transition ("Plotter offline — check power and WiFi. Use CONNECT…"), DISMISS button, technical detail demoted to caption + logs; dedup flag reset on reconnect | audit/2026-08-05-1008/screens-fixes/03_tests.png shows the new toast | ✅ |
+| sev-3 — no success feedback on actions | Jog/home/pen/work-zero actions now confirm ("Homed X", "Jogged X +10mm", …); failures unchanged | context.py `fluidnc_action(success_message=…)` | ✅ |
+| sev-3 — "Z up/down legacy" jargon | Renamed "Pen-up Z (mm)" / "Pen-down Z (mm)", tooltips keep the legacy explanation | calibration.py | ✅ |
+| sev-3 — 5 ad-hoc button styles | Two shared helpers (primary/safe) + danger for E-STOP; `color=positive` inline count → 0 | ui.py + 6 workspaces | ✅ |
+| Tests | — | 204 passed; GUI boot 200 | ✅ |
+
+Next audit run computes the formal trend against audit/2026-08-05-1008/findings.json (expect F-001 and the three sev-3s → fixed).
