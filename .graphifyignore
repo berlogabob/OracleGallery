@@ -1,0 +1,12 @@
+# graphify scan exclusions (gitignore syntax; .gitignore rules also apply)
+
+# Compiled Flutter web bundle served by GitHub Pages — minified build artifacts,
+# not source. Polluted the graph with thousands of junk nodes (main.dart.js,
+# canvaskit) before this exclusion.
+docs/
+
+# Test suites: graphify's AST pass emits INFERRED "uses" edges from test-fixture
+# name references (mock -> service), which the 2026-08-04 edge audit found to be
+# 15/16 wrong (planning/GRAPH_EDGE_AUDIT.md). Excluding tests keeps the graph a
+# map of production architecture.
+tests/
