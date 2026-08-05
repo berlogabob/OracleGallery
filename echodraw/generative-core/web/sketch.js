@@ -370,19 +370,6 @@ function setup() {
     }
   });
 
-  document.getElementById('stream-checkbox').addEventListener('change', (e) => {
-    if (e.target.checked) {
-      startStreaming();
-    } else {
-      stopStreaming();
-    }
-  });
-
-  document.getElementById('stream-interval').addEventListener('change', () => {
-    if (document.getElementById('stream-checkbox').checked) {
-      startStreaming(); // restart with new interval
-    }
-  });
 }
 
 function draw() {
@@ -436,12 +423,10 @@ function sendToPlotter() {
 // ============================================================================
 // Stream mode: regenerate + send on a repeating interval
 // ============================================================================
-function startStreaming() {
+function startStreaming(seconds) {
   stopStreaming(); // clear any existing interval first
 
-  const intervalInput = document.getElementById('stream-interval');
-  const seconds = Math.max(5, parseInt(intervalInput.value, 10) || 15);
-  intervalInput.value = seconds;
+  seconds = Math.max(5, Number(seconds) || 15);
 
   streamTimer = setInterval(() => {
     currentSeed = Math.floor(Math.random() * 1000000);
@@ -457,6 +442,16 @@ function stopStreaming() {
     streamTimer = null;
   }
 }
+
+window.addEventListener('message', (event) => {
+  const message = event.data;
+  if (!message || message.type !== 'stream' || typeof message.enabled !== 'boolean') return;
+  if (message.enabled) {
+    startStreaming(message.seconds);
+  } else {
+    stopStreaming();
+  }
+});
 
 // ============================================================================
 // Debug: expose current SVG

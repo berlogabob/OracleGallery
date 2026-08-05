@@ -58,11 +58,11 @@ def build(ctx: GuiContext) -> None:
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Generative sketch").classes("text-sm font-bold")
-            ui.element("iframe").props('src="/generative/index.html"').style("width:100%; height:900px; border:0; background:#1a1a1a; border-radius:10px;")
+            ui.element("iframe").props('id="generative-frame" src="/generative/index.html"').style("width:100%; height:900px; border:0; background:#f7f1e7; border-radius:10px;")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Send to plotter").classes("text-sm font-bold")
-            ui.label("SVG X0/Y0 origin controls are on the TESTS tab.").classes("text-xs text-[#8f4f2b]")
+            origin_label = ui.label("Origin X/Y: — / — mm (set on TESTS tab)").classes("text-xs text-[#8f4f2b]")
 
             captured_label = ui.label("No capture yet").classes("path-label text-xs")
 
@@ -71,22 +71,39 @@ def build(ctx: GuiContext) -> None:
                     captured_label.set_text(f"Captured: {LATEST['name']}")
                 else:
                     captured_label.set_text("No capture yet")
+                origin_x = ctx.fields.get("direct_svg_origin_x_mm")
+                origin_y = ctx.fields.get("direct_svg_origin_y_mm")
+                if origin_x is not None and origin_y is not None:
+                    origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on TESTS tab)")
 
             ui.timer(1.0, update_capture_label)
 
             with ui.row().classes("items-center gap-2"):
-                ui.button("START PRINT", on_click=lambda: ctx.print_generative_svg()).props("dense color=positive")
+                ui.button("PRINT CAPTURED SVG", on_click=lambda: ctx.print_generative_svg()).props("dense color=positive")
+
+            def push_stream_state() -> None:
+                seconds = max(5, float(stream_interval.value or 15))
+                ui.run_javascript(
+                    f"""const frame = document.getElementById('generative-frame');
+                    frame?.contentWindow?.postMessage({{type: 'stream', enabled: {str(STREAM['enabled']).lower()}, seconds: {seconds}}}, '*');"""
+                )
 
             def stream_toggled(event) -> None:
                 STREAM["enabled"] = bool(event.value)
+                push_stream_state()
                 if not STREAM["enabled"]:
                     ui.notify("Stream stopped", color="info")
 
-            ui.switch(
-                "Stream to plotter (auto-print each captured frame)",
-                value=STREAM["enabled"],
-                on_change=stream_toggled,
-            )
+            with ui.row().classes("items-center gap-2"):
+                ui.switch(
+                    "Stream to plotter (auto-print each captured frame)",
+                    value=STREAM["enabled"],
+                    on_change=stream_toggled,
+                )
+                stream_interval = ui.number(
+                    "Interval s", value=15, min=5, step=1,
+                    on_change=lambda _: push_stream_state(),
+                ).props("dense outlined").classes("w-28")
 
             async def _stream_tick() -> None:
                 if not should_send_frame(STREAM, LATEST):
