@@ -9,12 +9,13 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
+from ..ui import helper_text
 
 
 def render_motion_panel(ctx: GuiContext) -> None:
     with ui.card().classes("oracle-card compact-card w-full"):
         ui.label("Manual motion").classes("text-sm font-bold")
-        ui.label("Jog and homing for setup. Manual movement is blocked while G-code streams.").classes("text-xs text-[#8f4f2b]")
+        helper_text("Jog and homing for setup. Manual movement is blocked while G-code streams.")
         with ui.row().classes("gap-2 items-end"):
             ctx.fields["jog_step"] = ui.select(
                 {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},

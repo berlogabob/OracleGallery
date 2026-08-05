@@ -4,37 +4,6 @@ from typing import Any, Callable
 
 from nicegui import ui
 
-from ...shared.models import ComponentState, ComponentStatus
-
-
-STATUS_COLORS = {
-    ComponentStatus.RUNNING: "#2f7d46",
-    ComponentStatus.STARTING: "#9a5b24",
-    ComponentStatus.WARNING: "#b7791f",
-    ComponentStatus.ERROR: "#a43c2f",
-    ComponentStatus.OFFLINE: "#7a6f66",
-    ComponentStatus.STOPPED: "#7a6f66",
-}
-
-
-def status_pill(label: str) -> Any:
-    return ui.label(f"{label}: -").classes("status-pill")
-
-
-def update_status_pill(label: Any, state: ComponentState | None, display_name: str) -> None:
-    if state is None:
-        label.set_text(f"{display_name}: -")
-        label.style("border-color:#dac9ad;color:#7a6f66")
-        return
-    color = STATUS_COLORS.get(state.status, "#7a6f66")
-    label.set_text(f"{display_name}: {state.status.value}")
-    label.style(f"border-color:{color};color:{color}")
-
-
-def primary_action_button(label: str, on_click: Callable[..., Any]) -> Any:
-    return ui.button(label, on_click=on_click).props("dense color=positive")
-
-
 def danger_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     return ui.button(label, on_click=on_click).props("dense color=warning")
 
@@ -45,6 +14,20 @@ def safe_action_button(label: str, on_click: Callable[..., Any]) -> Any:
 
 def warning_banner(text: str) -> Any:
     return ui.label(text).classes("warning-banner")
+
+
+def mini_metric(label: str, *, extra_classes: str = "", style: str = "") -> Any:
+    """div.mini-metric > label.label(label) > label.value("-"); returns the value handle."""
+    classes = f"mini-metric {extra_classes}".strip()
+    with ui.element("div").classes(classes) as element:
+        if style:
+            element.style(style)
+        ui.label(label).classes("label")
+        return ui.label("-").classes("value")
+
+
+def helper_text(text: str) -> None:
+    ui.label(text).classes("text-xs text-[#8f4f2b]")
 
 
 def number_control(

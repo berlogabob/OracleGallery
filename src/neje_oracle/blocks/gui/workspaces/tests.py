@@ -6,7 +6,7 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import number_control, status_pill
+from ..ui import helper_text, number_control
 
 
 def build(ctx: GuiContext) -> None:
@@ -15,25 +15,15 @@ def build(ctx: GuiContext) -> None:
 
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("System nodes").classes("text-sm font-bold")
-            ui.label("Green = ready/running, yellow = warning, gray = offline/stopped, red = error.").classes("text-xs text-[#8f4f2b]")
-            with ui.row().classes("gap-2 flex-wrap"):
-                ctx.node_pills["fluidnc"] = status_pill("Plotter")
-                ctx.node_pills["macmini"] = status_pill("Mac mini")
-                ctx.node_pills["firebase"] = status_pill("Firebase")
-                ctx.node_pills["queue"] = status_pill("Queue")
-                ctx.node_pills["print"] = status_pill("Print")
-
-        with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("G-code test draw").classes("text-sm font-bold")
-            ui.label("Generates a local sheet from bundled symbols or starts a test print from the current queue/settings.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Generates a local sheet from bundled symbols or starts a test print from the current queue/settings.")
             with ui.row().classes("items-center gap-2"):
                 ui.button("GENERATE G-CODE", on_click=ctx.generate_dry_run).props("dense")
                 ui.button("START TEST PRINT", on_click=ctx.start_test_print).props("dense color=positive")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("SVG test draw").classes("text-sm font-bold")
-            ui.label("Prints the selected Inkscape SVG directly to FluidNC. Requires passing system checks, work zero, CONNECT and Idle.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Prints the selected Inkscape SVG directly to FluidNC. Requires passing system checks, work zero, CONNECT and Idle.")
             with ui.row().classes("gap-2 w-full"):
                 number_control(
                     fields, "direct_svg_origin_x_mm", label="SVG X0", value=settings.direct_svg_origin_x_mm,
@@ -52,6 +42,6 @@ def build(ctx: GuiContext) -> None:
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Test workspace notes").classes("text-sm font-bold")
-            ui.label("Tests run real FluidNC motion after the same readiness checks.").classes("text-xs text-[#8f4f2b]")
-            ui.label("Use generated G-code first when validating layout or sampling changes.").classes("text-xs text-[#8f4f2b]")
-            ui.label("The preview remains centered so the expected sheet is visible before print.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Tests run real FluidNC motion after the same readiness checks.")
+            helper_text("Use generated G-code first when validating layout or sampling changes.")
+            helper_text("The preview remains centered so the expected sheet is visible before print.")

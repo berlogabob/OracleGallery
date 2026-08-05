@@ -5,7 +5,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import danger_action_button, log_viewer, safe_action_button
+from ..ui import danger_action_button, helper_text, log_viewer, mini_metric, safe_action_button
 
 
 def build(ctx: GuiContext) -> None:
@@ -14,7 +14,7 @@ def build(ctx: GuiContext) -> None:
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("System run").classes("text-sm font-bold")
-            ui.label("Start the supervised local services, reset the Firebase baseline for this run, or stop safely before the next sheet.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Start the supervised local services, reset the Firebase baseline for this run, or stop safely before the next sheet.")
             with ui.row().classes("gap-2"):
                 ui.button("START SYSTEM", on_click=ctx.start_system).props("dense color=positive")
                 safe_action_button("NEW RUN", ctx.reset_baseline)
@@ -27,7 +27,7 @@ def build(ctx: GuiContext) -> None:
                 ui.button("STOP", on_click=ctx.stop_macmini).props("dense color=warning")
                 ui.button("SCAN", on_click=ctx.scan_macmini).props("dense flat")
                 ui.button("RESTART", on_click=ctx.restart_macmini).props("dense")
-            ui.label("Controlled through NEJE_MACMINI_AGENT_URL").classes("text-xs text-[#8f4f2b]")
+            helper_text("Controlled through NEJE_MACMINI_AGENT_URL")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Thermal printer").classes("text-sm font-bold")
@@ -44,13 +44,9 @@ def build(ctx: GuiContext) -> None:
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Work zero").classes("text-sm font-bold")
-            ui.label("Before Set Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Before Set Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure.")
             with ui.row().classes("gap-2"):
                 ui.button("SET WORK ZERO", on_click=ctx.set_work_zero).props("dense color=warning")
-            with ui.grid(columns=1).classes("w-full gap-1"):
-                with ui.element("div").classes("mini-metric"):
-                    ui.label("Zero").classes("label")
-                    ctx.ready_labels["zero"] = ui.label("-").classes("value")
             ctx.ready_labels["message"] = ui.label("-").classes("path-label text-xs")
             ui.separator()
             ctx.system_check_label = ui.label("System check runs automatically when print starts.").classes("text-xs text-[#8f4f2b]")
@@ -59,9 +55,7 @@ def build(ctx: GuiContext) -> None:
             ui.label("Queue").classes("text-sm font-bold")
             with ui.grid(columns=4).classes("w-full gap-1"):
                 for key, label in (("state", "Queue"), ("pending", "Pending"), ("active", "Active"), ("failed", "Fail/Skip")):
-                    with ui.element("div").classes("mini-metric"):
-                        ui.label(label).classes("label")
-                        ctx.queue_labels[key] = ui.label("-").classes("value")
+                    ctx.queue_labels[key] = mini_metric(label)
             ctx.queue_labels["message"] = ui.label("-").classes("path-label text-[10px]")
 
         with ui.card().classes("oracle-card compact-card w-full"):

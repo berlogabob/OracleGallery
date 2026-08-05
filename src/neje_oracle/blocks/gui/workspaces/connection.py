@@ -8,6 +8,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
+from ..ui import helper_text, mini_metric
 from .motion import render_motion_panel
 
 
@@ -16,7 +17,7 @@ def build(ctx: GuiContext) -> None:
         # FluidNC connection
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("FluidNC Connection").classes("text-sm font-bold")
-            ui.label("Network/controller checks only. No motion except emergency, unlock, resume and reset.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Network/controller checks only. No motion except emergency, unlock, resume and reset.")
             with ui.row().classes("gap-2"):
                 ui.button("CONNECT", on_click=lambda: ctx.check_fluidnc(scan=False)).props("dense color=positive")
                 ui.button("SCAN LAN", on_click=ctx.scan_fluidnc).props("dense flat")
@@ -25,9 +26,7 @@ def build(ctx: GuiContext) -> None:
                     ("webui", "WebUI"), ("telnet", "Telnet"), ("state", "State"),
                     ("mpos", "MPos"), ("pins", "Inputs"), ("modal", "Modal"),
                 ):
-                    with ui.element("div").classes("mini-metric"):
-                        ui.label(label).classes("label")
-                        ctx.fluidnc_labels[key] = ui.label("-").classes("value")
+                    ctx.fluidnc_labels[key] = mini_metric(label)
             ctx.fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
             ctx.fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
 
@@ -45,9 +44,9 @@ def build(ctx: GuiContext) -> None:
         # Notes
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Connection checklist").classes("text-sm font-bold")
-            ui.label("1. Join the plotter Wi-Fi or hotspot.").classes("text-xs text-[#8f4f2b]")
-            ui.label("2. Press CONNECT and verify WebUI, Telnet, and Idle.").classes("text-xs text-[#8f4f2b]")
-            ui.label("3. Use recovery only for a known alarm or hold state.").classes("text-xs text-[#8f4f2b]")
+            helper_text("1. Join the plotter Wi-Fi or hotspot.")
+            helper_text("2. Press CONNECT and verify WebUI, Telnet, and Idle.")
+            helper_text("3. Use recovery only for a known alarm or hold state.")
 
         # Defer the initial async probe until the page event loop is running.
         ui.timer(0.1, lambda: ctx.check_fluidnc(scan=False), once=True)

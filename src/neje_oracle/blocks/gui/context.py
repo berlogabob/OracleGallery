@@ -18,6 +18,7 @@ from typing import Any
 from nicegui import run, ui
 
 from .modes import mode_policy
+from .ui import helper_text
 from .support import (
     GUI_DEFAULTS,
     _field_or_default,
@@ -63,7 +64,6 @@ class GuiContext:
         self.gcode_labels: dict[str, Any] = {}
         self.ready_labels: dict[str, Any] = {}
         self.live_labels: dict[str, Any] = {}
-        self.node_pills: dict[str, Any] = {}
         self.uploaded_svg: dict[str, Any] = {"name": "", "bytes": b""}
 
         store = self.supervisor.runtime_store
@@ -279,23 +279,12 @@ class GuiContext:
         if self.progress is not None:
             self.progress.value = min(max(progress_percent / 100.0, 0.0), 1.0)
         print_enabled = bool(status.get("print_enabled"))
-        dry_run = bool(status.get("dry_run"))
-        run_mode = str(status.get("run_mode", "-") or "-")
         status_text = str(status.get("status", "-") or "-").replace("_", " ")
-        transport_text = "G-CODE ONLY" if dry_run else "FLUIDNC MOTION"
-        print_text = "READY" if print_enabled else "STOPPED"
         if self.plotter_labels:
-            self.plotter_labels["state"].set_text(f"{status_text.upper()} · {print_text}")
-            self.plotter_labels["mode"].set_text(f"{run_mode.upper()} · {transport_text}")
             self.plotter_labels["sheet"].set_text(str(status.get("current_sheet_id") or "no sheet yet"))
             self.plotter_labels["cells"].set_text(
                 f"{total}/{layout_capacity(self.settings)} cells · "
                 f"user {status.get('user_count', 0)} · idle {status.get('idle_count', 0)}"
-            )
-            self.plotter_labels["progress"].set_text(
-                f"{progress_percent:.0f}% · row {current_row}/{status.get('row_count', 0)} · "
-                f"cell {current_cell_in_row}/{row_cell_count} · "
-                f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} lines"
             )
             self.plotter_labels["message"].set_text(str(status.get("message", "-") or "-"))
         if self.queue_labels:
@@ -334,7 +323,6 @@ class GuiContext:
             self.live_labels["next"].set_text(next_action)
             self.live_labels["blockers"].set_text(" · ".join(blockers) if blockers else "none")
         if self.ready_labels:
-            self.ready_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
             self.ready_labels["message"].set_text(readiness.message)
         if self.preview_progress_label is not None:
             if self.preview_mode["value"] == "printing":
@@ -355,14 +343,6 @@ class GuiContext:
             firebase_state = states.get("firebase")
             if firebase_state is not None:
                 self.live_labels["firebase"].set_text(firebase_state.status.value.upper())
-        if self.node_pills:
-            from .ui import update_status_pill
-
-            update_status_pill(self.node_pills["fluidnc"], states.get("fluidnc"), "Plotter")
-            update_status_pill(self.node_pills["macmini"], states.get("macmini_uploader"), "Mac mini")
-            update_status_pill(self.node_pills["firebase"], states.get("firebase"), "Firebase")
-            update_status_pill(self.node_pills["queue"], states.get("queue"), "Queue")
-            update_status_pill(self.node_pills["print"], states.get("print"), "Print")
 
     def refresh_logs(self) -> None:
         from ...shared.logging import read_logs
@@ -528,7 +508,7 @@ class GuiContext:
     def confirm_action(self, title: str, message: str, action: Any) -> None:
         with ui.dialog() as dialog, ui.card().classes("oracle-card"):
             ui.label(title).classes("text-sm font-bold")
-            ui.label(message).classes("text-xs text-[#8f4f2b]")
+            helper_text(message)
 
             async def confirmed() -> None:
                 dialog.close()

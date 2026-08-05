@@ -12,7 +12,7 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import number_control
+from ..ui import helper_text, mini_metric, number_control
 from .motion import render_motion_panel
 from ....shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS
 
@@ -29,7 +29,7 @@ def build(ctx: GuiContext) -> None:
         min_value: float, max_value: float, step: float, on_change: Callable,
     ) -> Any:
         with ui.grid(columns="135px 1fr 74px 28px 28px").classes("w-full items-center gap-2"):
-            ui.label(label).classes("text-xs text-[#8f4f2b]")
+            helper_text(label)
             control = ui.slider(min=min_value, max=max_value, step=step, value=value).props("dense").classes("w-full tight-slider")
             number = ui.number(value=value, min=min_value, max=max_value, step=step).props("dense outlined").classes("w-full")
 
@@ -83,7 +83,7 @@ def build(ctx: GuiContext) -> None:
         # Motion speed
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Motion speed").classes("text-sm font-bold")
-            ui.label("XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings.").classes("text-xs text-[#8f4f2b]")
+            helper_text("XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings.")
             with ui.grid(columns=2).classes("w-full gap-2"):
                 number_control(fields, "travel_rate", label="Travel mm/min", value=settings.travel_rate, default=5000, min_value=1, width_class="w-full", tooltip="Pen-up movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
                 number_control(fields, "draw_rate", label="Draw mm/min", value=settings.draw_rate, default=1800, min_value=1, width_class="w-full", tooltip="Drawing movement speed. Saved directly to G-code F.", on_change=persist_and_refresh)
@@ -129,14 +129,12 @@ def build(ctx: GuiContext) -> None:
 
         # Advanced
         with ui.expansion("Advanced calibration", icon="tune").classes("oracle-card compact-card w-full"):
-            ui.label("Use these controls for curve sampling, origin filters, and symbol correction after the physical layout is stable.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Use these controls for curve sampling, origin filters, and symbol correction after the physical layout is stable.")
             ui.label("Drawing detail").classes("text-sm font-bold")
-            ui.label("Sets how many G-code points are generated from SVG curves. Smaller spacing is smoother and slower; larger spacing is lighter and faster.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Sets how many G-code points are generated from SVG curves. Smaller spacing is smoother and slower; larger spacing is lighter and faster.")
             with ui.grid(columns=3).classes("w-full gap-1"):
                 for key, label in (("effective", "Active spacing"), ("points", "Path density"), ("load", "G-code load")):
-                    with ui.element("div").classes("mini-metric"):
-                        ui.label(label).classes("label")
-                        gcode_labels[key] = ui.label("-").classes("value")
+                    gcode_labels[key] = mini_metric(label)
             ui.label("Main detail").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
             num("sample_step_mm", "Spacing at normal cell size (mm)", settings.sample_step_mm, 0.05, "Distance between sampled points for an 80 mm reference cell.", step=0.05)
             ui.label("Auto-adjust for cell size").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
@@ -153,7 +151,7 @@ def build(ctx: GuiContext) -> None:
             ctx.update_gcode_detail_labels()
 
             ui.label("Filters / markers").classes("text-sm font-bold")
-            ui.label("Display filters affect preview immediately. Print filters apply from the next row, never mid-row.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Display filters affect preview immediately. Print filters apply from the next row, never mid-row.")
             with ui.grid(columns=3).classes("w-full gap-1"):
                 ui.label("Origin").classes("text-[10px] font-bold text-[#8f4f2b]")
                 ui.label("Preview").classes("text-[10px] font-bold text-[#8f4f2b]")
@@ -164,11 +162,11 @@ def build(ctx: GuiContext) -> None:
                     fields[f"print_origin:{origin}"] = ui.checkbox(value=origin in settings.print_origins).props("dense").on_value_change(persist_and_refresh)
 
             ui.label("Symbol scale correction").classes("text-sm font-bold")
-            ui.label("These controls define how generated symbols will look before test generation and printing.").classes("text-xs text-[#8f4f2b]")
+            helper_text("These controls define how generated symbols will look before test generation and printing.")
             calibration_slider_row("Random coarse", "randomness", value=settings.randomness, default=float(GUI_DEFAULTS.get("randomness", 0)), min_value=0, max_value=100, step=1, on_change=persist_and_refresh)
             calibration_slider_row("Random fine", "randomness_fine", value=settings.randomness_fine, default=float(GUI_DEFAULTS.get("randomness_fine", 0)), min_value=-10, max_value=10, step=0.1, on_change=persist_and_refresh)
             calibration_slider_row("Global scale", "global_scale", value=settings.global_scale, default=1.0, min_value=0.3, max_value=3.0, step=0.01, on_change=persist_and_refresh)
-            ui.label("Double-click any scale slider to reset it to 1.0. Scale changes are applied and saved immediately.").classes("text-xs text-[#8f4f2b]")
+            helper_text("Double-click any scale slider to reset it to 1.0. Scale changes are applied and saved immediately.")
             with ui.column().classes("w-full gap-0"):
                 for symbol in ctx.symbols:
                     calibration_slider_row(

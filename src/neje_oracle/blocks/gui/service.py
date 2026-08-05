@@ -7,7 +7,7 @@ from pathlib import Path
 from nicegui import ui
 
 from .context import GuiContext
-from .ui import warning_banner
+from .ui import mini_metric, warning_banner
 from .workspaces import calibration, connection, exhibition, generative, tests, work
 from ...shared.origin_markers import (
     ALL_ORIGINS,
@@ -68,11 +68,8 @@ PAGE_STYLE = """
   }
   .preview-frame { max-height: calc(100vh - 210px); overflow: auto; width: 100%; }
   .preview-frame svg { display: block; width: auto; height: auto; max-width: none; max-height: none; }
-  .symbol-preview svg { width: 58px; height: 58px; }
   .path-label { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tight-slider .q-slider { min-height: 28px; }
-  .status-pill { border: 1px solid #dac9ad; border-radius: 999px; padding: 3px 8px; font-size: 11px; white-space: nowrap; }
-  .mode-badge { border: 1px solid #9a5b24; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; color: #8f4f2b; }
   .warning-banner { background: #fff4df; border: 1px solid #c99743; border-radius: 10px; color: #8f4f2b; padding: 6px 8px; font-size: 12px; }
   .log-viewer textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.35; }
   .q-btn { min-height: 30px; }
@@ -107,9 +104,7 @@ PAGE_STYLE = """
 
 
 def _live_metric(ctx: GuiContext, key: str, label: str, *, important: bool = False) -> None:
-    with ui.element("div").classes("mini-metric next-action" if important else "mini-metric"):
-        ui.label(label).classes("label")
-        ctx.live_labels[key] = ui.label("-").classes("value")
+    ctx.live_labels[key] = mini_metric(label, extra_classes="next-action" if important else "")
 
 
 def _preview_legend() -> None:
@@ -165,9 +160,7 @@ def build_page() -> None:
             _live_metric(ctx, "queue", "Queue")
             _live_metric(ctx, "sheet", "Sheet")
             _live_metric(ctx, "next", "Next action", important=True)
-            with ui.element("div").classes("mini-metric").style("grid-column: 1 / -1"):
-                ui.label("Blockers").classes("label")
-                ctx.live_labels["blockers"] = ui.label("-").classes("value")
+            ctx.live_labels["blockers"] = mini_metric("Blockers", style="grid-column: 1 / -1")
 
         # Workspace column + always-visible preview
         with ui.grid(columns="minmax(420px, 1fr) 480px").classes("w-full gap-2 min-h-0 workspace-panel workspace-grid"):
