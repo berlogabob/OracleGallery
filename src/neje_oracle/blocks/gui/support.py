@@ -333,30 +333,31 @@ def create_direct_svg_print_job_from_gui(
     svg_file = destination / f"{sheet_id}_{_safe_upload_stem(original_name)}.svg"
     svg_file.write_text(svg_text, encoding="utf-8")
 
+    config = gui_settings_to_plotter_config(settings)
     effective_step = compute_effective_sample_step(
-        sample_step_mm=settings.sample_step_mm,
-        cell_diameter_mm=settings.cell_diameter_mm,
-        sample_reference_cell_mm=settings.sample_reference_cell_mm,
-        sample_density_exponent=settings.sample_density_exponent,
-        sample_min_step_mm=settings.sample_min_step_mm,
-        sample_max_step_mm=settings.sample_max_step_mm,
+        sample_step_mm=config.sample_step_mm,
+        cell_diameter_mm=config.cell_diameter_mm,
+        sample_reference_cell_mm=config.sample_reference_cell_mm,
+        sample_density_exponent=config.sample_density_exponent,
+        sample_min_step_mm=config.sample_min_step_mm,
+        sample_max_step_mm=config.sample_max_step_mm,
     )
     gcode = generate_absolute_svg_gcode(
         svg_file,
         sample_step_mm=effective_step,
-        travel_rate=settings.travel_rate,
-        draw_rate=settings.draw_rate,
-        xy_acceleration_mm_s2=_repair_xy_acceleration(settings.xy_acceleration_mm_s2),
+        travel_rate=config.travel_rate,
+        draw_rate=config.draw_rate,
+        xy_acceleration_mm_s2=config.xy_acceleration_mm_s2,
         pen_up_command=resolved_plotter_settings.pen_up_command,
         pen_down_command=resolved_plotter_settings.pen_down_command,
         title=f"direct SVG {label}",
         return_home=True,
         use_z_servo=resolved_plotter_settings.use_z_servo,
-        z_down_mm=settings.z_down_mm,
-        z_up_mm=settings.z_up_mm,
-        z_feed_mm_min=settings.z_feed_mm_min,
-        origin_x_mm=settings.direct_svg_origin_x_mm,
-        origin_y_mm=settings.direct_svg_origin_y_mm,
+        z_down_mm=config.z_down_mm,
+        z_up_mm=config.z_up_mm,
+        z_feed_mm_min=config.z_feed_mm_min,
+        origin_x_mm=settings.direct_svg_origin_x_mm,  # not part of PlotterRuntimeConfig
+        origin_y_mm=settings.direct_svg_origin_y_mm,  # not part of PlotterRuntimeConfig
         keep_non_negative=True,
         max_x_mm=resolved_plotter_settings.sheet_width_mm,
         max_y_mm=resolved_plotter_settings.sheet_height_mm,
@@ -586,9 +587,10 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
     scales = load_symbol_scales(symbol_root=symbol_root)
     cache_dir = output_root / "cache"
     ensure_dir(cache_dir)
+    config = gui_settings_to_plotter_config(settings)
     scaled_symbols: list[Path] = []
     for symbol in symbols:
-        scale = scales.get(symbol.name, 1.0) * settings.global_scale
+        scale = scales.get(symbol.name, 1.0) * settings.global_scale  # not part of PlotterRuntimeConfig
         cached = cache_dir / f"dry_run_{symbol.stem}.svg"
         cached.write_text(
             normalize_svg_file(symbol, marker_kind="idle", scale=scale, include_rings=False),
@@ -612,30 +614,30 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
     ]
     sheet_id = datetime.now(tz=UTC).strftime("gui_sheet_%Y%m%d_%H%M%S")
     effective_step = compute_effective_sample_step(
-        sample_step_mm=settings.sample_step_mm,
-        cell_diameter_mm=settings.cell_diameter_mm,
-        sample_reference_cell_mm=settings.sample_reference_cell_mm,
-        sample_density_exponent=settings.sample_density_exponent,
-        sample_min_step_mm=settings.sample_min_step_mm,
-        sample_max_step_mm=settings.sample_max_step_mm,
+        sample_step_mm=config.sample_step_mm,
+        cell_diameter_mm=config.cell_diameter_mm,
+        sample_reference_cell_mm=config.sample_reference_cell_mm,
+        sample_density_exponent=config.sample_density_exponent,
+        sample_min_step_mm=config.sample_min_step_mm,
+        sample_max_step_mm=config.sample_max_step_mm,
     )
     gcode = generate_sheet_gcode(
         items,
         placements,
         sample_step_mm=effective_step,
-        cell_diameter_mm=settings.cell_diameter_mm,
-        travel_rate=settings.travel_rate,
-        draw_rate=settings.draw_rate,
-        xy_acceleration_mm_s2=_repair_xy_acceleration(settings.xy_acceleration_mm_s2),
+        cell_diameter_mm=config.cell_diameter_mm,
+        travel_rate=config.travel_rate,
+        draw_rate=config.draw_rate,
+        xy_acceleration_mm_s2=config.xy_acceleration_mm_s2,
         pen_up_command=PlotterSettings().pen_up_command,
         pen_down_command=PlotterSettings().pen_down_command,
-        include_rings=settings.include_rings,
-        include_markers=settings.include_markers,
-        marker_diameter_mm=settings.marker_diameter_mm,
+        include_rings=config.include_rings,
+        include_markers=config.include_markers,
+        marker_diameter_mm=config.marker_diameter_mm,
         use_z_servo=PlotterSettings().use_z_servo,
-        z_down_mm=settings.z_down_mm,
-        z_up_mm=settings.z_up_mm,
-        z_feed_mm_min=settings.z_feed_mm_min,
+        z_down_mm=config.z_down_mm,
+        z_up_mm=config.z_up_mm,
+        z_feed_mm_min=config.z_feed_mm_min,
     )
     gcode_path = output_root / f"{sheet_id}.gcode"
     manifest_path = output_root / f"{sheet_id}.json"
@@ -645,26 +647,26 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
             {
                 "sheet_id": sheet_id,
                 "generated_by": "neje-gui",
-                "layout_mode": settings.layout_mode,
-                "cell_diameter_mm": settings.cell_diameter_mm,
-                "gap_mm": settings.gap_mm,
-                "organic_enabled": settings.organic_enabled,
-                "organic_cell_size_mm": settings.organic_cell_size_mm,
-                "organic_rotation_ramp": settings.organic_rotation_ramp,
-                "organic_scale_ramp": settings.organic_scale_ramp,
-                "organic_seed": settings.organic_seed,
+                "layout_mode": config.layout_mode,
+                "cell_diameter_mm": config.cell_diameter_mm,
+                "gap_mm": config.gap_mm,
+                "organic_enabled": config.organic_enabled,
+                "organic_cell_size_mm": config.organic_cell_size_mm,
+                "organic_rotation_ramp": config.organic_rotation_ramp,
+                "organic_scale_ramp": config.organic_scale_ramp,
+                "organic_seed": config.organic_seed,
                 "symbol_fit_ratio": SYMBOL_FIT_RATIO,
-                "include_markers": settings.include_markers,
-                "marker_diameter_mm": settings.marker_diameter_mm,
+                "include_markers": config.include_markers,
+                "marker_diameter_mm": config.marker_diameter_mm,
                 # G-code optimisation
-                "sample_step_mm": settings.sample_step_mm,
-                "sample_reference_cell_mm": settings.sample_reference_cell_mm,
-                "sample_density_exponent": settings.sample_density_exponent,
-                "sample_min_step_mm": settings.sample_min_step_mm,
-                "sample_max_step_mm": settings.sample_max_step_mm,
+                "sample_step_mm": config.sample_step_mm,
+                "sample_reference_cell_mm": config.sample_reference_cell_mm,
+                "sample_density_exponent": config.sample_density_exponent,
+                "sample_min_step_mm": config.sample_min_step_mm,
+                "sample_max_step_mm": config.sample_max_step_mm,
                 "effective_sample_step_mm": effective_step,
-                "streaming_mode": settings.streaming_mode,
-                "xy_acceleration_mm_s2": _repair_xy_acceleration(settings.xy_acceleration_mm_s2),
+                "streaming_mode": config.streaming_mode,
+                "xy_acceleration_mm_s2": config.xy_acceleration_mm_s2,
                 "items": [
                     {
                         "session_id": item.session_id,
@@ -672,7 +674,7 @@ def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = N
                         "origin": item.origin,
                         "tags": item.tags,
                         "marker_position": item.marker_position,
-                        "marker_diameter_mm": settings.marker_diameter_mm,
+                        "marker_diameter_mm": config.marker_diameter_mm,
                         "svg_path": str(item.svg_path),
                         "sheet_index": index,
                         "center_x_mm": placements[index].center_x_mm,
