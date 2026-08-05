@@ -19,7 +19,7 @@ This brief defines the structure and content of the Oracle website across five p
 - **Pages:** All five pages shown.
 - **Navigation:** Persistent nav shown on every page.
 - **Mobile:** Show mobile layout for The Cloth page only — this is the page most visited on phone (QR code destination).
-- **Annotations:** Annotate the two-layer cloth viewer clearly (see Page 2). Annotate content sources throughout (e.g. "text from oracle_narrative.html Chapter I").
+- **Annotations:** Annotate the two-layer cloth viewer clearly (see Page 2). Annotate content sources throughout (e.g. "text from ../../../Narrative/oracle_narrative.html Chapter I").
 - **Motion:** Do not apply motion or animation — static wireframe only.
 - **Tone:** Ritual, archaic, restrained. Nothing should feel like a generic portfolio or tech product.
 
@@ -70,7 +70,7 @@ The visual design system is in `oracle_design_system.html`. Reference it for all
 
 ### Section 3: What the oracle is
 - Register: cream (document)
-- Three paragraphs — source: `oracle_narrative.html` Chapter I
+- Three paragraphs — source: `../../../Narrative/oracle_narrative.html` Chapter I
 - No images
 
 ### Section 4: The cloth preview
@@ -114,7 +114,7 @@ The visual design system is in `oracle_design_system.html`. Reference it for all
 
 ### Section 3: About the cloth
 - Register: cream (document)
-- Two paragraphs — source: `oracle_narrative.html` Chapter V, first two paragraphs
+- Two paragraphs — source: `../../../Narrative/oracle_narrative.html` Chapter V, first two paragraphs
 - Positioned below the viewer
 
 ---
@@ -122,7 +122,7 @@ The visual design system is in `oracle_design_system.html`. Reference it for all
 ## Page 3 — The Marks `/marks`
 
 ### Section 1: Framing
-- One sentence — source: `oracle_narrative.html` Chapter IV, first sentence of opening paragraph
+- One sentence — source: `../../../Narrative/oracle_narrative.html` Chapter IV, first sentence of opening paragraph
   > *"These signs were once used by itinerant workers to leave messages for those who came after — the oracle has learned to read them differently."*
 - Failsafe note immediately below:
   > *"Didn't receive your receipt? Browse the eight marks below to find yours."*
@@ -135,11 +135,11 @@ The visual design system is in `oracle_design_system.html`. Reference it for all
 
 | Element | Detail | Source |
 |---|---|---|
-| SVG | Mark drawn large on void background | `oracle_narrative.html` Ch. IV |
-| Emotion label | Small, rust, Cinzel, letter-spaced | `oracle_narrative.html` Ch. IV |
-| Mark name | Gold, Cinzel | `oracle_narrative.html` Ch. IV |
-| Description | Body paragraph | `oracle_narrative.html` Ch. IV |
-| Oracle reading | *"The oracle heard..."* — italic, EB Garamond | `oracle_narrative.html` Ch. IV |
+| SVG | Mark drawn large on void background | `../../../Narrative/oracle_narrative.html` Ch. IV |
+| Emotion label | Small, rust, Cinzel, letter-spaced | `../../../Narrative/oracle_narrative.html` Ch. IV |
+| Mark name | Gold, Cinzel | `../../../Narrative/oracle_narrative.html` Ch. IV |
+| Description | Body paragraph | `../../../Narrative/oracle_narrative.html` Ch. IV |
+| Oracle reading | *"The oracle heard..."* — italic, EB Garamond | `../../../Narrative/oracle_narrative.html` Ch. IV |
 
 *Copy all content exactly from source. Do not rewrite.*
 
@@ -194,11 +194,11 @@ The visual design system is in `oracle_design_system.html`. Reference it for all
 
 | Content | Source document | Location |
 |---|---|---|
-| What the oracle is | `oracle_narrative.html` | Chapter I, all four paragraphs |
-| The exchange steps | `oracle_narrative.html` | Chapter II, all six steps |
-| Each mark description + oracle reading | `oracle_narrative.html` | Chapter IV, all eight cards |
-| About the cloth | `oracle_narrative.html` | Chapter V, first two paragraphs |
-| Hobo framing sentence | `oracle_narrative.html` | Chapter IV, first sentence |
+| What the oracle is | `../../../Narrative/oracle_narrative.html` | Chapter I, all four paragraphs |
+| The exchange steps | `../../../Narrative/oracle_narrative.html` | Chapter II, all six steps |
+| Each mark description + oracle reading | `../../../Narrative/oracle_narrative.html` | Chapter IV, all eight cards |
+| About the cloth | `../../../Narrative/oracle_narrative.html` | Chapter V, first two paragraphs |
+| Hobo framing sentence | `../../../Narrative/oracle_narrative.html` | Chapter IV, first sentence |
 | AI transparency note | `oracle_website_brief.html` | Section 02, The Marks copy block |
 | How it works | `oracle_website_brief.html` | Section 02, About copy block |
 | Project description paragraph | Written by team | About page only |
@@ -221,5 +221,5 @@ The visual design system is in `oracle_design_system.html`. Reference it for all
 
 ---
 
-*Read alongside `oracle_design_system.html` and `oracle_narrative.html`*
+*Read alongside `oracle_design_system.html` and `../../../Narrative/oracle_narrative.html`*
 *Oracle · The Oracle That Wears Us · IADE M-CCIA · 2026*
