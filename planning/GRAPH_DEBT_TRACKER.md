@@ -20,3 +20,17 @@ The W1 split reduced *file-level* debt (support.py −500 LOC) but, as expected 
 ## Open item carried forward
 
 - **Hardware verification**: is the physical Y travel really 420mm, or was the machine modified for 440mm sheets? Until answered on the machine, `echodraw/hardware/GEOMETRY.md` documents the 20mm overshoot and `tests/test_geometry_consistency.py` keeps it visible.
+
+---
+
+# Round 2 (2026-08-05): graph findings fixed + auto-update installed
+
+| # | Metric | Baseline | Target | Actual | Status |
+|---|--------|----------|--------|--------|--------|
+| F1 | audited-wrong INFERRED edges in graph | 15 (AST test-fixture noise, not cache) | ~0 | **0** — test-mock nodes gone entirely (`.graphifyignore` excludes `tests/` + `docs/`) | ✅ |
+| F2 | FirebaseSettings degree / bridged communities | 55 / 11 | <40 / ≤6 | **18 / 7** (remaining bridges are its legitimate consumers; 7 vs 6 target = near miss, accepted) | ✅ |
+| F3 | GuiSettings→plotter field mappings | 3 hand-written copies | 1 | **1** (`gui_settings_to_plotter_config` is the single source; output byte-identical) | ✅ |
+| F4 | broken asset references / duplicate PDFs | 15+ dead citations, 4.6MB byte-dup, 5.9MB unreferenced | 0 / 0 | **0 / 0** — renamed HTML, fixed citations, deleted dup, archived 5.9MB | ✅ |
+| F5 | zero-node JSON warning | 17 files | documented | Known graphify blind spot: `symbol_scales.json`, `tinybee.json`, `receipt_payload.json` etc. are load-bearing but Path-read, not imported. Intentionally untouched. | ✅ |
+| M | graph auto-update | none | hook + CLAUDE.md | **installed**: post-commit hook (AST rebuild on code changes), post-checkout hook, merge driver, `## graphify` CLAUDE.md section. Doc/image changes still need `/graphify --update` manually. | ✅ |
+| info | god nodes after curation | GuiSettings 92 · SupervisorService 83 · GuiContext 78 · DryTransport(!) 49 | — | GuiContext 77 · SupervisorService 54 · ComponentState 45 · GuiSettings **36**; no test mocks in list. Graph: 1,449 nodes / 3,327 edges / 116 communities | ✅ |
