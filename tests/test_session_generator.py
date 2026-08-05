@@ -5,7 +5,7 @@ import re
 from random import Random
 from pathlib import Path
 
-from neje_oracle.shared.config import FirebaseSettings, UploaderSettings
+from neje_oracle.shared.config import UploaderSettings
 from neje_oracle.shared.models import PublicationResult, PublicStatus, SheetItem, SheetPlacement
 from neje_oracle.blocks.symbols.session_generator import build_variant_svg, generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
 from neje_oracle.blocks.macmini.session_uploader import SessionUploader
@@ -273,7 +273,7 @@ def test_generated_session_passes_through_uploader(tmp_path: Path) -> None:
     remote = FakeRemoteRepository()
     uploader = SessionUploader(
         settings,
-        FirebaseSettings(project_id="test", storage_bucket="test", gallery_base_url="https://example.test"),
+        "https://example.test",
         UploaderStore(settings.db_path),
         remote,
     )

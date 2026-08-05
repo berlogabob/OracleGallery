@@ -397,7 +397,7 @@ def test_session_dir_needs_stability_window_or_ready_marker(tmp_path: Path) -> N
     )
     store = UploaderStore(settings.db_path)
     remote = FakeRemoteRepository()
-    uploader = SessionUploader(settings, firebase_settings, store, remote)
+    uploader = SessionUploader(settings, firebase_settings.gallery_base_url, store, remote)
 
     assert uploader.scan_once() == []
     assert remote.publish_calls == []
@@ -438,7 +438,7 @@ def test_scan_continues_after_malformed_session_metadata(tmp_path: Path) -> None
     )
     store = UploaderStore(settings.db_path)
     remote = FakeRemoteRepository()
-    uploader = SessionUploader(settings, firebase_settings, store, remote)
+    uploader = SessionUploader(settings, firebase_settings.gallery_base_url, store, remote)
 
     assert uploader.scan_once() == [session_ids[0], session_ids[2]]
 
@@ -469,7 +469,7 @@ def test_qr_download_failure_does_not_mark_session_published(tmp_path: Path) -> 
     )
     store = UploaderStore(settings.db_path)
     remote = FakeRemoteRepository(fail_qr_download=True)
-    uploader = SessionUploader(settings, firebase_settings, store, remote)
+    uploader = SessionUploader(settings, firebase_settings.gallery_base_url, store, remote)
 
     assert uploader.scan_once() == ["20260426_120500"]
     assert not (session_dir / "20260426_120500_qr.png").exists()
@@ -511,7 +511,7 @@ def test_session_without_receipt_txt_is_ignored(tmp_path: Path) -> None:
     )
     store = UploaderStore(settings.db_path)
     remote = FakeRemoteRepository()
-    uploader = SessionUploader(settings, firebase_settings, store, remote)
+    uploader = SessionUploader(settings, firebase_settings.gallery_base_url, store, remote)
 
     assert uploader.scan_once() == []
     assert remote.publish_calls == []
@@ -547,11 +547,11 @@ def test_published_session_is_not_imported_twice_after_restart(tmp_path: Path) -
 
     remote = FakeRemoteRepository()
     first_store = UploaderStore(settings.db_path)
-    first = SessionUploader(settings, firebase_settings, first_store, remote)
+    first = SessionUploader(settings, firebase_settings.gallery_base_url, first_store, remote)
     assert first.scan_once() == ["20260426_130000"]
 
     second_store = UploaderStore(settings.db_path)
-    second = SessionUploader(settings, firebase_settings, second_store, remote)
+    second = SessionUploader(settings, firebase_settings.gallery_base_url, second_store, remote)
     assert second.scan_once() == []
     assert remote.publish_calls == ["20260426_130000"]
 
@@ -600,7 +600,7 @@ def test_uploader_baseline_skips_old_session_folders(tmp_path: Path) -> None:
     store = UploaderStore(settings.db_path)
     store.save_run_started_at(datetime(2026, 4, 26, 13, 0, tzinfo=UTC))
     remote = FakeRemoteRepository()
-    uploader = SessionUploader(settings, firebase_settings, store, remote)
+    uploader = SessionUploader(settings, firebase_settings.gallery_base_url, store, remote)
 
     assert uploader.scan_once() == []
     assert remote.publish_calls == []
@@ -667,7 +667,7 @@ def test_touchdesigner_plotter_and_receipt_assets_are_imported_without_visitor_p
     )
     store = UploaderStore(settings.db_path)
     remote = FakeRemoteRepository()
-    uploader = SessionUploader(settings, firebase_settings, store, remote)
+    uploader = SessionUploader(settings, firebase_settings.gallery_base_url, store, remote)
 
     assert uploader.scan_once() == [session_id]
     assert (public_root / session_id / "artwork.svg").exists()

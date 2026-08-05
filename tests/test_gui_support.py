@@ -728,11 +728,14 @@ def test_read_queue_status_fetches_on_cold_cache(monkeypatch: pytest.MonkeyPatch
     payload = {"online": True, "total": 3}
     remote = SimpleNamespace(get_plot_job_counts=lambda *, run_started_at: payload)
     store = SimpleNamespace(load_run_started_at=lambda: None)
-    monkeypatch.setattr(gui_support, "_QUEUE_STATUS_CACHE", None)
-    monkeypatch.setattr(gui_support, "FirebaseSettings", lambda: SimpleNamespace(enabled=True))
-    monkeypatch.setattr(gui_support, "OracleSupervisorSettings", lambda: SimpleNamespace(runtime_db_path=Path("unused")))
-    monkeypatch.setattr(gui_support, "OracleRuntimeStore", lambda _: store)
-    monkeypatch.setattr(gui_support, "FirebaseRemoteRepository", lambda _: remote)
+    from neje_oracle.blocks.firebase import queue_status
+
+    monkeypatch.setattr(queue_status, "_QUEUE_STATUS_CACHE", None)
+    monkeypatch.setattr(queue_status, "firebase_enabled", lambda: True)
+    monkeypatch.setattr(queue_status, "FirebaseSettings", lambda: SimpleNamespace(enabled=True))
+    monkeypatch.setattr(queue_status, "OracleSupervisorSettings", lambda: SimpleNamespace(runtime_db_path=Path("unused")))
+    monkeypatch.setattr(queue_status, "OracleRuntimeStore", lambda _: store)
+    monkeypatch.setattr(queue_status, "FirebaseRemoteRepository", lambda _: remote)
 
     result = gui_support.read_queue_status()
 

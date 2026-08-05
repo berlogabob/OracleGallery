@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 import qrcode
 
-from ...shared.config import FirebaseSettings, UploaderSettings, _repo_root, ensure_dir
+from ...shared.config import UploaderSettings, _repo_root, ensure_dir
 from ...shared.logging import append_log
 from ..firebase.repository import FirebaseRemoteRepository, record_to_json
 from ...shared.models import PlotStatus, PublicStatus, SessionRecord
@@ -24,12 +24,13 @@ class SessionUploader:
     def __init__(
         self,
         settings: UploaderSettings,
-        firebase_settings: FirebaseSettings,
+        gallery_base_url: str,
         store: UploaderStore,
         remote: FirebaseRemoteRepository,
     ) -> None:
+        """Initialize the uploader with the public gallery base URL."""
         self.settings = settings
-        self.firebase_settings = firebase_settings
+        self.gallery_base_url = gallery_base_url
         self.store = store
         self.remote = remote
         ensure_dir(self.settings.session_root)
@@ -172,7 +173,7 @@ class SessionUploader:
             }
         )
 
-        qr_url = f"{self.firebase_settings.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
+        qr_url = f"{self.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
         qr_target = public_dir / "qr.png"
         qrcode.make(qr_url).save(qr_target)
         record = SessionRecord(

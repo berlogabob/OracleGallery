@@ -9,8 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from ...shared.config import SYMBOL_FIT_RATIO, FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root, ensure_dir
-from ..firebase.repository import FirebaseRemoteRepository
+from ...shared.config import SYMBOL_FIT_RATIO, OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root, ensure_dir
 from .modes import apply_mode_to_config, mode_policy
 from ..gcode.layout import build_sheet_layout, calculate_layout_capacity
 from ...shared.models import PlotterRuntimeConfig, SheetItem, SheetPlacement, SystemMode
@@ -28,7 +27,6 @@ from ..gcode.svg_gcode import generate_absolute_svg_gcode, generate_sheet_gcode
 from ..symbols.svg_normalizer import normalize_svg_file
 
 
-_QUEUE_STATUS_CACHE: tuple[datetime, dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -530,54 +528,6 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
     }
 
 
-def read_queue_status(*, force: bool = False, ttl_seconds: float = 10.0) -> dict[str, Any]:
-    global _QUEUE_STATUS_CACHE
-    now = datetime.now(tz=UTC)
-    if not force and _QUEUE_STATUS_CACHE is not None:
-        cached_at, cached_payload = _QUEUE_STATUS_CACHE
-        if (now - cached_at).total_seconds() < ttl_seconds:
-            return cached_payload
-    firebase_settings = FirebaseSettings()
-    if not firebase_settings.enabled:
-        payload = _queue_status_offline("Firebase is not configured")
-        _QUEUE_STATUS_CACHE = (now, payload)
-        return payload
-
-    try:
-        oracle_store = OracleRuntimeStore(OracleSupervisorSettings().runtime_db_path)
-        baseline = oracle_store.load_run_started_at()
-        payload = FirebaseRemoteRepository(firebase_settings).get_plot_job_counts(run_started_at=baseline)
-        payload["runStartedAt"] = baseline.isoformat() if baseline else ""
-        _QUEUE_STATUS_CACHE = (now, payload)
-        return payload
-    except Exception as exc:  # noqa: BLE001
-        payload = _queue_status_offline(str(exc))
-        _QUEUE_STATUS_CACHE = (now, payload)
-        return payload
-
-
-def _queue_status_offline(message: str) -> dict[str, Any]:
-    return {
-        "online": False,
-        "total": 0,
-        "limitedTo": 0,
-        "pending": 0,
-        "pendingAfterBaseline": 0,
-        "pendingUserAfterBaseline": 0,
-        "pendingFillerAfterBaseline": 0,
-        "pendingBeforeBaseline": 0,
-        "leased": 0,
-        "plotting": 0,
-        "printed": 0,
-        "failed": 0,
-        "skipped": 0,
-        "hidden": 0,
-        "unknown": 0,
-        "runStartedAt": "",
-        "message": message,
-    }
-
-
 def generate_dry_run_sheet(settings: GuiSettings, *, spool_root: Path | None = None, symbol_root: Path | None = None) -> dict[str, Path]:
     output_root = spool_root or PlotterSettings().spool_root
     ensure_dir(output_root)
@@ -798,3 +748,5 @@ from .preview import (  # noqa: E402,F401
     _preview_symbol_index,
     _svg_file_data_uri,
 )
+
+from ..firebase.queue_status import read_queue_status  # noqa: E402,F401

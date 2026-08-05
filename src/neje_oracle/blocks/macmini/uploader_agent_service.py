@@ -99,7 +99,7 @@ def create_app(controller: UploaderAgentController | None = None) -> FastAPI:
         firebase_settings = FirebaseSettings()
         store = UploaderStore(uploader_settings.db_path)
         remote = FirebaseRemoteRepository(firebase_settings)
-        uploader = SessionUploader(uploader_settings, firebase_settings, store, remote)
+        uploader = SessionUploader(uploader_settings, firebase_settings.gallery_base_url, store, remote)
         controller = UploaderAgentController(uploader, uploader_settings)
 
     app = FastAPI(title="Oracle Uploader Agent")

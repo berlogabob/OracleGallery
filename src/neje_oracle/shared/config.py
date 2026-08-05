@@ -86,6 +86,11 @@ class FirebaseSettings:
         return bool(self.project_id and self.storage_bucket and self.credentials_path.exists())
 
 
+def firebase_enabled() -> bool:
+    """True when Firebase credentials are configured (see FirebaseSettings.enabled)."""
+    return FirebaseSettings().enabled
+
+
 @dataclass(frozen=True)
 class UploaderSettings:
     session_root: Path = Path(os.getenv("NEJE_UPLOADER_SESSION_ROOT", str(_repo_root() / "sessions_raw")))

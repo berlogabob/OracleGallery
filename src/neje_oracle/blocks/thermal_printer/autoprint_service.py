@@ -13,11 +13,12 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import cached_property
 from ipaddress import ip_network
 from pathlib import Path
 from typing import Any, Callable
 
-from ...shared.config import FirebaseSettings
+from ...shared.config import FirebaseSettings, firebase_enabled
 from ..firebase.repository import FirebaseRemoteRepository, recorded_datetime
 
 
@@ -74,6 +75,7 @@ class ThermalAutoprintService:
         print_receipt: Callable[[Path], dict[str, Any]] | None = None,
         firebase_sessions: Callable[[], list[dict[str, Any]]] | None = None,
         download_asset: Callable[[str, Path], None] | None = None,
+        remote_factory: Callable[[], FirebaseRemoteRepository] | None = None,
         now: Callable[[], float] | None = None,
     ) -> None:
         self.settings = settings
@@ -81,6 +83,7 @@ class ThermalAutoprintService:
         self.print_receipt = print_receipt or self._print_receipt
         self.firebase_sessions = firebase_sessions or self._firebase_sessions
         self.download_asset = download_asset or self._download_firebase_asset
+        self.remote_factory = remote_factory or (lambda: FirebaseRemoteRepository(FirebaseSettings()))
         self.now = now or time.time
         self.macmini_agent_url = settings.macmini_agent_url.rstrip("/")
         self.state = self._load_state()
@@ -377,14 +380,17 @@ class ThermalAutoprintService:
         self.settings.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.settings.state_path.write_text(json.dumps(self.state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    @cached_property
+    def firebase_remote(self) -> FirebaseRemoteRepository:
+        return self.remote_factory()
+
     def _firebase_sessions(self) -> list[dict[str, Any]]:
-        firebase_settings = FirebaseSettings()
-        if not firebase_settings.enabled:
+        if not firebase_enabled():
             return []
-        return FirebaseRemoteRepository(firebase_settings).iter_recent_sessions(limit=self.settings.firebase_limit)
+        return self.firebase_remote.iter_recent_sessions(limit=self.settings.firebase_limit)
 
     def _download_firebase_asset(self, storage_path: str, destination: Path) -> None:
-        FirebaseRemoteRepository(FirebaseSettings()).download_asset(storage_path, destination)
+        self.firebase_remote.download_asset(storage_path, destination)
 
 
 def printable_session(session_dir: Path) -> tuple[bool, str]:
