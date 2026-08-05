@@ -1,0 +1,83 @@
+[
+  {
+    "criterion": "VD-LAY-1",
+    "screen": "01 Connection (Generative tab content)",
+    "severity": 2,
+    "evidence": "On the Connection/Exhibition/Generative tabs (screens 01, 05, 06) the left content card is narrow (~650px of a ~2000px canvas) and the 'Sheet Preview' card starts far to the right (~1155px), leaving a ~450-550px empty dead column in the middle of the screen. On the Calibration/Tests/Work tabs (02, 03, 04) the left card stretches to ~1010-1140px, shrinking the same gutter to a normal ~130-150px. The layout grid/gutter width is not consistent across tabs in the same shell.",
+    "screenshot": "screens/01_connection.png",
+    "measurement": "estimate: left-card right edge ~650px vs ~1010-1140px across tabs (of ~2000px canvas); gutter varies ~450px vs ~150px",
+    "recommendation": "Give the left content card a consistent max-width (or let it flex to fill available space) on every tab so the gutter before Sheet Preview stays constant; on Connection/Exhibition/Generative either widen the left card or add content/visualization to use the reclaimed space."
+  },
+  {
+    "criterion": "VD-COL-3",
+    "screen": "01 Connection / 02 Calibration (persistent status toast)",
+    "severity": 2,
+    "evidence": "A floating 'Checking FluidNC...' status pill renders in a sky-blue/cyan fill with white text, positioned bottom-center over the dead whitespace column. Every other status/action color in the app is drawn from cream, rust/amber (brand + caution), black (neutral action), green (go/success), or red (emergency/error) — blue does not appear anywhere else in the UI, making this pill visually foreign against the established Oracle palette.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": "estimate: hue distinct from the rest of the palette (no other blue element observed on any of the 6 tabs)",
+    "recommendation": "Recolor the loading/checking toast using the existing semantic set (e.g. muted amber for 'in progress', matching the caution color already used for NEXT ACTION/STOP) instead of introducing a new blue accent."
+  },
+  {
+    "criterion": "VD-TYPE-3",
+    "screen": "05 Exhibition",
+    "severity": 2,
+    "evidence": "In the 'Live print state' progress bar, the numeric label '0.375' sits inside the unfilled light-gray track segment and renders in a light/near-white tone, giving very low estimated contrast against the light-gray track (roughly ~2:1, well under the 4.5:1 body-text / 3:1 large-text thresholds).",
+    "screenshot": "screens/05_exhibition.png",
+    "measurement": "estimate ~2:1 (light text on light-gray track)",
+    "recommendation": "Render the progress-bar value in a dark, high-contrast color regardless of which segment (filled/unfilled) it overlaps, or place the label outside the track entirely."
+  },
+  {
+    "criterion": "VD-COL-2",
+    "screen": "04 Work (also 02 Calibration)",
+    "severity": 2,
+    "evidence": "The amber/gold accent color is used for two conflicting semantic roles: (1) 'primary suggested action' — the NEXT ACTION status box and the HOME ALL button on the Calibration tab, and (2) 'stop/caution' — the STOP SYSTEM button (System run) and STOP button (Mac mini uploader) on the Work tab. The same hue signals both 'do this next' and 'halt' depending on the widget, undermining a consistent semantic color code.",
+    "screenshot": "screens/04_work.png",
+    "measurement": "estimate: same amber/gold swatch reused for HOME ALL / NEXT ACTION highlight and for STOP / STOP SYSTEM",
+    "recommendation": "Reserve one accent color per meaning: keep amber strictly for caution/stop actions, and use a different treatment (e.g. the rust brand color or a bordered/ghost style) to highlight the recommended NEXT ACTION and HOME ALL."
+  },
+  {
+    "criterion": "VD-GES-2",
+    "screen": "02 Calibration",
+    "severity": 2,
+    "evidence": "In 'Manual motion', the direction/home controls X-, Y+, Y-, X+ and HOME ALL render as solid buttons (black or amber fill, white text), but the functionally equivalent jog/home commands Z UP / PEN UP, Z- / PEN DOWN, HOME X, HOME Y in the same panel render as plain bold text with no button chrome (no fill, no border) — same control category, two different affordances.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": "estimate: visually two distinct component styles for the same 'jog command' control type",
+    "recommendation": "Give Z UP/PEN UP, Z-/PEN DOWN, HOME X, HOME Y the same button chrome as the X/Y jog buttons so all motion commands read as one consistent control family."
+  },
+  {
+    "criterion": "VD-GES-2",
+    "screen": "04 Work",
+    "severity": 2,
+    "evidence": "The same button-vs-plain-text inconsistency recurs: 'NEW RUN' (System run), 'SCAN' (Mac mini uploader), and 'TEST RECEIPT' (Thermal printer) are unstyled text labels sitting inline with solid buttons of the same tier (START SYSTEM/STOP SYSTEM, START/STOP/RESTART, STATUS/CONNECT/PRINT LATEST/PRINT SELECTED).",
+    "screenshot": "screens/04_work.png",
+    "measurement": "estimate: 3 additional plain-text controls interleaved with solid buttons in one tab",
+    "recommendation": "Apply the same button component to NEW RUN, SCAN, and TEST RECEIPT as their neighboring controls, or intentionally demote them with a distinct but consistent 'text link' style used app-wide."
+  },
+  {
+    "criterion": "VD-TYPE-3",
+    "screen": "01 Connection (recurs on all 6 operator tabs)",
+    "severity": 1,
+    "evidence": "The small uppercase eyebrow labels above each status value (NOW, WORK ZERO, FIREBASE, QUEUE, SHEET, NEXT ACTION, BLOCKERS) and the 'preview tuning | random symbols | 16 cells' line under Sheet Preview render in a light muted tan, noticeably lower contrast than the bold black value text beneath them, at a small size (~12px). Estimated contrast is close to the 4.5:1 AA floor for text this small and identical on every tab.",
+    "screenshot": "screens/01_connection.png",
+    "measurement": "estimate ~3:1 (muted tan-on-cream, ~12px, no measurements.json data available)",
+    "recommendation": "Darken the eyebrow-label color or increase its size slightly so the label-to-value pairing stays legible at a glance; verify with an actual contrast checker since this is a visual estimate."
+  },
+  {
+    "criterion": "VD-WS-1",
+    "screen": "04 Work (also 03 Tests)",
+    "severity": 2,
+    "evidence": "The red 'FluidNC Telnet offline...' toast is fixed to the bottom-right and overlaps underlying content: on the Work tab it truncates the Thermal printer helper text ('Printer offline is a warning only; plotter and upload workflow c...'), and on the Tests tab it covers part of the SVG upload progress control including its '+' affordance.",
+    "screenshot": "screens/04_work.png",
+    "measurement": "estimate: toast overlaps and clips underlying text/controls on 2 of 6 tabs",
+    "recommendation": "Reserve a docked status-bar region (or reflow content above it) so the persistent error toast never overlaps interactive controls or truncates text."
+  },
+  {
+    "criterion": "VD-GES-2",
+    "screen": "07 Sketch page",
+    "severity": 1,
+    "evidence": "The generative sketch page already uses the cream/rust color palette (not the dark/blue theme expected pre-restyle), but its controls use a different component language than the rest of the app: 'Regenerate', 'Send to plotter', and '+ Add layer' are rounded pill outline buttons and the 'mask' checkbox is an unstyled native checkbox, whereas tabs 1-6 use rectangular solid-fill buttons (black/green/amber) throughout. Same control category (primary actions), two different shapes/fills.",
+    "screenshot": "screens/07_sketch_page.png",
+    "measurement": "estimate: pill/outline buttons vs rectangular solid-fill buttons used elsewhere",
+    "recommendation": "Reuse the operator GUI's rectangular solid-fill button component (and a styled checkbox) on the sketch page so it reads as part of the same design system, not a visually distinct sub-app."
+  }
+]

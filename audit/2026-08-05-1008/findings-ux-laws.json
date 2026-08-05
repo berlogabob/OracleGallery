@@ -1,0 +1,74 @@
+[
+  {
+    "criterion": "LAW-FITTS-1",
+    "screen": "02_calibration",
+    "severity": 2,
+    "evidence": "The 'Step mm' and 'Feed' number input fields with adjacent dropdowns are visually small (estimated 45-55px width each) and closely spaced horizontally. These are frequent-use controls for motion setup that require precise tapping.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": "visual estimate: ~50px input width, <10px horizontal gap between adjacent fields",
+    "recommendation": "Increase minimum input field width to 60-70px; add 12-16px horizontal padding between control groups (Step/Feed pair vs. directional buttons). Consider vertical stacking for mobile/tablet contexts if this GUI is accessed on smaller screens."
+  },
+  {
+    "criterion": "LAW-FITTS-1",
+    "screen": "02_calibration",
+    "severity": 2,
+    "evidence": "The 'Motion speed' section contains 6 number inputs arranged in a 2×3 grid with dense spacing (Travel mm/min, Draw mm/min, XY accel m/s^2, Z up legacy, Z down legacy, Z mm/min). Each input is approximately 80-100px wide with minimal padding.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": "visual estimate: ~90px per input, ~8-10px inter-item spacing in compact grid layout",
+    "recommendation": "Increase vertical spacing between rows to 20-24px; add 16px horizontal padding within each column. Consider progressive disclosure: hide advanced fields (Z up legacy, Z down legacy) behind an 'Advanced' toggle to reduce visual density."
+  },
+  {
+    "criterion": "LAW-FITTS-1",
+    "screen": "03_tests",
+    "severity": 2,
+    "evidence": "The 'SVG test draw' section has two number inputs (SVG X0, SVG Y0) that are compact and narrowly spaced (estimated 80-110px wide each). These require precise numeric entry for coordinate setup.",
+    "screenshot": "screens/03_tests.png",
+    "measurement": "visual estimate: ~100px input width, minimal vertical spacing (~12px) between X0 and Y0 fields",
+    "recommendation": "Increase input field minimum width to 120px and add 16-20px vertical spacing between coordinate fields. Consider grouping both in a 'Position' labeled fieldset with visual grouping (border or background color)."
+  },
+  {
+    "criterion": "LAW-HICK-1",
+    "screen": "04_work",
+    "severity": 2,
+    "evidence": "The 'Thermal printer' section displays 5 action buttons in a single horizontal row (STATUS, CONNECT, PRINT LATEST, PRINT SELECTED, TEST RECEIPT). This presents a high decision load at one decision point—users must scan 5 similarly-styled buttons to find their target action.",
+    "screenshot": "screens/04_work.png",
+    "measurement": "visual estimate: 5 buttons packed in ~750px width with ~12-15px gaps, ~140px per button",
+    "recommendation": "Restructure into action groups: primary actions (CONNECT, PRINT LATEST) above; secondary actions (STATUS, PRINT SELECTED, TEST RECEIPT) in a smaller button row below, or hide secondary actions behind a 'More' / 'Advanced' menu. Apply visual hierarchy (size/color) to distinguish critical actions (CONNECT/PRINT) from diagnostic ones (STATUS/TEST RECEIPT)."
+  },
+  {
+    "criterion": "LAW-MILLER-1",
+    "screen": "04_work",
+    "severity": 2,
+    "evidence": "The 'Thermal printer' section button row exceeds the 7±2 working memory threshold when combined with the two text inputs (URL, Session folder) immediately above. Visually grouped: 7 interactive elements (2 inputs + 5 buttons) requiring choices/actions in close proximity.",
+    "screenshot": "screens/04_work.png",
+    "measurement": "visual estimate: 2 form fields + 5 buttons = 7 elements in a ~500px vertical span; buttons occupy single row",
+    "recommendation": "Split into two logical groups: (1) 'Connection' group with URL input + CONNECT button; (2) 'Operations' group with START, PRINT LATEST, PRINT SELECTED in primary row and STATUS/TEST RECEIPT in secondary row. Use section spacing (24-32px) and optional borders to chunk visually."
+  },
+  {
+    "criterion": "LAW-JAKOB-1",
+    "screen": "04_work",
+    "severity": 1,
+    "evidence": "The 'Mac mini uploader' section uses neutral (black/white) button styling for control actions (START, STOP, SCAN, RESTART) that would typically follow platform convention of green (start), red (stop), gray (neutral). STOP button uses a yellow/orange background (unusual for web/platform standards) which could confuse users about severity.",
+    "screenshot": "screens/04_work.png",
+    "measurement": "visual estimate: non-standard color palette for stop action (yellow vs. expected red or dark color)",
+    "recommendation": "Apply platform-standard colors: START → green (#2ecc71 or Material green-500), STOP → red (#e74c3c or Material red-500), SCAN/RESTART → neutral gray or outlined style. Verify color contrast against WCAG AA standards (4.5:1 minimum for text)."
+  },
+  {
+    "criterion": "IXD-VIS",
+    "screen": "02_calibration",
+    "severity": 1,
+    "evidence": "The dropdown selectors for 'Step mm' (showing '1') and 'Feed' inputs have no clear visual affordance—the dropdown arrow is small and the selected value blends with the background. Users may not immediately recognize these as interactive/selectable dropdowns vs. static display fields.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": "visual estimate: dropdown arrow ~12-16px width, minimal contrast/padding",
+    "recommendation": "Increase dropdown affordance: larger chevron icon (18-24px), distinct border on dropdowns (1-2px solid or outline style), and add subtle hover/focus states (background tint or shadow). Ensure labels ('Step mm', 'Feed') are consistently positioned above or left of inputs."
+  },
+  {
+    "criterion": "IXD-CONS",
+    "screen": "01_connection, 02_calibration, 03_tests, 04_work, 05_exhibition, 06_generative",
+    "severity": 1,
+    "evidence": "Button styling is inconsistent across screens: some buttons use solid filled backgrounds (green for primary, black for secondary), while others use outlined/bordered styles. The 'Mac mini uploader' section shows START/STOP/SCAN/RESTART all in solid black, differing from the color-coded buttons in 'System run' (green START, yellow STOP).",
+    "screenshot": "screens/04_work.png",
+    "measurement": "visual estimate: 3+ distinct button style families across the UI",
+    "recommendation": "Establish a single button design system: (1) Primary action buttons → solid green; (2) Destructive/caution actions → red; (3) Secondary/neutral actions → gray or outlined; (4) Custom hardware controls → bold black OK (if intentional and consistent across all hardware sections). Document in UI kit and apply uniformly."
+  }
+]

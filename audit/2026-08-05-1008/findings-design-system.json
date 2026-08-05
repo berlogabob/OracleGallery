@@ -1,0 +1,92 @@
+[
+  {
+    "criterion": "DS-BTN-1",
+    "screen": "04 Work",
+    "severity": 3,
+    "evidence": "In 'System run' and 'Thermal printer' cards, NEW RUN, SCAN, and TEST RECEIPT render as plain bold black text with no fill, border, radius, or shadow — indistinguishable from static labels — while sibling actions in the same row (START SYSTEM, STOP SYSTEM, START, STOP, RESTART, STATUS, CONNECT, PRINT LATEST, PRINT SELECTED) are all filled rectangular buttons. Same 'action button' family rendered as a no-chrome text variant with zero affordance.",
+    "screenshot": "screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Give every clickable action at least a ghost/tertiary treatment (border or underline + hover state) from the shared button helper; never ship a bare ui.button with no props as a peer of filled buttons."
+  },
+  {
+    "criterion": "DS-BTN-1",
+    "screen": "02 Calibration",
+    "severity": 3,
+    "evidence": "In 'Manual motion', Z UP / PEN UP, Z- / PEN DOWN, HOME X, and HOME Y render as plain bold text with no button chrome, directly below the jog pad's black filled square buttons (X-, Y+, Y-, X+) and the gold filled HOME ALL button. Critical machine-control actions (including Z-axis and per-axis homing) are visually unidentifiable as buttons.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": null,
+    "recommendation": "Style Z UP/PEN UP, Z-/PEN DOWN, HOME X, HOME Y with the same button treatment as the adjacent jog buttons (or an explicit secondary variant) so all manual-motion controls share one recognizable affordance."
+  },
+  {
+    "criterion": "DS-BTN-1",
+    "screen": "04 Work",
+    "severity": 2,
+    "evidence": "Primary filled action buttons use three different colors with no consistent semantic: black (GENERATE G-CODE, START, RESTART, STATUS, CONNECT, PRINT SELECTED), green (START SYSTEM, START TEST PRINT, PRINT LATEST, START PRINT), and gold (STOP SYSTEM, STOP, HOME ALL). 'Start/launch' actions alone span both black and green depending on screen, with no visible primary/secondary hierarchy.",
+    "screenshot": "screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Define one primary color (e.g. green = go / gold = caution-stop / black = neutral secondary) and apply it by semantic role everywhere, not per-screen convention."
+  },
+  {
+    "criterion": "DS-COL-1",
+    "screen": "02 Calibration",
+    "severity": 2,
+    "evidence": "HOME ALL is filled with the same gold/amber used for STOP SYSTEM (Work) and STOP (Mac mini uploader), even though homing is a routine setup action, not a caution/stop action. The gold token's meaning is inconsistent across screens.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": null,
+    "recommendation": "Reserve the gold/amber fill exclusively for stop/caution actions; give HOME ALL the neutral (black) or primary (green) treatment used for other setup actions."
+  },
+  {
+    "criterion": "DS-BTN-1",
+    "screen": "01 Connection",
+    "severity": 2,
+    "evidence": "EMERGENCY STOP (top-right, present on every screen) uses raw Quasar props (dense, color=negative) and renders with a visibly smaller corner radius and no drop-shadow, versus the custom-styled black/green/gold action buttons (e.g. START SYSTEM) which have a larger rounded radius and a soft box-shadow. Same 'filled primary button' family, two different chrome recipes, on the app's single highest-stakes control.",
+    "screenshot": "screens/01_connection.png",
+    "measurement": null,
+    "recommendation": "Route EMERGENCY STOP through the same styled button helper used for other action buttons (matching radius/shadow), only swapping the color token to the danger/negative color."
+  },
+  {
+    "criterion": "DS-BTN-1",
+    "screen": "07 Sketch page (pre-restyle)",
+    "severity": 3,
+    "evidence": "Regenerate, Send to plotter, and + Add layer render as fully-rounded (pill) outline buttons — cream fill, thin tan border, rust bold text — a button family not used anywhere across the six operator-surface tabs, which use rectangular ~8-10px-radius filled buttons in black/green/gold. Confirms this surface predates the oracle-card / PAGE_STYLE restyle.",
+    "screenshot": "screens/07_sketch_page.png",
+    "measurement": null,
+    "recommendation": "Bring the generative sketch page's controls into the shared button component (rectangular radius, filled colors) before it ships alongside the restyled operator tabs, or clearly gate it as an isolated iframe surface with its own intentional system."
+  },
+  {
+    "criterion": "DS-FORM-1",
+    "screen": "07 Sketch page (pre-restyle)",
+    "severity": 2,
+    "evidence": "The shape-type select ('circles'), the density/opacity range slider, and the 'mask' checkbox render as unstyled native HTML controls, while every operator-surface field (Step mm, Feed, Travel mm/min, SVG X0/Y0, etc.) uses a bordered, rounded field with a floating 12px label per .q-field rules in PAGE_STYLE.",
+    "screenshot": "screens/07_sketch_page.png",
+    "measurement": null,
+    "recommendation": "Apply the same Quasar field styling (or an equivalent themed component) to the sketch page's form controls so inputs look identical regardless of which surface hosts them."
+  },
+  {
+    "criterion": "DS-SPACE-1",
+    "screen": "03 Tests",
+    "severity": 1,
+    "evidence": "Padding values defined in the shared PAGE_STYLE block don't sit on a 4/8px grid: .compact-card { padding: 10px 12px }, .status-pill { padding: 3px 8px }, .mini-metric { padding: 5px 7px }, .warning-banner { padding: 6px 8px }, .mobile-operator-warning { padding: 8px 10px }. Visible as slightly irregular internal spacing on the status pills (Plotter: offline, etc.) and live-strip metric boxes.",
+    "screenshot": "screens/03_tests.png",
+    "measurement": "10px/12px, 3px/8px, 5px/7px, 6px/8px, 8px/10px paddings across 5 component classes",
+    "recommendation": "Round all component padding to the nearest 4px (e.g. 8px 12px, 4px 8px, 4px 8px, 8px 8px) to converge on one spacing scale."
+  },
+  {
+    "criterion": "DS-TYPE-1",
+    "screen": "03 Tests",
+    "severity": 1,
+    "evidence": "Small 'label/caption' text clusters into four near-identical sizes with no evident scale logic: 9px (.mini-metric .label), 10px (.legend-chip), 11px (.status-pill, .log-viewer textarea), 12px (.mini-metric .value, .q-field__label). All four appear together on this screen (pill labels, metric boxes) yet read as arbitrarily different sizes rather than one deliberate caption style.",
+    "screenshot": "screens/03_tests.png",
+    "measurement": "9px, 10px, 11px, 12px all used for caption-weight text",
+    "recommendation": "Collapse to a single caption size (e.g. 11px) for all label/pill/legend text, reserving a distinct step only for values that are meant to read larger."
+  },
+  {
+    "criterion": "DS-SPACE-1",
+    "screen": "02 Calibration",
+    "severity": 2,
+    "evidence": "On Calibration, Tests, Work, and Exhibition tabs, the left workspace content card(s) stop at roughly the same width regardless of available space, leaving a large band of plain background (no card, no border) between the content card and the Sheet Preview card. On the Generative tab the left card instead stretches to meet the preview card. The same 1fr grid track is filled inconsistently depending on which tab is active, breaking the app's otherwise all-content-in-a-card rhythm.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": null,
+    "recommendation": "Make every workspace tab's root card w-full so it fills its grid column consistently, matching the Generative tab's behavior."
+  }
+]

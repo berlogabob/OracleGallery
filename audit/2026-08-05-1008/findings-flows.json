@@ -1,0 +1,38 @@
+[
+  {
+    "criterion": "ST-SUCCESS",
+    "screen": "02_calibration, 03_tests, 04_work, 05_exhibition",
+    "severity": 3,
+    "evidence": "Action buttons (jog/home, START TEST PRINT, START SYSTEM, START PRINT) have no confirmation toast, checkmark, loading state, or state change after click. User cannot confirm action executed successfully. Reference standard: 'Completed actions confirm (state change, toast, checkmark) — the user never wonders \"did it work?\"'",
+    "screenshot": "screens/02_calibration.png, screens/03_tests.png, screens/04_work.png, screens/05_exhibition.png",
+    "measurement": null,
+    "recommendation": "Add immediate feedback for action buttons: show loading state (spinner/disabled button) during action, then success toast on completion. Example flow: button click → 'Homing X...' (loading) → 'Homing complete' (toast)."
+  },
+  {
+    "criterion": "ST-ERROR",
+    "screen": "03_tests, 04_work",
+    "severity": 2,
+    "evidence": "Red error toast 'FluidNC Telnet offline: 10.28.8.74:23; HTTP offline (timed out)' displays failure message but no recovery path. No retry button, reconnect action, or diagnostic guidance. Reference standard: 'Failures show a recoverable error state (message + retry), not a crash, blank screen, or silent nothing.'",
+    "screenshot": "screens/03_tests.png, screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Provide recovery options in error state: add 'Retry' button to reconnect, or include diagnostic guidance: 'Check FluidNC controller is powered on and connected to network (IP: 10.28.8.74).' Make error actionable, not terminal."
+  },
+  {
+    "criterion": "ST-ERROR",
+    "screen": "03_tests, 04_work",
+    "severity": 2,
+    "evidence": "Error toast has no dismiss mechanism (no close button, X, or explicit acknowledgment path). Toast persists indefinitely on screen, blocking visual real estate. User cannot acknowledge they've seen the error.",
+    "screenshot": "screens/03_tests.png, screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Add close button (X) to error toast. Alternatively, implement auto-dismiss after 5–8 seconds with re-show if condition persists, so error doesn't clutter UI indefinitely."
+  },
+  {
+    "criterion": "FLOW-4",
+    "screen": "01_connection, 03_tests, 04_work, 05_exhibition, 06_generative",
+    "severity": 2,
+    "evidence": "Error state is inconsistent across workflow tabs. Red FluidNC offline toast is visible in screens 03–04 (mid-workflow) but absent in screens 05–06, despite error condition persisting (dry-run, no controller). Operator navigates through tabs; error disappears and reappears unpredictably, breaking confidence in system state clarity. Violates FLOW-4: 'Errors mid-flow are recoverable without restarting the flow.'",
+    "screenshot": "screens/03_tests.png, screens/04_work.png, screens/05_exhibition.png, screens/06_generative.png",
+    "measurement": null,
+    "recommendation": "Ensure error state persists visibly across all tabs until user explicitly dismisses it. If toast must auto-dismiss (UI best practice: 5–8s), re-show it if error condition is still active when user returns to that section. Provide persistent indicator (icon/badge on tab or status area) if error is blocking workflow."
+  }
+]

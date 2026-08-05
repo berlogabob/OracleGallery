@@ -1,0 +1,128 @@
+[
+  {
+    "criterion": "H9",
+    "screen": "03_tests.png",
+    "severity": 4,
+    "evidence": "Error toast displays raw technical details: 'FluidNC Telnet offline: 10.28.8.74:23; HTTP offline (timed out)'. An operator does not need to know the IP address, port number, or protocol layer. The error provides no actionable guidance on how to recover (e.g., 'Check controller network connection and try reconnecting').",
+    "screenshot": "screens/03_tests.png",
+    "measurement": null,
+    "recommendation": "Rewrite error messages in plain language. Instead: 'Controller offline. Check that the device is powered on and connected to the network, then reconnect.' Remove technical details (IP, port, protocol names)."
+  },
+  {
+    "criterion": "H2",
+    "screen": "02_calibration.png",
+    "severity": 3,
+    "evidence": "Input fields labeled 'Z up legacy' and 'Z down legacy' expose developer terminology ('legacy') to the operator interface. An operator does not understand what 'legacy' means in this context or why it matters. The labels should describe the user action or device state.",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": null,
+    "recommendation": "Rename to user-facing terms such as 'Z rise speed (legacy)' or 'Pen up delay' / 'Pen down delay' depending on actual function. Add a help icon with tooltip if legacy variants must coexist with newer ones."
+  },
+  {
+    "criterion": "H4",
+    "screen": "04_work.png",
+    "severity": 3,
+    "evidence": "Button styling is inconsistent across sections: Mac mini uploader uses black buttons (START, STOP), while Thermal printer section uses colored buttons (green CONNECT, PRINT LATEST). No visual hierarchy or pattern explanation. User cannot predict which action is primary or destructive.",
+    "screenshot": "screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Establish a consistent button style hierarchy: primary actions (green), secondary (gray), destructive (red). Apply uniformly across all sections. Use color to signal intent, not randomly."
+  },
+  {
+    "criterion": "H1",
+    "screen": "05_exhibition.png",
+    "severity": 3,
+    "evidence": "Status displayed as 'OPERATOR PAUSED · STOPPED' and 'EXHIBITION · FluidNC MOTION' using dot notation without a legend or key. Operator must guess what the dots mean (separation? hierarchy?). The same dot notation is not used consistently elsewhere in the UI (compare to 'user 0 · idle 15').",
+    "screenshot": "screens/05_exhibition.png",
+    "measurement": null,
+    "recommendation": "Use explicit labels: 'Print status: Operator paused (Stopped)' and 'Mode: Exhibition (FluidNC motion)'. Avoid ambiguous separators. If dot notation is needed, provide a legend on first use."
+  },
+  {
+    "criterion": "H10",
+    "screen": "07_sketch_page.png",
+    "severity": 3,
+    "evidence": "The sketch editor exposes interactive controls—a 'circles' dropdown, a slider for parameter adjustment, a 'mask' checkbox, and an '+ Add layer' button—with no tooltips, help text, labels, or documentation. A first-time user cannot understand what these controls do or how to use them effectively.",
+    "screenshot": "screens/07_sketch_page.png",
+    "measurement": null,
+    "recommendation": "Add tooltips or a help panel (?) explaining each control. Example: 'circles: Generator algorithm. Slider: Shape complexity (0–100). Mask: Restrict output to selected region. Add layer: Stack multiple generation rules.' Consider a quick-start modal on first visit."
+  },
+  {
+    "criterion": "H2",
+    "screen": "02_calibration.png",
+    "severity": 2,
+    "evidence": "The 'Feed' input field (showing value 1000) has no unit label, while 'Travel mm/min' and 'Draw mm/min' fields explicitly label their units. Inconsistency creates ambiguity: is Feed in mm/min, steps, or something else?",
+    "screenshot": "screens/02_calibration.png",
+    "measurement": null,
+    "recommendation": "Add unit label to the Feed field: 'Feed (mm/min)' or 'Feed rate' with the appropriate unit in a hint below the input."
+  },
+  {
+    "criterion": "H1",
+    "screen": "03_tests.png",
+    "severity": 2,
+    "evidence": "A dark progress bar displays '0.08 / 0.00%' with no label, context, or title. Operator cannot determine what is being measured (progress? ratio? memory?), and the two numbers suggest a comparison but the meaning is opaque.",
+    "screenshot": "screens/03_tests.png",
+    "measurement": null,
+    "recommendation": "Add a clear label above or below the bar: 'Compilation progress: 0.08 / 0.00%' or 'Test execution: X of Y complete'. If the metric is rarely used, consider removing it to reduce visual clutter (H8)."
+  },
+  {
+    "criterion": "H2",
+    "screen": "04_work.png",
+    "severity": 2,
+    "evidence": "The line 'Controlled through NEJE_MACMINI_AGENT_URL' uses technical environment variable naming. An operator does not need or want to know this implementation detail. It distracts from the actual control (START/STOP buttons).",
+    "screenshot": "screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Remove or relocate this line to a developer/settings panel. Replace with user-facing text if needed: 'Manages asset transfer to the device' or omit entirely."
+  },
+  {
+    "criterion": "H6",
+    "screen": "05_exhibition.png",
+    "severity": 2,
+    "evidence": "Progress detail line reads '15/16 cells · user 0 · idle 15'. Without seeing the print grid or knowing what 'user 0' and 'idle 15' mean, the operator cannot assess print status. The notation requires domain knowledge not provided by the UI.",
+    "screenshot": "screens/05_exhibition.png",
+    "measurement": null,
+    "recommendation": "Use explicit language: 'Cells completed: 15 of 16. Current: user queue 0 (waiting 15 cells). Row 2 of 4.' Add a visual grid or timeline to contextualize the position and remaining work."
+  },
+  {
+    "criterion": "H7",
+    "screen": "07_sketch_page.png",
+    "severity": 2,
+    "evidence": "The close button (×) in the top right corner of the sketch editor is small (relative to the large canvas) and lacks visibility or discoverability. A user might not see it as an option to return to the main UI.",
+    "screenshot": "screens/07_sketch_page.png",
+    "measurement": null,
+    "recommendation": "Increase button size, or add a visual affordance (e.g., background circle, border). Alternatively, add a 'Back' or 'Close' text button alongside the ×. Ensure keyboard shortcut (ESC) is available and documented."
+  },
+  {
+    "criterion": "H10",
+    "screen": "04_work.png",
+    "severity": 2,
+    "evidence": "Help text for the Thermal printer section is truncated: 'Printer offline is a warning only; plotter and upload workflow c...' The sentence ends abruptly, leaving the operator without complete information about the printer's role or offline behavior.",
+    "screenshot": "screens/04_work.png",
+    "measurement": null,
+    "recommendation": "Complete the truncated sentence and reflow text to fit the container. Provide clear guidance: 'Printer offline is a warning only; the plotter will continue. Upload workflow captures prints as images.' Add a [?] help icon with full explanation."
+  },
+  {
+    "criterion": "H1",
+    "screen": "05_exhibition.png",
+    "severity": 2,
+    "evidence": "Progress bar label shows '0.378' with no units or context. Is this 37.8%, a ratio, or a raw metric? The lack of a percent sign or legend creates ambiguity. Compare to the text below ('38%') which adds clarity, but the bar label does not.",
+    "screenshot": "screens/05_exhibition.png",
+    "measurement": null,
+    "recommendation": "Label the progress bar with units: '0.378 (37.8%)' or simplify to '38%'. Ensure all progress indicators use consistent units."
+  },
+  {
+    "criterion": "H8",
+    "screen": "01_connection.png",
+    "severity": 1,
+    "evidence": "Header status bar displays 6 separate status fields (NOW, WORK ZERO, FIREBASE, QUEUE, SHEET, NEXT ACTION). Each repeats key information already shown in detail below (e.g., OPERATOR PAUSED shown in both header and main section, WORK ZERO status duplicated). This is the known issue; flagged here for completeness. The same duplication appears on screens 02–05.",
+    "screenshot": "screens/01_connection.png",
+    "measurement": null,
+    "recommendation": "Consolidate status displays. Keep either the compact header bar or the detailed sections below, not both. If both are needed, ensure each shows distinct information. Current: 7 facts across 18+ display sites."
+  },
+  {
+    "criterion": "H8",
+    "screen": "01_connection.png",
+    "severity": 1,
+    "evidence": "An orange banner labeled 'NOW OPERATOR PAUSED' appears above the status fields, followed by a separate informational banner ('Plotter output starts only after...'), creating visual noise. The status and contextual information compete for prominence instead of being layered clearly.",
+    "screenshot": "screens/01_connection.png",
+    "measurement": null,
+    "recommendation": "Separate status from contextual help: move the informational banner to a collapsible section or help panel. Reserve the top banner for critical status only (e.g., errors or alerts). Use consistent visual hierarchy."
+  }
+]

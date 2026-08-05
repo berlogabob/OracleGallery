@@ -1,0 +1,7 @@
+url: http://127.0.0.1:8787/generative/index.html
+---
+- openLink: http://127.0.0.1:8787/generative/index.html
+- extendedWaitUntil:
+    visible: "Regenerate"
+    timeout: 10000
+- takeScreenshot: audit/2026-08-05-1008/screens/07_sketch_page
