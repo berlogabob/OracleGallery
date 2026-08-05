@@ -54,3 +54,4 @@ ESP32-BTN_Printer/**/config.local.h
 .idea/
 graphify-out/
 /2026-*.txt
+.claude/scheduled_tasks.lock
