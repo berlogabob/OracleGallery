@@ -71,6 +71,12 @@ class GuiContext:
         self.active_workspace = {"value": saved_workspace if saved_workspace in VALID_WORKSPACES else "connection"}
         self.preview_mode = {"value": "preview"}
 
+        # Dedup state for the FluidNC offline toast: only notify once per offline
+        # transition instead of on every status check (CONNECT click, periodic
+        # probe after another action, etc). The live-strip "Now" metric stays as
+        # the persistent indicator while this stays quiet in between transitions.
+        self._fluidnc_offline_notified = False
+
         # Element handles assigned during layout / workspace build.
         self.preview: Any = None
         self.preview_progress_label: Any = None
@@ -526,7 +532,29 @@ class GuiContext:
                 ui.button("Confirm", on_click=confirmed).props("dense color=warning")
         dialog.open()
 
-    async def fluidnc_action(self, label: str, action: Any, *, refresh_probe: bool = True) -> None:
+    def _notify_fluidnc_offline(self, detail: str) -> None:
+        """Show one friendly, dismissible offline notice per offline transition.
+
+        The raw technical detail (host:port, timeout kind) is demoted to a
+        secondary caption here and is also already routed to the logs view via
+        supervisor.check_fluidnc()/refresh_logs(). Repeated checks while still
+        offline (CONNECT re-clicks, incidental probes after other FluidNC
+        actions) are suppressed until the state flips back online.
+        """
+        if self._fluidnc_offline_notified:
+            return
+        self._fluidnc_offline_notified = True
+        ui.notify(
+            "Plotter offline — check power and WiFi. Use CONNECT on the Connection tab to retry.",
+            caption=detail,
+            type="negative",
+            close_button="DISMISS",
+            timeout=0,
+        )
+
+    async def fluidnc_action(
+        self, label: str, action: Any, *, refresh_probe: bool = True, success_message: str | None = None
+    ) -> None:
         ui.notify(f"Sending {label}...", color="info")
         try:
             state = await run.io_bound(action)
@@ -536,7 +564,10 @@ class GuiContext:
             self.refresh_logs()
             self.restore_workspace()
             return
-        ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
+        if state.status == ComponentStatus.RUNNING and success_message:
+            ui.notify(success_message, color="positive")
+        else:
+            ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
         if refresh_probe:
             await self.check_fluidnc(scan=False)
         self.refresh_status()
@@ -554,12 +585,18 @@ class GuiContext:
             return
         if probe is None:  # ponytail: no configured endpoint yet — offline, not an error
             self.update_fluidnc_labels({"controller_state": "Offline", "message": "No FluidNC endpoint configured"})
+            self._notify_fluidnc_offline("No FluidNC endpoint configured yet.")
+            self.refresh_logs()
             self.restore_workspace()
             return
         self.supervisor.check_fluidnc(probe)
         result = {**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port}
         self.update_fluidnc_labels(result)
-        ui.notify(probe.message, color="positive" if probe.online else "negative")
+        if probe.online:
+            self._fluidnc_offline_notified = False
+            ui.notify(probe.message, color="positive")
+        else:
+            self._notify_fluidnc_offline(probe.message)
         self.refresh_logs()
         self.restore_workspace()
 
@@ -570,27 +607,39 @@ class GuiContext:
         self.confirm_action(
             "SET WORK ZERO",
             "Current XY becomes G54 X0 Y0. Z is not zeroed; Z moves use absolute configured values. Use after placing the tool at the upper-left origin.",
-            lambda: self.fluidnc_action("set work zero", self.supervisor.set_work_zero),
+            lambda: self.fluidnc_action("set work zero", self.supervisor.set_work_zero, success_message="Work zero set"),
         )
 
     def home_xy(self) -> None:
         self.confirm_action(
             "HOME ALL",
             "The plotter will run FluidNC homing command $H. Use this when FluidNC rejects single-axis homing.",
-            lambda: self.fluidnc_action("home all", self.supervisor.home_xy_fluidnc, refresh_probe=False),
+            lambda: self.fluidnc_action(
+                "home all", self.supervisor.home_xy_fluidnc, refresh_probe=False, success_message="Homed all axes"
+            ),
         )
 
     def home_axis(self, axis: str) -> None:
         self.confirm_action(
             f"HOME {axis}",
             f"Single-axis homing sends $H={axis}. Use only if this FluidNC config supports it.",
-            lambda: self.fluidnc_action(f"home {axis}", lambda: self.supervisor.home_fluidnc(axis), refresh_probe=False),
+            lambda: self.fluidnc_action(
+                f"home {axis}",
+                lambda: self.supervisor.home_fluidnc(axis),
+                refresh_probe=False,
+                success_message=f"Homed {axis}",
+            ),
         )
 
     async def jog(self, axis: str, sign: float) -> None:
         distance = sign * float(self.fields["jog_step"].value or 1)
         feed = float(self.fields["jog_feed"].value or 1000)
-        await self.fluidnc_action(f"jog {axis}", lambda: self.supervisor.jog_fluidnc(axis, distance, feed), refresh_probe=False)
+        await self.fluidnc_action(
+            f"jog {axis}",
+            lambda: self.supervisor.jog_fluidnc(axis, distance, feed),
+            refresh_probe=False,
+            success_message=f"Jogged {axis} {distance:+g}mm",
+        )
 
     async def jog_x_negative(self) -> None:
         await self.jog("X", -1)
@@ -605,10 +654,12 @@ class GuiContext:
         await self.jog("Y", 1)
 
     async def pen_up(self) -> None:
-        await self.fluidnc_action("pen up", self.supervisor.pen_up_fluidnc, refresh_probe=False)
+        await self.fluidnc_action("pen up", self.supervisor.pen_up_fluidnc, refresh_probe=False, success_message="Pen up")
 
     async def pen_down(self) -> None:
-        await self.fluidnc_action("pen down", self.supervisor.pen_down_fluidnc, refresh_probe=False)
+        await self.fluidnc_action(
+            "pen down", self.supervisor.pen_down_fluidnc, refresh_probe=False, success_message="Pen down"
+        )
 
     def unlock_alarm(self) -> None:
         self.confirm_action("UNLOCK ALARM", "This sends $X. It clears FluidNC alarm state without moving the machine.", lambda: self.fluidnc_action("unlock", self.supervisor.unlock_fluidnc_alarm))

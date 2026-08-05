@@ -5,7 +5,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import helper_text
+from ..ui import helper_text, primary_action_button
 
 
 def build(ctx: GuiContext) -> None:
@@ -13,7 +13,7 @@ def build(ctx: GuiContext) -> None:
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Exhibition controls").classes("text-sm font-bold")
             helper_text("Minimal live-print controls. No layout, jog, scale or test generation here.")
-            ctx.start_print_button = ui.button("START PRINT", on_click=ctx.start_print).props("dense color=positive").classes("w-full")
+            ctx.start_print_button = primary_action_button("START PRINT", ctx.start_print).classes("w-full")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Live print state").classes("text-sm font-bold")

@@ -8,7 +8,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import helper_text, mini_metric
+from ..ui import helper_text, mini_metric, primary_action_button, safe_action_button
 from .motion import render_motion_panel
 
 
@@ -19,8 +19,8 @@ def build(ctx: GuiContext) -> None:
             ui.label("FluidNC Connection").classes("text-sm font-bold")
             helper_text("Network/controller checks only. No motion except emergency, unlock, resume and reset.")
             with ui.row().classes("gap-2"):
-                ui.button("CONNECT", on_click=lambda: ctx.check_fluidnc(scan=False)).props("dense color=positive")
-                ui.button("SCAN LAN", on_click=ctx.scan_fluidnc).props("dense flat")
+                primary_action_button("CONNECT", lambda: ctx.check_fluidnc(scan=False))
+                safe_action_button("SCAN LAN", ctx.scan_fluidnc)
             with ui.grid(columns=2).classes("w-full gap-1"):
                 for key, label in (
                     ("webui", "WebUI"), ("telnet", "Telnet"), ("state", "State"),
@@ -35,7 +35,7 @@ def build(ctx: GuiContext) -> None:
             ui.label("Controller Recovery").classes("text-sm font-bold")
             with ui.row().classes("gap-2"):
                 ui.button("UNLOCK", on_click=ctx.unlock_alarm).props("dense color=warning")
-                ui.button("Resume", on_click=ctx.resume_after_hold).props("dense flat")
+                safe_action_button("Resume", ctx.resume_after_hold)
                 ui.button("RESET / ABORT", on_click=ctx.soft_reset).props("dense color=negative")
 
         # Manual motion (shared card)

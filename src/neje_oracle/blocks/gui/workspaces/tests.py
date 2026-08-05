@@ -6,7 +6,7 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import helper_text, number_control
+from ..ui import helper_text, number_control, primary_action_button, safe_action_button
 
 
 def build(ctx: GuiContext) -> None:
@@ -18,8 +18,8 @@ def build(ctx: GuiContext) -> None:
             ui.label("G-code test draw").classes("text-sm font-bold")
             helper_text("Generates a local sheet from bundled symbols or starts a test print from the current queue/settings.")
             with ui.row().classes("items-center gap-2"):
-                ui.button("GENERATE G-CODE", on_click=ctx.generate_dry_run).props("dense")
-                ui.button("START TEST PRINT", on_click=ctx.start_test_print).props("dense color=positive")
+                safe_action_button("GENERATE G-CODE", ctx.generate_dry_run)
+                primary_action_button("START TEST PRINT", ctx.start_test_print)
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("SVG test draw").classes("text-sm font-bold")
@@ -37,7 +37,7 @@ def build(ctx: GuiContext) -> None:
                 )
             ui.upload(on_upload=ctx.handle_svg_upload).props("accept=.svg max-files=1 auto-upload").classes("w-full")
             with ui.row().classes("items-center gap-2"):
-                ui.button("START SVG PRINT", on_click=ctx.print_uploaded_svg).props("dense color=positive")
+                primary_action_button("START SVG PRINT", ctx.print_uploaded_svg)
                 ctx.uploaded_svg_label = ui.label("No SVG selected").classes("path-label text-xs")
 
         with ui.card().classes("oracle-card compact-card w-full"):

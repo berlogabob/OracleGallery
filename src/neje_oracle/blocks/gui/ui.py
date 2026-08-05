@@ -4,6 +4,11 @@ from typing import Any, Callable
 
 from nicegui import ui
 
+
+def primary_action_button(label, on_click) -> Any:
+    return ui.button(label, on_click=on_click).props("dense color=positive")
+
+
 def danger_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     return ui.button(label, on_click=on_click).props("dense color=warning")
 

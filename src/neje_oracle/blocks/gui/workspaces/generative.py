@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from ..context import GuiContext
+from ..ui import primary_action_button
 
 
 LATEST: dict = {"name": "", "bytes": b""}
@@ -79,7 +80,7 @@ def build(ctx: GuiContext) -> None:
             ui.timer(1.0, update_capture_label)
 
             with ui.row().classes("items-center gap-2"):
-                ui.button("PRINT CAPTURED SVG", on_click=lambda: ctx.print_generative_svg()).props("dense color=positive")
+                primary_action_button("PRINT CAPTURED SVG", lambda: ctx.print_generative_svg())
 
             def push_stream_state() -> None:
                 seconds = max(5, float(stream_interval.value or 15))

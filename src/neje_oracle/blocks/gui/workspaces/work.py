@@ -5,7 +5,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import danger_action_button, helper_text, log_viewer, mini_metric, safe_action_button
+from ..ui import danger_action_button, helper_text, log_viewer, mini_metric, primary_action_button, safe_action_button
 
 
 def build(ctx: GuiContext) -> None:
@@ -16,17 +16,17 @@ def build(ctx: GuiContext) -> None:
             ui.label("System run").classes("text-sm font-bold")
             helper_text("Start the supervised local services, reset the Firebase baseline for this run, or stop safely before the next sheet.")
             with ui.row().classes("gap-2"):
-                ui.button("START SYSTEM", on_click=ctx.start_system).props("dense color=positive")
+                primary_action_button("START SYSTEM", ctx.start_system)
                 safe_action_button("NEW RUN", ctx.reset_baseline)
                 danger_action_button("STOP SYSTEM", ctx.stop_system)
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Mac mini uploader").classes("text-sm font-bold")
             with ui.row().classes("gap-2"):
-                ui.button("START", on_click=ctx.start_macmini).props("dense")
+                safe_action_button("START", ctx.start_macmini)
                 ui.button("STOP", on_click=ctx.stop_macmini).props("dense color=warning")
-                ui.button("SCAN", on_click=ctx.scan_macmini).props("dense flat")
-                ui.button("RESTART", on_click=ctx.restart_macmini).props("dense")
+                safe_action_button("SCAN", ctx.scan_macmini)
+                safe_action_button("RESTART", ctx.restart_macmini)
             helper_text("Controlled through NEJE_MACMINI_AGENT_URL")
 
         with ui.card().classes("oracle-card compact-card w-full"):
@@ -35,11 +35,11 @@ def build(ctx: GuiContext) -> None:
             fields["thermal_printer_url"] = ui.input("ESP32 URL", value=str(saved_printer.get("url") or "http://10.28.8.56")).props("dense outlined").classes("w-full")
             fields["thermal_session_dir"] = ui.input("Session folder", value=str(ctx.latest_receipt_session_dir() or "")).props("dense outlined").classes("w-full")
             with ui.row().classes("gap-2 flex-wrap"):
-                ui.button("STATUS", on_click=ctx.thermal_printer_status).props("dense")
-                ui.button("CONNECT", on_click=ctx.thermal_printer_connect).props("dense")
-                ui.button("PRINT LATEST", on_click=ctx.thermal_printer_print_latest).props("dense color=positive")
-                ui.button("PRINT SELECTED", on_click=ctx.thermal_printer_print_selected).props("dense")
-                ui.button("TEST RECEIPT", on_click=ctx.thermal_printer_test_receipt).props("dense flat")
+                safe_action_button("STATUS", ctx.thermal_printer_status)
+                safe_action_button("CONNECT", ctx.thermal_printer_connect)
+                primary_action_button("PRINT LATEST", ctx.thermal_printer_print_latest)
+                safe_action_button("PRINT SELECTED", ctx.thermal_printer_print_selected)
+                safe_action_button("TEST RECEIPT", ctx.thermal_printer_test_receipt)
             ctx.thermal_printer_labels["message"] = ui.label("Printer offline is a warning only; plotter and upload workflow continue.").classes("path-label text-xs")
 
         with ui.card().classes("oracle-card compact-card w-full"):
