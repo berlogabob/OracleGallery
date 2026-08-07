@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, ensure_dir
-from ..blocks.gui.modes import mode_policy
-from ..blocks.gui.support import GuiSettings, default_idle_root, generate_dry_run_sheet, list_base_symbols
-from ..shared.models import SystemCheck, SystemCheckLevel, SystemCheckResult, SystemMode
 from ..blocks.fluidnc.transport import FluidNCTransport
+from ..blocks.gcode.dry_run import generate_dry_run_sheet
+from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, ensure_dir
+from ..shared.gui_settings import GuiSettings
+from ..shared.models import SystemCheck, SystemCheckLevel, SystemCheckResult, SystemMode
+from ..shared.modes import mode_policy
+from ..shared.symbols import default_idle_root, list_base_symbols
 
 
 class SystemCheckService:
@@ -62,20 +64,32 @@ class SystemCheckService:
         idle_root = default_idle_root()
         idle_count = len(list(idle_root.glob("*.svg"))) if idle_root.exists() else 0
         if idle_count <= 0:
-            return SystemCheck("local filler fallback", SystemCheckLevel.WARNING, "No legacy local filler SVGs found; production uses queue jobs or Generate next filler")
-        return SystemCheck("local filler fallback", SystemCheckLevel.OK, f"{idle_count} legacy local filler SVG(s) available as fallback")
+            return SystemCheck(
+                "local filler fallback",
+                SystemCheckLevel.WARNING,
+                "No legacy local filler SVGs found; production uses queue jobs or Generate next filler",
+            )
+        return SystemCheck(
+            "local filler fallback",
+            SystemCheckLevel.OK,
+            f"{idle_count} legacy local filler SVG(s) available as fallback",
+        )
 
     def _check_uploader_folder(self) -> SystemCheck:
         root = self.uploader_settings.session_root
         if not root.exists():
-            return SystemCheck("uploader folder", SystemCheckLevel.WARNING, f"Uploader watched folder does not exist yet: {root}")
+            return SystemCheck(
+                "uploader folder", SystemCheckLevel.WARNING, f"Uploader watched folder does not exist yet: {root}"
+            )
         if not root.is_dir():
             return SystemCheck("uploader folder", SystemCheckLevel.CRITICAL, f"Uploader path is not a folder: {root}")
         return SystemCheck("uploader folder", SystemCheckLevel.OK, f"Uploader watches {root}")
 
     def _check_firebase(self, mode: SystemMode) -> SystemCheck:
         if self.firebase_settings.enabled:
-            return SystemCheck("firebase config", SystemCheckLevel.OK, f"Firebase configured: {self.firebase_settings.project_id}")
+            return SystemCheck(
+                "firebase config", SystemCheckLevel.OK, f"Firebase configured: {self.firebase_settings.project_id}"
+            )
         level = SystemCheckLevel.CRITICAL if mode_policy(mode).firebase_required else SystemCheckLevel.WARNING
         return SystemCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
 
@@ -87,7 +101,9 @@ class SystemCheckService:
         try:
             payload = json.loads(config_path.read_text(encoding="utf-8"))
         except Exception as exc:  # noqa: BLE001
-            return SystemCheck("tinybee hardware", SystemCheckLevel.CRITICAL, f"TinyBee config JSON is unreadable: {exc}")
+            return SystemCheck(
+                "tinybee hardware", SystemCheckLevel.CRITICAL, f"TinyBee config JSON is unreadable: {exc}"
+            )
 
         values = _flatten_tinybee_settings(payload)
         problems: list[str] = []
@@ -100,7 +116,9 @@ class SystemCheckService:
             problems.append("Telnet/Enable must be 1")
         telnet_port = _float_value(values.get("Telnet/Port"), 0)
         if int(telnet_port) != self.plotter_settings.fluidnc_telnet_port:
-            problems.append(f"Telnet port {int(telnet_port)} does not match sender port {self.plotter_settings.fluidnc_telnet_port}")
+            problems.append(
+                f"Telnet port {int(telnet_port)} does not match sender port {self.plotter_settings.fluidnc_telnet_port}"
+            )
 
         x_travel = _float_value(values.get("/axes/X/max_travel_mm"), 0)
         y_travel = _float_value(values.get("/axes/Y/max_travel_mm"), 0)
@@ -143,7 +161,9 @@ class SystemCheckService:
             online, message = self.fluidnc_checker(1.5)
             detail = {}
         else:
-            probe = FluidNCTransport(self.plotter_settings).probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
+            probe = FluidNCTransport(self.plotter_settings).probe(
+                timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds
+            )
             online = probe.online and probe.controller.is_idle
             message = probe.message
             detail = probe.to_dict()
@@ -160,7 +180,9 @@ class SystemCheckService:
             _assert_writable(self.plotter_settings.spool_root)
         except Exception as exc:  # noqa: BLE001
             return SystemCheck("spool folder", SystemCheckLevel.CRITICAL, f"Spool folder is not writable: {exc}")
-        return SystemCheck("spool folder", SystemCheckLevel.OK, f"Spool folder writable: {self.plotter_settings.spool_root}")
+        return SystemCheck(
+            "spool folder", SystemCheckLevel.OK, f"Spool folder writable: {self.plotter_settings.spool_root}"
+        )
 
     def _check_gcode_generation(self, gui_settings: GuiSettings) -> SystemCheck:
         try:

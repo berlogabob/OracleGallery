@@ -3,7 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1] / "src" / "neje_oracle"
 
 
@@ -35,3 +34,11 @@ def test_non_gui_blocks_do_not_import_gui_block() -> None:
         targets = _import_targets(path)
         assert not any("neje_oracle.blocks.gui" in target for target in targets), path
         assert not any(target.startswith("..gui") for target in targets), path
+
+
+def test_app_layer_does_not_import_gui_block() -> None:
+    for path in (ROOT / "app").rglob("*.py"):
+        targets = _import_targets(path)
+        assert not any("neje_oracle.blocks.gui" in target for target in targets), path
+        assert not any(target.startswith("..blocks.gui") for target in targets), path
+        assert not any(target.startswith(".blocks.gui") for target in targets), path
