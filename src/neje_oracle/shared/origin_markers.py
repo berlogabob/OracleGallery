@@ -82,13 +82,17 @@ def classify_session_origin(metadata: dict[str, Any] | None) -> OriginClassifica
 
     kind = str(metadata.get("kind") or "").strip().lower()
     generated_by = str(metadata.get("generatedBy") or metadata.get("generated_by") or "").strip().lower()
-    source_machine = str(
-        metadata.get("sourceMachine")
-        or metadata.get("source_machine")
-        or metadata.get("machine")
-        or metadata.get("host")
-        or ""
-    ).strip().lower()
+    source_machine = (
+        str(
+            metadata.get("sourceMachine")
+            or metadata.get("source_machine")
+            or metadata.get("machine")
+            or metadata.get("host")
+            or ""
+        )
+        .strip()
+        .lower()
+    )
 
     if kind.startswith("test") or "generate" in generated_by:
         if "mini" in source_machine or "macmini" in source_machine or "mac-mini" in source_machine:

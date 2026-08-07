@@ -104,7 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--repo-root", type=Path, default=repo_root)
     parser.add_argument("--esp32", help="ESP32 base URL, for example http://192.168.1.42")
-    parser.add_argument("--protocol", default="ilabel", choices=("ilabel", "escpos"), help="ESP32 /print protocol query.")
+    parser.add_argument(
+        "--protocol", default="ilabel", choices=("ilabel", "escpos"), help="ESP32 /print protocol query."
+    )
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--dry-run", action="store_true", help="Print JSON without posting to the ESP32.")
     parser.add_argument("--output", type=Path, help="Write the generated JSON payload to a file.")
@@ -132,7 +134,8 @@ def post_ilabel_raster_chunks(base_url: str, payload: dict[str, Any], *, timeout
     height = int(payload["ilabel_height_dots"])
     post_json(
         base,
-        "/ilabel-raster-begin?" + urllib.parse.urlencode({"width": str(width), "height": str(height), "length": str(len(raster))}),
+        "/ilabel-raster-begin?"
+        + urllib.parse.urlencode({"width": str(width), "height": str(height), "length": str(len(raster))}),
         None,
         timeout=timeout,
     )
@@ -199,7 +202,10 @@ def build_payload(
         symbol_image = render_svg_symbol_image(symbol_path, width=printer_width, height=symbol_size)
         escpos_symbol = escpos_raster(symbol_image)
     elif include_symbol:
-        print(f"No matching symbol SVG found for mark '{mark_name}'; sending receipt without symbol bitmap.", file=sys.stderr)
+        print(
+            f"No matching symbol SVG found for mark '{mark_name}'; sending receipt without symbol bitmap.",
+            file=sys.stderr,
+        )
 
     qr_escpos = escpos_raster(center_on_width(qr_image, printer_width))
     ilabel_image = render_thermal_receipt(
@@ -273,9 +279,15 @@ def render_thermal_receipt(
 
     blocks.append(text_block(symbol_label or "UNKNOWN SYMBOL", fonts["section"], width, align="center", bottom=18))
     blocks.append(rule_block(width, margin))
-    blocks.append(text_block("WHAT THE ORACLE PERCEIVED", fonts["section"], width, align="left", margin=margin, top=12, bottom=6))
-    blocks.append(wrapped_text_block(sanitize_ascii(oracle_text), fonts["body"], width, content_width, margin, bottom=18))
-    blocks.append(text_block("WHAT THE SYSTEM MEASURED", fonts["section"], width, align="left", margin=margin, bottom=6))
+    blocks.append(
+        text_block("WHAT THE ORACLE PERCEIVED", fonts["section"], width, align="left", margin=margin, top=12, bottom=6)
+    )
+    blocks.append(
+        wrapped_text_block(sanitize_ascii(oracle_text), fonts["body"], width, content_width, margin, bottom=18)
+    )
+    blocks.append(
+        text_block("WHAT THE SYSTEM MEASURED", fonts["section"], width, align="left", margin=margin, bottom=6)
+    )
     measure_lines = [
         f"INTENSITY   {format_measure(measures.get('intensity'))}",
         f"INSTABILITY {format_measure(measures.get('instability'))}",
@@ -283,7 +295,16 @@ def render_thermal_receipt(
     ]
     blocks.append(wrapped_text_block("\n".join(measure_lines), fonts["body"], width, content_width, margin, bottom=18))
     blocks.append(text_block("THEMES", fonts["section"], width, align="left", margin=margin, bottom=6))
-    blocks.append(wrapped_text_block(", ".join(sanitize_ascii(str(theme)).upper() for theme in themes) or "NONE", fonts["body"], width, content_width, margin, bottom=18))
+    blocks.append(
+        wrapped_text_block(
+            ", ".join(sanitize_ascii(str(theme)).upper() for theme in themes) or "NONE",
+            fonts["body"],
+            width,
+            content_width,
+            margin,
+            bottom=18,
+        )
+    )
     blocks.append(rule_block(width, margin))
     blocks.append(text_block("VIEW YOUR MARK ONLINE", fonts["section"], width, align="center", top=12, bottom=10))
     qr_size = min(248 if width >= 576 else 200, content_width)
@@ -337,10 +358,7 @@ def text_block(
     text_height = bbox[3] - bbox[1]
     image = Image.new("L", (width, max(1, top + text_height + bottom)), 255)
     draw = ImageDraw.Draw(image)
-    if align == "center":
-        x = max(0, (width - text_width) // 2)
-    else:
-        x = margin
+    x = max(0, (width - text_width) // 2) if align == "center" else margin
     draw.text((x, top - bbox[1]), text, fill=0, font=font)
     return image
 
@@ -481,7 +499,9 @@ def escpos_raster(image: Image.Image) -> bytes:
     width, height = image.size
     width_bytes = math.ceil(width / 8)
     payload = bytearray()
-    payload.extend([0x1D, 0x76, 0x30, 0x00, width_bytes & 0xFF, (width_bytes >> 8) & 0xFF, height & 0xFF, (height >> 8) & 0xFF])
+    payload.extend(
+        [0x1D, 0x76, 0x30, 0x00, width_bytes & 0xFF, (width_bytes >> 8) & 0xFF, height & 0xFF, (height >> 8) & 0xFF]
+    )
     payload.extend(raster_bytes(image))
     return bytes(payload)
 
@@ -602,7 +622,10 @@ def symbol_for_mark(symbol_root: Path, mark_name: str) -> Path | None:
         if index < len(MARK_NAMES) and normalize_name(MARK_NAMES[index]) == normalized_mark:
             return symbol
     for symbol in symbols:
-        if normalize_name(symbol.stem).find(normalized_mark) >= 0 or normalized_mark.find(normalize_name(symbol.stem)) >= 0:
+        if (
+            normalize_name(symbol.stem).find(normalized_mark) >= 0
+            or normalized_mark.find(normalize_name(symbol.stem)) >= 0
+        ):
             return symbol
     return None
 

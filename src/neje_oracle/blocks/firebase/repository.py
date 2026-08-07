@@ -52,7 +52,9 @@ class FirebaseRemoteRepository:
         receipt_blob.upload_from_filename(str(public_dir / "receipt.txt"), content_type="text/plain; charset=utf-8")
         qr_blob.upload_from_filename(str(public_dir / "qr.png"), content_type="image/png")
         if raw_svg_path.exists():
-            self._bucket.blob(raw_svg_storage_path).upload_from_filename(str(raw_svg_path), content_type="image/svg+xml")
+            self._bucket.blob(raw_svg_storage_path).upload_from_filename(
+                str(raw_svg_path), content_type="image/svg+xml"
+            )
         if tarot_path.exists():
             self._bucket.blob(tarot_storage_path).upload_from_filename(str(tarot_path), content_type="image/jpeg")
 
@@ -257,7 +259,9 @@ class FirebaseRemoteRepository:
             skipped += 1
         return skipped
 
-    def get_plot_job_counts(self, *, run_started_at: datetime | None = None, limit: int = 500) -> dict[str, int | str | bool]:
+    def get_plot_job_counts(
+        self, *, run_started_at: datetime | None = None, limit: int = 500
+    ) -> dict[str, int | str | bool]:
         docs = list(self._db.collection("plot_jobs").limit(limit).stream())
         return summarize_plot_job_counts(
             [doc.to_dict() or {} for doc in docs],
@@ -304,7 +308,7 @@ class FirebaseRemoteRepository:
             "error": error,
             "updatedAt": firestore.SERVER_TIMESTAMP,
         }
-        session_payload = {
+        session_payload: dict[str, str | int] = {
             "plotStatus": status.value,
         }
         if sheet_index is not None:
@@ -404,10 +408,7 @@ def recorded_datetime(value):
         return datetime.now(tz=UTC)
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=UTC)
-    if hasattr(value, "isoformat"):
-        raw = value.isoformat()
-    else:
-        raw = str(value)
+    raw = value.isoformat() if hasattr(value, "isoformat") else str(value)
     parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 

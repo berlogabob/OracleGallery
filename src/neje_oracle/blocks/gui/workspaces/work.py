@@ -14,7 +14,9 @@ def build(ctx: GuiContext) -> None:
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("System run").classes("text-sm font-bold")
-            helper_text("Start the supervised local services, reset the Firebase baseline for this run, or stop safely before the next sheet.")
+            helper_text(
+                "Start the supervised local services, reset the Firebase baseline for this run, or stop safely before the next sheet."
+            )
             with ui.row().classes("gap-2"):
                 primary_action_button("START SYSTEM", ctx.start_system)
                 safe_action_button("NEW RUN", ctx.reset_baseline)
@@ -32,38 +34,70 @@ def build(ctx: GuiContext) -> None:
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Thermal printer").classes("text-sm font-bold")
             saved_printer = ctx.supervisor.runtime_store.load_json("thermal_printer", {"url": "http://10.28.8.56"})
-            fields["thermal_printer_url"] = ui.input("ESP32 URL", value=str(saved_printer.get("url") or "http://10.28.8.56")).props("dense outlined").classes("w-full")
-            fields["thermal_session_dir"] = ui.input("Session folder", value=str(ctx.latest_receipt_session_dir() or "")).props("dense outlined").classes("w-full")
+            fields["thermal_printer_url"] = (
+                ui.input("ESP32 URL", value=str(saved_printer.get("url") or "http://10.28.8.56"))
+                .props("dense outlined")
+                .classes("w-full")
+            )
+            fields["thermal_session_dir"] = (
+                ui.input("Session folder", value=str(ctx.latest_receipt_session_dir() or ""))
+                .props("dense outlined")
+                .classes("w-full")
+            )
             with ui.row().classes("gap-2 flex-wrap"):
                 safe_action_button("STATUS", ctx.thermal_printer_status)
                 safe_action_button("CONNECT", ctx.thermal_printer_connect)
                 primary_action_button("PRINT LATEST", ctx.thermal_printer_print_latest)
                 safe_action_button("PRINT SELECTED", ctx.thermal_printer_print_selected)
                 safe_action_button("TEST RECEIPT", ctx.thermal_printer_test_receipt)
-            ctx.thermal_printer_labels["message"] = ui.label("Printer offline is a warning only; plotter and upload workflow continue.").classes("path-label text-xs")
+            ctx.thermal_printer_labels["message"] = ui.label(
+                "Printer offline is a warning only; plotter and upload workflow continue."
+            ).classes("path-label text-xs")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Work zero").classes("text-sm font-bold")
-            helper_text("Before Set Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure.")
+            helper_text(
+                "Before Set Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure."
+            )
             with ui.row().classes("gap-2"):
                 ui.button("SET WORK ZERO", on_click=ctx.set_work_zero).props("dense color=warning")
             ctx.ready_labels["message"] = ui.label("-").classes("path-label text-xs")
             ui.separator()
-            ctx.system_check_label = ui.label("System check runs automatically when print starts.").classes("text-xs text-[#8f4f2b]")
+            ctx.system_check_label = ui.label("System check runs automatically when print starts.").classes(
+                "text-xs text-[#8f4f2b]"
+            )
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Queue").classes("text-sm font-bold")
             with ui.grid(columns=4).classes("w-full gap-1"):
-                for key, label in (("state", "Queue"), ("pending", "Pending"), ("active", "Active"), ("failed", "Fail/Skip")):
+                for key, label in (
+                    ("state", "Queue"),
+                    ("pending", "Pending"),
+                    ("active", "Active"),
+                    ("failed", "Fail/Skip"),
+                ):
                     ctx.queue_labels[key] = mini_metric(label)
             ctx.queue_labels["message"] = ui.label("-").classes("path-label text-[10px]")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Logs").classes("text-sm font-bold")
-            fields["log_filter"] = ui.select(
-                {"all": "all", "errors": "errors", "system": "system", "plotter": "plotter", "uploader": "uploader", "checks": "checks"},
-                value="all", label="Filter",
-            ).props("dense outlined").classes("w-full").on_value_change(ctx.refresh_logs)
+            fields["log_filter"] = (
+                ui.select(
+                    {
+                        "all": "all",
+                        "errors": "errors",
+                        "system": "system",
+                        "plotter": "plotter",
+                        "uploader": "uploader",
+                        "checks": "checks",
+                    },
+                    value="all",
+                    label="Filter",
+                )
+                .props("dense outlined")
+                .classes("w-full")
+                .on_value_change(ctx.refresh_logs)
+            )
             with ui.row().classes("gap-2"):
                 safe_action_button("Refresh", ctx.refresh_logs)
                 safe_action_button("Open logs", ctx.open_logs)

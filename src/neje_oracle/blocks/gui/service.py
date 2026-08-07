@@ -6,16 +6,15 @@ from pathlib import Path
 
 from nicegui import ui
 
-from .context import GuiContext
-from .ui import mini_metric, warning_banner
-from .workspaces import calibration, connection, exhibition, generative, tests, work
 from ...shared.origin_markers import (
     ALL_ORIGINS,
     ORIGIN_LABELS,
     ORIGIN_MARKER_POSITIONS,
     ORIGIN_PREVIEW_COLORS,
 )
-
+from .context import GuiContext
+from .ui import mini_metric, warning_banner
+from .workspaces import calibration, connection, exhibition, generative, image, tests, work
 
 PAGE_STYLE = """
 <style>
@@ -117,7 +116,9 @@ def _preview_legend() -> None:
                 ui.element("span").classes("legend-ring legend-double-ring")
                 ui.label("double ring: filler/local cell").classes("text-[10px]")
             with ui.element("div").classes("legend-chip"):
-                ui.element("span").classes("legend-dot").style("background:#8f8980; border-color:#8f8980; opacity:0.45;")
+                ui.element("span").classes("legend-dot").style(
+                    "background:#8f8980; border-color:#8f8980; opacity:0.45;"
+                )
                 ui.label("gray: next in line").classes("text-[10px]")
         with ui.row().classes("items-center gap-3 flex-wrap"):
             for origin in ALL_ORIGINS:
@@ -138,19 +139,24 @@ def build_page() -> None:
         # Header + tabs + emergency stop
         with ui.row().classes("w-full items-center gap-3"):
             ui.label("THE ORACLE OPERATOR").classes("oracle-title text-lg")
-            with ui.tabs(on_change=lambda event: ctx.workspace_changed(event.value)).classes("workspace-tabs") as workspace_tabs:
+            with ui.tabs(on_change=lambda event: ctx.workspace_changed(event.value)).classes(
+                "workspace-tabs"
+            ) as workspace_tabs:
                 connection_tab = ui.tab("connection", label="1 CONNECTION")
                 calibration_tab = ui.tab("calibration", label="2 CALIBRATION")
                 tests_tab = ui.tab("tests", label="3 TESTS")
                 work_tab = ui.tab("work", label="4 WORK")
                 exhibition_tab = ui.tab("exhibition", label="5 EXHIBITION")
                 generative_tab = ui.tab("generative", label="6 GENERATIVE")
+                image_tab = ui.tab("image", label="7 IMAGE")
             workspace_tabs.value = ctx.active_workspace["value"]
             ctx.workspace_tabs = workspace_tabs
             ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
 
         warning_banner("Plotter output starts only after system checks pass, work zero is set, and FluidNC is Idle.")
-        ui.label("Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control.").classes("mobile-operator-warning")
+        ui.label(
+            "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
+        ).classes("mobile-operator-warning")
 
         # Live status strip
         with ui.element("div").classes("live-strip w-full"):
@@ -177,6 +183,8 @@ def build_page() -> None:
                     exhibition.build(ctx)
                 with ui.tab_panel(generative_tab).classes("p-0"):
                     generative.build(ctx)
+                with ui.tab_panel(image_tab).classes("p-0"):
+                    image.build(ctx)
 
             with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
                 with ui.row().classes("w-full items-center justify-between"):

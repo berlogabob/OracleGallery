@@ -10,17 +10,17 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import cached_property
 from ipaddress import ip_network
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ...shared.config import FirebaseSettings, firebase_enabled
 from ..firebase.repository import FirebaseRemoteRepository, recorded_datetime
-
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SEND_RECEIPT_SCRIPT = REPO_ROOT / "ESP32-BTN_Printer" / "tools" / "send_receipt.py"
@@ -98,7 +98,9 @@ class ThermalAutoprintService:
             try:
                 status = self.http_get_json(f"{self.macmini_agent_url}/status", self.settings.timeout_seconds)
                 watched_folder = Path(str(status.get("watched_folder") or "")).expanduser()
-                imported = [str(session_id) for session_id in status.get("last_imported", []) if str(session_id).strip()]
+                imported = [
+                    str(session_id) for session_id in status.get("last_imported", []) if str(session_id).strip()
+                ]
             except Exception as exc:  # noqa: BLE001
                 agent_error = str(exc)
                 imported = []
@@ -226,7 +228,9 @@ class ThermalAutoprintService:
         session_id = str(payload.get("sessionId") or payload.get("_id") or "").strip()
         if not session_id:
             return None
-        asset_paths = payload.get("assetPaths") if isinstance(payload.get("assetPaths"), dict) else {}
+        asset_paths = payload.get("assetPaths")
+        if not isinstance(asset_paths, dict):
+            asset_paths = {}
         receipt_path = str(asset_paths.get("receipt") or "")
         svg_path = str(asset_paths.get("svg") or "")
         if not receipt_path or not svg_path:
@@ -245,7 +249,9 @@ class ThermalAutoprintService:
 
     def _write_firebase_csv(self, payload: dict[str, Any], session_dir: Path) -> None:
         session_id = str(payload.get("sessionId") or payload.get("_id") or session_dir.name)
-        measures = payload.get("measures") if isinstance(payload.get("measures"), dict) else {}
+        measures = payload.get("measures")
+        if not isinstance(measures, dict):
+            measures = {}
         themes = payload.get("themes") if isinstance(payload.get("themes"), list) else []
         csv_path = session_dir / f"{session_id}_receipt.csv"
         with csv_path.open("w", newline="", encoding="utf-8") as handle:
@@ -499,8 +505,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retry-seconds", type=float, default=_env_float("NEJE_THERMAL_RETRY_SECONDS", 60.0))
     parser.add_argument("--max-attempts", type=int, default=_env_int("NEJE_THERMAL_MAX_ATTEMPTS", 3))
     parser.add_argument("--timeout", type=float, default=_env_float("NEJE_THERMAL_TIMEOUT_SECONDS", 90.0))
-    parser.add_argument("--state-path", type=Path, default=Path(os.getenv("NEJE_THERMAL_STATE_PATH", str(REPO_ROOT / "runtime" / "thermal_autoprint.json"))))
-    parser.add_argument("--cache-root", type=Path, default=Path(os.getenv("NEJE_THERMAL_CACHE_ROOT", str(REPO_ROOT / "runtime" / "thermal_sessions"))))
+    parser.add_argument(
+        "--state-path",
+        type=Path,
+        default=Path(os.getenv("NEJE_THERMAL_STATE_PATH", str(REPO_ROOT / "runtime" / "thermal_autoprint.json"))),
+    )
+    parser.add_argument(
+        "--cache-root",
+        type=Path,
+        default=Path(os.getenv("NEJE_THERMAL_CACHE_ROOT", str(REPO_ROOT / "runtime" / "thermal_sessions"))),
+    )
     return parser
 
 

@@ -34,7 +34,7 @@ def onReceive(dat, rowIndex, message, byteData, peer=None):
         if source_kind == selected:
             _handle_start(dat, source, text)
         else:
-            _append_log(dat, "IGNORED", source, "selected={} message={}".format(selected, text))
+            _append_log(dat, "IGNORED", source, f"selected={selected} message={text}")
     else:
         if source_kind == selected:
             _append_log(dat, "RX", source, text)
@@ -127,9 +127,7 @@ def _flash_notification(bridge):
         node.color = FLASH_COLOR
         paths.append(node.path)
 
-    script = "\n".join(
-        "op({!r}).color = {!r}".format(path, DEFAULT_COLOR) for path in paths
-    )
+    script = "\n".join(f"op({path!r}).color = {DEFAULT_COLOR!r}" for path in paths)
     if script:
         run(script, delayFrames=FLASH_FRAMES)
 
@@ -148,4 +146,4 @@ def _append_log(dat, event, source, message):
     while table.numRows > MAX_LOG_ROWS + 1:
         table.deleteRow(1)
 
-    print("Oracle ESP32 [{}] {} {}".format(event, source, message))
+    print(f"Oracle ESP32 [{event}] {source} {message}")

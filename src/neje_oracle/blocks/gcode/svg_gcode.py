@@ -12,7 +12,6 @@ from ...shared.models import SheetItem, SheetPlacement
 from ...shared.origin_markers import DEFAULT_MARKER_DIAMETER_MM, marker_center_for_position, marker_position_for_origin
 from ..symbols.svg_normalizer import read_normalized_svg_metadata
 
-
 Z_SERVO_PEN_DOWN_COMMAND = "G0 Z-25.000"
 DEFAULT_IMPORTED_SVG_SIMPLIFY_MM = 0.05
 DEFAULT_MIN_EMITTED_SEGMENT_MM = 0.1
@@ -60,7 +59,9 @@ def generate_sheet_gcode(
     z_feed_mm_min: float = 1000.0,
 ) -> str:
     pen_up = _pen_up_command(pen_up_command, use_z_servo=use_z_servo, z_up_mm=z_up_mm)
-    pen_down = _pen_down_command(pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min)
+    pen_down = _pen_down_command(
+        pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min
+    )
     lines = [
         f"; Neje Oracle {title}",
         f"; effective draw feed F{draw_rate:.2f} mm/min",
@@ -72,9 +73,8 @@ def generate_sheet_gcode(
         pen_up,
     ]
 
-    current_cell_index = 0
     total_cells = len(items)
-    for item, placement in zip(items, placements, strict=True):
+    for current_cell_index, (item, placement) in enumerate(zip(items, placements, strict=True)):
         lines.append(f"; item {item.session_id} ({item.source_kind})")
         lines.append(f"; cell-start {current_cell_index}/{total_cells}")
         if include_rings:
@@ -119,7 +119,9 @@ def generate_absolute_svg_gcode(
     max_y_mm: float | None = None,
 ) -> str:
     pen_up = _pen_up_command(pen_up_command, use_z_servo=use_z_servo, z_up_mm=z_up_mm)
-    pen_down = _pen_down_command(pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min)
+    pen_down = _pen_down_command(
+        pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min
+    )
     polylines = _svg_to_absolute_polylines(svg_path, sample_step_mm)
     safety_shift_x = 0.0
     safety_shift_y = 0.0
@@ -391,7 +393,9 @@ def _postprocess_svg_polylines(
 ) -> list[list[tuple[float, float]]]:
     tolerance = max(simplify_tolerance, DEFAULT_IMPORTED_SVG_SIMPLIFY_MM)
     processed = [_simplify_polyline(polyline, tolerance) for polyline in polylines if len(polyline) >= 2]
-    return [_filter_short_segments(polyline, DEFAULT_MIN_EMITTED_SEGMENT_MM) for polyline in processed if len(polyline) >= 2]
+    return [
+        _filter_short_segments(polyline, DEFAULT_MIN_EMITTED_SEGMENT_MM) for polyline in processed if len(polyline) >= 2
+    ]
 
 
 def _filter_short_segments(points: list[tuple[float, float]], min_segment_mm: float) -> list[tuple[float, float]]:

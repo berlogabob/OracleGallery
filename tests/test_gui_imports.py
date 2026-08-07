@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest

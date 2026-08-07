@@ -46,7 +46,7 @@ class SystemMode(str, Enum):
     EXHIBITION = "exhibition"
 
     @classmethod
-    def _missing_(cls, value: object) -> "SystemMode | None":
+    def _missing_(cls, value: object) -> SystemMode | None:
         if str(value) in {"exhibition_dry", "exhibition_real"}:
             return cls.EXHIBITION
         return None
@@ -207,7 +207,7 @@ class PlotterRuntimeState:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PlotterRuntimeState":
+    def from_dict(cls, payload: dict[str, Any]) -> PlotterRuntimeState:
         raw_status = payload.get("status", RuntimeStatus.IDLE.value)
         try:
             status = RuntimeStatus(raw_status)
@@ -230,9 +230,7 @@ class PlotterRuntimeState:
             cells_completed=int(payload.get("cells_completed", 0)),
             rows_completed=int(payload.get("rows_completed", 0)),
             sheet_progress_percent=float(payload.get("sheet_progress_percent", 0.0)),
-            updated_at=datetime.fromisoformat(payload["updated_at"])
-            if payload.get("updated_at")
-            else utcnow(),
+            updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )
 
 
@@ -254,15 +252,13 @@ class PlotterControlState:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PlotterControlState":
+    def from_dict(cls, payload: dict[str, Any]) -> PlotterControlState:
         return cls(
             print_enabled=bool(payload.get("print_enabled", False)),
             operator_paused=bool(payload.get("operator_paused", True)),
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
-            updated_at=datetime.fromisoformat(payload["updated_at"])
-            if payload.get("updated_at")
-            else utcnow(),
+            updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )
 
 
@@ -288,7 +284,7 @@ class ComponentState:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "ComponentState":
+    def from_dict(cls, payload: dict[str, Any]) -> ComponentState:
         return cls(
             component=str(payload.get("component", "")),
             status=ComponentStatus(payload.get("status", ComponentStatus.STOPPED.value)),
@@ -296,9 +292,7 @@ class ComponentState:
             last_error=str(payload.get("last_error", "")),
             heartbeat_at=_optional_datetime(payload.get("heartbeat_at")),
             started_at=_optional_datetime(payload.get("started_at")),
-            updated_at=datetime.fromisoformat(payload["updated_at"])
-            if payload.get("updated_at")
-            else utcnow(),
+            updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )
 
 
@@ -450,7 +444,7 @@ class PlotterRuntimeConfig:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PlotterRuntimeConfig":
+    def from_dict(cls, payload: dict[str, Any]) -> PlotterRuntimeConfig:
         return cls(
             layout_mode=str(payload.get("layout_mode", "hex")),
             sheet_width_mm=float(payload.get("sheet_width_mm", 250.0)),
@@ -482,9 +476,7 @@ class PlotterRuntimeConfig:
             sample_min_step_mm=float(payload.get("sample_min_step_mm", 0.25)),
             sample_max_step_mm=float(payload.get("sample_max_step_mm", 3.0)),
             streaming_mode=str(payload.get("streaming_mode", "row")),
-            updated_at=datetime.fromisoformat(payload["updated_at"])
-            if payload.get("updated_at")
-            else utcnow(),
+            updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )
 
 
@@ -504,14 +496,12 @@ class PlotterReadinessState:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "PlotterReadinessState":
+    def from_dict(cls, payload: dict[str, Any]) -> PlotterReadinessState:
         return cls(
             work_zero_set=bool(payload.get("work_zero_set", False)),
             plotter_ready=bool(payload.get("plotter_ready", False)),
             message=str(payload.get("message", "Not ready")),
-            updated_at=datetime.fromisoformat(payload["updated_at"])
-            if payload.get("updated_at")
-            else utcnow(),
+            updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )
 
 
@@ -531,7 +521,7 @@ class SystemCheck:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "SystemCheck":
+    def from_dict(cls, payload: dict[str, Any]) -> SystemCheck:
         return cls(
             name=str(payload.get("name", "")),
             level=SystemCheckLevel(payload.get("level", SystemCheckLevel.WARNING.value)),
@@ -558,14 +548,12 @@ class SystemCheckResult:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "SystemCheckResult":
+    def from_dict(cls, payload: dict[str, Any]) -> SystemCheckResult:
         checks = [SystemCheck.from_dict(item) for item in payload.get("checks", [])]
         return cls(
             status=SystemCheckLevel(payload.get("status", SystemCheckLevel.WARNING.value)),
             checks=checks,
-            generated_at=datetime.fromisoformat(payload["generated_at"])
-            if payload.get("generated_at")
-            else utcnow(),
+            generated_at=datetime.fromisoformat(payload["generated_at"]) if payload.get("generated_at") else utcnow(),
         )
 
 

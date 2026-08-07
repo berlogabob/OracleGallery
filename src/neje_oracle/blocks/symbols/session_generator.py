@@ -7,10 +7,10 @@ import os
 import random
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Iterable
 
 from ...shared.config import UploaderSettings, _repo_root, ensure_dir
 from ...shared.origin_markers import ORIGIN_FILLER_MACBOOK, tags_for_origin
@@ -60,7 +60,7 @@ def main() -> None:
     if args.mode == "idle":
         count = args.count if args.count is not None else len(_load_source_symbols(args.source_root))
         output_root = args.output_root or (_repo_root() / "assets" / "generated_idle_symbols")
-        generated = generate_idle_symbols(
+        generated_files = generate_idle_symbols(
             source_root=args.source_root,
             output_root=output_root,
             scale_config=args.scale_config,
@@ -68,13 +68,13 @@ def main() -> None:
             seed=args.seed,
             jitter_px=args.jitter_px,
         )
-        print(f"Generated {len(generated)} idle SVG files in {output_root}")
+        print(f"Generated {len(generated_files)} idle SVG files in {output_root}")
         return
 
     if args.mode == "filler":
         count = args.count if args.count is not None else len(_load_source_symbols(args.source_root))
         output_root = args.output_root or (_repo_root() / "assets" / "generated_filler_sessions")
-        generated = generate_filler_session_packages(
+        generated_sessions = generate_filler_session_packages(
             source_root=args.source_root,
             output_root=output_root,
             scale_config=args.scale_config,
@@ -82,7 +82,7 @@ def main() -> None:
             seed=args.seed,
             jitter_px=args.jitter_px,
         )
-        print(f"Generated {len(generated)} filler session package(s) in {output_root}")
+        print(f"Generated {len(generated_sessions)} filler session package(s) in {output_root}")
         return
 
     count = args.count if args.count is not None else 1

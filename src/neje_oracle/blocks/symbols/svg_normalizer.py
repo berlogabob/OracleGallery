@@ -6,7 +6,6 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from svgpathtools import svg2paths2
 
@@ -343,8 +342,7 @@ def _force_stroke_only(root: ET.Element) -> None:
             kept_styles = [
                 part.strip()
                 for part in style.split(";")
-                if part.strip()
-                and not part.strip().lower().startswith(("stroke:", "stroke-width:", "fill:"))
+                if part.strip() and not part.strip().lower().startswith(("stroke:", "stroke-width:", "fill:"))
             ]
             if kept_styles:
                 element.set("style", ";".join(kept_styles))

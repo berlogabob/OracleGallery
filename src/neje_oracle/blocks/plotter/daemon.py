@@ -9,12 +9,29 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from ...shared.config import SYMBOL_FIT_RATIO, PlotterSettings, _repo_root, ensure_dir
-from ..firebase.repository import FirebaseRemoteRepository
-from ..gcode.layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
-from ...shared.models import ComponentStatus, PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, PlotterRuntimeState, RuntimeStatus, SheetItem, SheetPlacement
-from ...shared.origin_markers import ALL_ORIGINS, DEFAULT_MARKER_DIAMETER_MM, ORIGIN_FILLER_MACBOOK, marker_position_for_origin, normalize_tags
-from ..gcode.sampling import compute_effective_sample_step
+from ...shared.models import (
+    ComponentStatus,
+    PlotJobLease,
+    PlotStatus,
+    PlotterControlState,
+    PlotterRuntimeConfig,
+    PlotterRuntimeState,
+    RuntimeStatus,
+    SheetItem,
+    SheetPlacement,
+)
+from ...shared.origin_markers import (
+    ALL_ORIGINS,
+    DEFAULT_MARKER_DIAMETER_MM,
+    ORIGIN_FILLER_MACBOOK,
+    marker_position_for_origin,
+    normalize_tags,
+)
 from ...shared.store import OracleRuntimeStore, PlotterStore
+from ..firebase.repository import FirebaseRemoteRepository
+from ..fluidnc.transport import FluidNCTransport
+from ..gcode.layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
+from ..gcode.sampling import compute_effective_sample_step
 from ..gcode.svg_gcode import generate_sheet_gcode
 from ..symbols.svg_normalizer import (
     DEFAULT_SIMPLIFY_TOLERANCE_MM,
@@ -26,7 +43,6 @@ from ..symbols.svg_normalizer import (
     read_normalized_svg_metadata,
     scale_for_mark_name,
 )
-from ..fluidnc.transport import FluidNCTransport
 
 
 class PlotterDaemon:
@@ -88,7 +104,9 @@ class PlotterDaemon:
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
-            self.oracle_store.set_component("plotter", ComponentStatus.RUNNING, message="Preparing next sheet", heartbeat=True)
+            self.oracle_store.set_component(
+                "plotter", ComponentStatus.RUNNING, message="Preparing next sheet", heartbeat=True
+            )
 
         layout_capacity = calculate_layout_capacity(
             mode=config.layout_mode,
@@ -195,7 +213,12 @@ class PlotterDaemon:
                 except Exception as exc:  # noqa: BLE001
                     user_jobs = []
                     if self.oracle_store is not None:
-                        self.oracle_store.set_component("queue", ComponentStatus.WARNING, message=f"Remote queue unavailable; using idle symbols: {exc}", heartbeat=True)
+                        self.oracle_store.set_component(
+                            "queue",
+                            ComponentStatus.WARNING,
+                            message=f"Remote queue unavailable; using idle symbols: {exc}",
+                            heartbeat=True,
+                        )
 
                 items = self._materialize_sheet_items(user_jobs, row_limit)
                 if not items:
@@ -271,8 +294,12 @@ class PlotterDaemon:
                     )
                 except Exception as exc:  # noqa: BLE001
                     for job in user_jobs:
-                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
-                        self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+                        self.remote.update_plot_job(
+                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
+                        )
+                        self.store.record_job_status(
+                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
+                        )
                     row_payload["status"] = "failed"
                     row_payload["error"] = str(exc)
                     self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
@@ -281,8 +308,12 @@ class PlotterDaemon:
                         control.print_enabled = False
                         control.operator_paused = True
                         self.oracle_store.save_print_control(control)
-                        self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
-                    self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on row {row_index}: {exc}", sheet_id=sheet_id)
+                        self.oracle_store.set_component(
+                            "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}"
+                        )
+                    self._set_state(
+                        RuntimeStatus.ERROR, f"Plotter transport failed on row {row_index}: {exc}", sheet_id=sheet_id
+                    )
                     return
 
                 last_gcode_path = gcode_path
@@ -321,7 +352,9 @@ class PlotterDaemon:
                 control.print_enabled = False
                 control.operator_paused = True
                 self.oracle_store.save_print_control(control)
-                self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after post-sheet safety failure: {exc}")
+                self.oracle_store.set_component(
+                    "print", ComponentStatus.STOPPED, message=f"Print disabled after post-sheet safety failure: {exc}"
+                )
             self._set_state(RuntimeStatus.ERROR, f"Post-sheet safety failed: {exc}", sheet_id=sheet_id)
             return
 
@@ -348,13 +381,12 @@ class PlotterDaemon:
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
-            self.oracle_store.set_component("plotter", ComponentStatus.WARNING, message="Sheet finished; print stopped", heartbeat=True)
+            self.oracle_store.set_component(
+                "plotter", ComponentStatus.WARNING, message="Sheet finished; print stopped", heartbeat=True
+            )
 
     def _post_sheet_safety_gcode(self, config: PlotterRuntimeConfig, sheet_id: str) -> str:
-        if config.use_z_servo:
-            pen_up = "$H=Z"
-        else:
-            pen_up = self.settings.pen_up_command
+        pen_up = "$H=Z" if config.use_z_servo else self.settings.pen_up_command
         return "\n".join(
             [
                 f"; Neje Oracle {sheet_id} post-sheet safety",
@@ -396,7 +428,12 @@ class PlotterDaemon:
                 except Exception as exc:  # noqa: BLE001
                     user_jobs = []
                     if self.oracle_store is not None:
-                        self.oracle_store.set_component("queue", ComponentStatus.WARNING, message=f"Remote queue unavailable; using idle symbols: {exc}", heartbeat=True)
+                        self.oracle_store.set_component(
+                            "queue",
+                            ComponentStatus.WARNING,
+                            message=f"Remote queue unavailable; using idle symbols: {exc}",
+                            heartbeat=True,
+                        )
 
                 items = self._materialize_sheet_items(user_jobs, 1)
                 if not items:
@@ -472,8 +509,12 @@ class PlotterDaemon:
                     )
                 except Exception as exc:  # noqa: BLE001
                     for job in user_jobs:
-                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
-                        self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
+                        self.remote.update_plot_job(
+                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
+                        )
+                        self.store.record_job_status(
+                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
+                        )
                     cell_payload["status"] = "failed"
                     cell_payload["error"] = str(exc)
                     self._replace_manifest_cell(manifest_path, manifest, cell_id, cell_payload)
@@ -482,8 +523,14 @@ class PlotterDaemon:
                         failed_control.print_enabled = False
                         failed_control.operator_paused = True
                         self.oracle_store.save_print_control(failed_control)
-                        self.oracle_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}")
-                    self._set_state(RuntimeStatus.ERROR, f"Plotter transport failed on cell {placement.index + 1}: {exc}", sheet_id=sheet_id)
+                        self.oracle_store.set_component(
+                            "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}"
+                        )
+                    self._set_state(
+                        RuntimeStatus.ERROR,
+                        f"Plotter transport failed on cell {placement.index + 1}: {exc}",
+                        sheet_id=sheet_id,
+                    )
                     return None
 
                 last_gcode_path = gcode_path
@@ -557,7 +604,11 @@ class PlotterDaemon:
             local_svg = cache_dir / f"{job.session_id}.svg"
             self.remote.download_asset(job.svg_storage_path, local_svg)
             _apply_current_mark_scale(local_svg, job.title)
-            source_kind = "placeholder" if job.queue == "filler" or job.priority == "filler" or job.origin == ORIGIN_FILLER_MACBOOK else "user"
+            source_kind = (
+                "placeholder"
+                if job.queue == "filler" or job.priority == "filler" or job.origin == ORIGIN_FILLER_MACBOOK
+                else "user"
+            )
             items.append(
                 SheetItem(
                     source_kind=source_kind,
@@ -874,9 +925,15 @@ class PlotterDaemon:
                     self.runtime_state.current_cell_in_row = current_cell_in_row
                     self.runtime_state.row_cell_count = self._current_row_cell_count
                     self.runtime_state.current_cell_index = current_sheet_index
-                    self.runtime_state.cells_completed = self._cells_completed_before_row + max(0, current_cell_in_row - 1)
+                    self.runtime_state.cells_completed = self._cells_completed_before_row + max(
+                        0, current_cell_in_row - 1
+                    )
                 self.runtime_state.sheet_progress_percent = min(
-                    max(((self.runtime_state.rows_completed + completed_fraction) / self.runtime_state.row_count) * 100.0, 0.0),
+                    max(
+                        ((self.runtime_state.rows_completed + completed_fraction) / self.runtime_state.row_count)
+                        * 100.0,
+                        0.0,
+                    ),
                     100.0,
                 )
             cell_label = ""

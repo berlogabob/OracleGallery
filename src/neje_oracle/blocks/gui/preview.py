@@ -4,10 +4,11 @@ realtime/live previews driven off plotter status + spool manifests.
 Split out of support.py (mechanical extraction, no behavior change) to keep
 that module under the repo's file-size budget.
 """
+
 from __future__ import annotations
 
-import random
 import json
+import random
 from base64 import b64encode
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,8 +27,14 @@ from ...shared.origin_markers import (
 from ..gcode.svg_gcode import symbol_diameter_for_cell
 from ..symbols.session_generator import build_variant_svg
 from ..symbols.svg_normalizer import CANONICAL_BASE_DIAMETER, CANONICAL_CANVAS_SIZE, read_normalized_svg_metadata
-from .support import GuiSettings, _build_layout_for_settings, effective_randomness, layout_capacity, list_base_symbols, load_symbol_scales
-
+from .support import (
+    GuiSettings,
+    _build_layout_for_settings,
+    effective_randomness,
+    layout_capacity,
+    list_base_symbols,
+    load_symbol_scales,
+)
 
 PREVIEW_PX_PER_MM = 2.0
 
@@ -63,7 +70,9 @@ def build_preview_svg(
         return _empty_preview_svg(settings, "No printable cells")
     item_count = capacity
     user_count = max(0, min(user_count, item_count))
-    idle_count = max(0, item_count - user_count) if idle_count is None else max(0, min(idle_count, item_count - user_count))
+    idle_count = (
+        max(0, item_count - user_count) if idle_count is None else max(0, min(idle_count, item_count - user_count))
+    )
     placements = _build_layout_for_settings(settings, user_count + idle_count)
     scale = _preview_scale(settings)
     width = settings.sheet_width_mm * scale
@@ -92,9 +101,13 @@ def build_preview_svg(
             f'stroke="{cell_stroke}" stroke-width="{cell_stroke_width}"/>'
         )
         if settings.include_rings and visible_origin:
-            circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" stroke="{stroke}" stroke-width="1.4" data-ring="outer"/>')
+            circles.append(
+                f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" stroke="{stroke}" stroke-width="1.4" data-ring="outer"/>'
+            )
             if kind == "idle":
-                circles.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" stroke="{stroke}" stroke-width="0.9" data-ring="inner"/>')
+                circles.append(
+                    f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" stroke="{stroke}" stroke-width="0.9" data-ring="inner"/>'
+                )
         if settings.include_markers and visible_origin:
             marker_x, marker_y = marker_center_for_position(
                 placement,
@@ -133,7 +146,7 @@ def build_preview_svg(
         'fill="none" stroke="#d4c3a5" stroke-width="1"/>'
         + (
             '<text x="10" y="18" font-size="11" fill="#9a5b24" font-family="monospace">'
-            'overscale may overlap cells</text>'
+            "overscale may overlap cells</text>"
             if overscale
             else ""
         )
@@ -318,9 +331,7 @@ def _build_live_preview_svg(settings: GuiSettings, items: list[LivePreviewItem])
         f'<rect x="{settings.sheet_margin_mm * scale:.2f}" y="{settings.sheet_margin_mm * scale:.2f}" '
         f'width="{(settings.sheet_width_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
         f'height="{(settings.sheet_height_mm - settings.sheet_margin_mm * 2) * scale:.2f}" '
-        'fill="none" stroke="#d4c3a5" stroke-width="1"/>'
-        + "".join(elements)
-        + "</svg>"
+        'fill="none" stroke="#d4c3a5" stroke-width="1"/>' + "".join(elements) + "</svg>"
     )
 
 
@@ -335,7 +346,10 @@ def _live_preview_items(settings: GuiSettings, status: dict[str, Any], queue: di
     is_drawing = status_name == RuntimeStatus.PRINTING.value and current_cell_in_row > 0
     current_ordinal = cells_completed if is_drawing else None
     next_ordinal = (current_ordinal + 1) if current_ordinal is not None else cells_completed
-    if status_name == RuntimeStatus.OPERATOR_PAUSED.value and float(status.get("sheet_progress_percent", 0.0) or 0.0) >= 100.0:
+    if (
+        status_name == RuntimeStatus.OPERATOR_PAUSED.value
+        and float(status.get("sheet_progress_percent", 0.0) or 0.0) >= 100.0
+    ):
         current_ordinal = None
         next_ordinal = len(manifest_items)
 
@@ -462,7 +476,10 @@ def _pending_user_queue_count(queue: dict[str, Any]) -> int:
 def _placement_row_lookup(placements) -> dict[int, int]:
     rows: dict[float, int] = {}
     lookup: dict[int, int] = {}
-    for placement in sorted(placements, key=lambda item: (item.row_y_mm if item.row_y_mm is not None else item.center_y_mm, item.center_x_mm)):
+    for placement in sorted(
+        placements,
+        key=lambda item: (item.row_y_mm if item.row_y_mm is not None else item.center_y_mm, item.center_x_mm),
+    ):
         placement_row_y = placement.row_y_mm if placement.row_y_mm is not None else placement.center_y_mm
         row_key = next((key for key in rows if abs(key - placement_row_y) < 0.001), None)
         if row_key is None:

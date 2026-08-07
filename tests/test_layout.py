@@ -212,7 +212,10 @@ def test_organic_layout_is_deterministic_and_varied() -> None:
     regular = build_grid_layout(9, sheet_width_mm=300, sheet_height_mm=300, margin_mm=0, diameter_mm=80)
 
     assert first == second
-    assert any((organic.center_x_mm, organic.center_y_mm) != (base.center_x_mm, base.center_y_mm) for organic, base in zip(first, regular, strict=True))
+    assert any(
+        (organic.center_x_mm, organic.center_y_mm) != (base.center_x_mm, base.center_y_mm)
+        for organic, base in zip(first, regular, strict=True)
+    )
     assert any(abs(placement.rotation_deg) > 0.001 for placement in first)
     assert any(abs(placement.symbol_scale - 1.0) > 0.001 for placement in first)
 

@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
-from neje_oracle.blocks.gui.support import GuiSettings
-from neje_oracle.shared.models import SystemCheckLevel, SystemMode
 from neje_oracle.app.system_checks import SystemCheckService
+from neje_oracle.blocks.gui.support import GuiSettings
+from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
+from neje_oracle.shared.models import SystemCheckLevel, SystemMode
 
 
 def _plotter_settings(tmp_path: Path) -> PlotterSettings:
@@ -19,7 +19,9 @@ def _plotter_settings(tmp_path: Path) -> PlotterSettings:
     )
 
 
-def _write_tinybee_config(path: Path, *, x_travel: float = 255.0, y_travel: float = 440.0, z_travel: float = 25.0) -> None:
+def _write_tinybee_config(
+    path: Path, *, x_travel: float = 255.0, y_travel: float = 440.0, z_travel: float = 25.0
+) -> None:
     settings = {
         "Flash": {
             "Settings": [
@@ -48,7 +50,9 @@ def test_system_check_marks_real_mode_critical_when_fluidnc_offline(tmp_path: Pa
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=_plotter_settings(tmp_path),
         uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
-        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        firebase_settings=FirebaseSettings(
+            project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"
+        ),
         fluidnc_checker=lambda timeout: (False, "offline"),
     )
 
@@ -63,7 +67,9 @@ def test_system_check_blocks_test_print_with_offline_fluidnc(tmp_path: Path) -> 
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=_plotter_settings(tmp_path),
         uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
-        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        firebase_settings=FirebaseSettings(
+            project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"
+        ),
         fluidnc_checker=lambda timeout: (False, "offline"),
     )
 
@@ -79,7 +85,9 @@ def test_system_check_allows_test_without_firebase_as_warning(tmp_path: Path) ->
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=settings,
         uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
-        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        firebase_settings=FirebaseSettings(
+            project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"
+        ),
         fluidnc_checker=lambda timeout: (True, "Idle"),
     )
 
@@ -97,7 +105,9 @@ def test_system_check_blocks_exhibition_without_firebase(tmp_path: Path) -> None
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=settings,
         uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
-        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        firebase_settings=FirebaseSettings(
+            project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"
+        ),
         fluidnc_checker=lambda timeout: (True, "Idle"),
     )
 
@@ -114,7 +124,9 @@ def test_system_check_validates_tinybee_hardware_config(tmp_path: Path) -> None:
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=settings,
         uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
-        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        firebase_settings=FirebaseSettings(
+            project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"
+        ),
         fluidnc_checker=lambda timeout: (True, "Idle"),
     )
 
@@ -130,7 +142,9 @@ def test_system_check_blocks_layout_larger_than_tinybee_travel(tmp_path: Path) -
         supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "runtime" / "oracle.sqlite3"),
         plotter_settings=settings,
         uploader_settings=UploaderSettings(session_root=tmp_path / "sessions"),
-        firebase_settings=FirebaseSettings(project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"),
+        firebase_settings=FirebaseSettings(
+            project_id="", storage_bucket="", credentials_path=tmp_path / "missing.json"
+        ),
         fluidnc_checker=lambda timeout: (True, "Idle"),
     )
 

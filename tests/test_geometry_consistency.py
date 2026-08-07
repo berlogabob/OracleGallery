@@ -1,6 +1,5 @@
 from neje_oracle.shared.config import PlotterSettings
 
-
 # Keep these synchronized with echodraw/hardware/GEOMETRY.md.
 HARDWARE_TRAVEL_X_MM = 255.0
 HARDWARE_TRAVEL_Y_MM = 420.0

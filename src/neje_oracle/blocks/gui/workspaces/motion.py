@@ -17,12 +17,18 @@ def render_motion_panel(ctx: GuiContext) -> None:
         ui.label("Manual motion").classes("text-sm font-bold")
         helper_text("Jog and homing for setup. Manual movement is blocked while G-code streams.")
         with ui.row().classes("gap-2 items-end"):
-            ctx.fields["jog_step"] = ui.select(
-                {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},
-                value=1.0,
-                label="Step mm",
-            ).props("dense outlined").classes("w-24")
-            ctx.fields["jog_feed"] = ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
+            ctx.fields["jog_step"] = (
+                ui.select(
+                    {1.0: "1", 5.0: "5", 10.0: "10", 25.0: "25", 50.0: "50", 100.0: "100"},
+                    value=1.0,
+                    label="Step mm",
+                )
+                .props("dense outlined")
+                .classes("w-24")
+            )
+            ctx.fields["jog_feed"] = (
+                ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
+            )
             ui.button("Home all", on_click=ctx.home_xy).props("dense color=warning")
         with ui.grid(columns=3).classes("w-full gap-1 jog-pad"):
             ui.label("")

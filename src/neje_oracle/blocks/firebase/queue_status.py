@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from .repository import FirebaseRemoteRepository
 from ...shared.config import FirebaseSettings, OracleSupervisorSettings, firebase_enabled
 from ...shared.store import OracleRuntimeStore
+from .repository import FirebaseRemoteRepository
 
 _QUEUE_STATUS_CACHE: tuple[datetime, dict[str, Any]] | None = None
 

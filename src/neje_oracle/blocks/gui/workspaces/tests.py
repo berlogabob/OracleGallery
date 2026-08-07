@@ -16,24 +16,40 @@ def build(ctx: GuiContext) -> None:
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("G-code test draw").classes("text-sm font-bold")
-            helper_text("Generates a local sheet from bundled symbols or starts a test print from the current queue/settings.")
+            helper_text(
+                "Generates a local sheet from bundled symbols or starts a test print from the current queue/settings."
+            )
             with ui.row().classes("items-center gap-2"):
                 safe_action_button("GENERATE G-CODE", ctx.generate_dry_run)
                 primary_action_button("START TEST PRINT", ctx.start_test_print)
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("SVG test draw").classes("text-sm font-bold")
-            helper_text("Prints the selected Inkscape SVG directly to FluidNC. Requires passing system checks, work zero, CONNECT and Idle.")
+            helper_text(
+                "Prints the selected Inkscape SVG directly to FluidNC. Requires passing system checks, work zero, CONNECT and Idle."
+            )
             with ui.row().classes("gap-2 w-full"):
                 number_control(
-                    fields, "direct_svg_origin_x_mm", label="SVG X0", value=settings.direct_svg_origin_x_mm,
-                    default=float(GUI_DEFAULTS["direct_svg_origin_x_mm"]), min_value=0, width_class="w-full",
-                    tooltip="Direct SVG print: machine/work X position for SVG coordinate 0.", on_change=ctx.persist_and_refresh,
+                    fields,
+                    "direct_svg_origin_x_mm",
+                    label="SVG X0",
+                    value=settings.direct_svg_origin_x_mm,
+                    default=float(GUI_DEFAULTS["direct_svg_origin_x_mm"]),
+                    min_value=0,
+                    width_class="w-full",
+                    tooltip="Direct SVG print: machine/work X position for SVG coordinate 0.",
+                    on_change=ctx.persist_and_refresh,
                 )
                 number_control(
-                    fields, "direct_svg_origin_y_mm", label="SVG Y0", value=settings.direct_svg_origin_y_mm,
-                    default=float(GUI_DEFAULTS["direct_svg_origin_y_mm"]), min_value=0, width_class="w-full",
-                    tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.", on_change=ctx.persist_and_refresh,
+                    fields,
+                    "direct_svg_origin_y_mm",
+                    label="SVG Y0",
+                    value=settings.direct_svg_origin_y_mm,
+                    default=float(GUI_DEFAULTS["direct_svg_origin_y_mm"]),
+                    min_value=0,
+                    width_class="w-full",
+                    tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.",
+                    on_change=ctx.persist_and_refresh,
                 )
             ui.upload(on_upload=ctx.handle_svg_upload).props("accept=.svg max-files=1 auto-upload").classes("w-full")
             with ui.row().classes("items-center gap-2"):
