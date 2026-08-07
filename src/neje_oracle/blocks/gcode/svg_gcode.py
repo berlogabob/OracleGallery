@@ -12,7 +12,6 @@ from ...shared.models import SheetItem, SheetPlacement
 from ...shared.origin_markers import DEFAULT_MARKER_DIAMETER_MM, marker_center_for_position, marker_position_for_origin
 from ..symbols.svg_normalizer import read_normalized_svg_metadata
 
-Z_SERVO_PEN_DOWN_COMMAND = "G0 Z-25.000"
 DEFAULT_IMPORTED_SVG_SIMPLIFY_MM = 0.05
 DEFAULT_MIN_EMITTED_SEGMENT_MM = 0.1
 

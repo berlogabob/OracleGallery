@@ -52,6 +52,11 @@ class UploaderAgentController:
         return self.start()
 
     def scan_once(self) -> dict[str, Any]:
+        # A manual scan must respect the same baseline start() sets, otherwise it sweeps
+        # every historical folder in the watch dir and republishes it. Observed live:
+        # one scan_once() imported 19 folders when a single new session was intended.
+        if self.uploader.store.load_run_started_at() is None:
+            self.uploader.store.save_run_started_at(datetime.now(tz=UTC))
         try:
             imported = self.uploader.scan_once()
             self._record_imported(imported)

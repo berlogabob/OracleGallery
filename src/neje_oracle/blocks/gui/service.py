@@ -151,6 +151,7 @@ def build_page() -> None:
                 image_tab = ui.tab("image", label="7 IMAGE")
             workspace_tabs.value = ctx.active_workspace["value"]
             ctx.workspace_tabs = workspace_tabs
+            ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
             ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
 
         warning_banner("Plotter output starts only after system checks pass, work zero is set, and FluidNC is Idle.")

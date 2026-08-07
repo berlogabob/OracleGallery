@@ -615,8 +615,8 @@ def test_next_filler_upload_uses_uploader_session_shape_and_tags(tmp_path: Path)
 
 def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
     settings = GuiSettings(
-        sheet_width_mm=200,
-        sheet_height_mm=120,
+        sheet_width_mm=800,
+        sheet_height_mm=800,
         cell_diameter_mm=80,
         include_rings=True,
         include_markers=True,
@@ -640,6 +640,36 @@ def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
     assert "G0 X0 Y0" in job.gcode
     assert not (tmp_path / "uploaded_svg" / "READY").exists()
     assert not list((tmp_path / "uploaded_svg").glob("metadata.json"))
+
+
+def test_direct_svg_bounds_use_operator_sheet_not_plotter_defaults(tmp_path: Path) -> None:
+    """Art larger than the operator's configured sheet must be rejected.
+
+    Regression: the bound was read from PlotterSettings (default 250x440) instead of
+    the operator's GuiSettings sheet, so a 200x200 sheet silently accepted art that
+    drew 25mm off the paper.
+    """
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='200mm' height='200mm' viewBox='0 0 200 200'>"
+        "<path d='M0,0 H200 V200 H0 Z' stroke='black' fill='none'/>"
+        "</svg>"
+    )
+    settings = GuiSettings(
+        sheet_width_mm=200,
+        sheet_height_mm=200,
+        direct_svg_origin_x_mm=25,
+        direct_svg_origin_y_mm=25,
+    )
+
+    with pytest.raises(ValueError, match="exceeds the configured sheet"):
+        create_direct_svg_print_job_from_gui(
+            settings,
+            svg_bytes=svg.encode("utf-8"),
+            original_name="oversized.svg",
+            output_root=tmp_path / "uploaded_svg",
+            # Deliberately generous: this must NOT be what the bound is taken from.
+            plotter_settings=PlotterSettings(sheet_width_mm=800, sheet_height_mm=800),
+        )
 
 
 def test_direct_svg_print_offsets_reference_origin_for_negative_artwork(tmp_path: Path) -> None:

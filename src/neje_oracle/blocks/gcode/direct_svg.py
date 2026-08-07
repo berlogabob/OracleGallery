@@ -66,8 +66,11 @@ def create_direct_svg_print_job_from_gui(
         origin_x_mm=settings.direct_svg_origin_x_mm,
         origin_y_mm=settings.direct_svg_origin_y_mm,
         keep_non_negative=True,
-        max_x_mm=resolved_plotter_settings.sheet_width_mm,
-        max_y_mm=resolved_plotter_settings.sheet_height_mm,
+        # Bound against the operator's configured sheet, not the PlotterSettings default.
+        # These used to read resolved_plotter_settings, so a 200x200 sheet was validated
+        # against 250x440 and oversized art was accepted.
+        max_x_mm=config.sheet_width_mm,
+        max_y_mm=config.sheet_height_mm,
     )
     return DirectSvgPrintJob(
         sheet_id=sheet_id,

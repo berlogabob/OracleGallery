@@ -16,7 +16,7 @@ from neje_oracle.blocks.fluidnc.transport import (
     settings_for_fluidnc_host,
 )
 from neje_oracle.shared.config import PlotterSettings
-from neje_oracle.shared.models import FluidNCState
+from neje_oracle.shared.models import FluidNCCommandResult, FluidNCState
 
 
 class FakeFluidNCServer:
@@ -458,3 +458,69 @@ def test_prune_spool_disabled_and_missing_dir_are_safe(tmp_path: Path) -> None:
     assert prune_spool(tmp_path, retention_days=0) == 0
     assert stale_file.exists(), "retention_days=0 must disable pruning entirely"
     assert prune_spool(tmp_path / "does-not-exist", retention_days=30) == 0
+
+
+def test_parse_status_response_reads_work_offset() -> None:
+    state = parse_status_response("<Idle|MPos:10.000,10.000,0.000|FS:0,0|WCO:5.000,5.000,0.000>")
+
+    assert state.work_offset == (5.0, 5.0, 0.0)
+    assert state.machine_position == (10.0, 10.0, 0.0)
+
+
+def test_parse_status_response_without_work_offset_reports_none() -> None:
+    """FluidNC only emits WCO periodically; a missing field is not a zero offset."""
+    state = parse_status_response("<Idle|MPos:10.000,10.000,0.000|FS:0,0>")
+
+    assert state.work_offset is None
+
+
+def test_read_board_identity_extracts_board_line_from_config_dump(tmp_path: Path) -> None:
+    transport = FluidNCTransport(PlotterSettings(spool_root=tmp_path / "spool", fluidnc_http_url=""))
+    dump = [
+        "board: MKS TinyBee V1.0 XXYYZ",
+        "name: NEJE",
+        "stepping: ",
+        "  engine: I2S_STATIC",
+    ]
+    transport.send_command = lambda *a, **k: FluidNCCommandResult(  # type: ignore[method-assign]
+        ok=True, command="$CD", response_lines=dump
+    )
+
+    assert transport.read_board_identity() == "MKS TinyBee V1.0 XXYYZ"
+
+
+def test_read_board_identity_reports_fallback_config(tmp_path: Path) -> None:
+    """The panic fallback dump that the live board produced on 2026-08-07."""
+    transport = FluidNCTransport(PlotterSettings(spool_root=tmp_path / "spool", fluidnc_http_url=""))
+    transport.send_command = lambda *a, **k: FluidNCCommandResult(  # type: ignore[method-assign]
+        ok=True, command="$CD", response_lines=["board: None", "name: Default (Test Drive)"]
+    )
+
+    assert transport.read_board_identity() == "None"
+
+
+def test_read_board_identity_returns_none_when_command_fails(tmp_path: Path) -> None:
+    transport = FluidNCTransport(PlotterSettings(spool_root=tmp_path / "spool", fluidnc_http_url=""))
+    transport.send_command = lambda *a, **k: FluidNCCommandResult(  # type: ignore[method-assign]
+        ok=False, command="$CD", error="unreachable"
+    )
+
+    assert transport.read_board_identity() is None
+
+
+def test_read_board_identity_accepts_dump_without_terminating_ok(tmp_path: Path) -> None:
+    """$CD returns ~200 lines and often misses its "ok" inside the ack window.
+
+    Verified against the real board: send_command reported ok=False with the full dump in
+    response_lines. Gating on ok made this return None on a healthy controller, which would
+    have silently disabled the fallback-config detection it exists to provide.
+    """
+    transport = FluidNCTransport(PlotterSettings(spool_root=tmp_path / "spool", fluidnc_http_url=""))
+    transport.send_command = lambda *a, **k: FluidNCCommandResult(  # type: ignore[method-assign]
+        ok=False,
+        command="$CD",
+        response_lines=["board: MKS TinyBee V1.0 XXYYZ", "name: None", "off_on_alarm: false"],
+        error="off_on_alarm: false",
+    )
+
+    assert transport.read_board_identity() == "MKS TinyBee V1.0 XXYYZ"

@@ -771,3 +771,37 @@ def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: P
     assert ("real_user", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
     assert ("filler_cloud", PlotStatus.PRINTED.value, daemon.get_state().current_sheet_id) in remote.updates
     assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
+
+
+def test_sheet_progress_is_cell_based_and_never_runs_backwards(tmp_path: Path) -> None:
+    """Mid-stream progress must use the same unit as the cell-completion writer.
+
+    Regression: sheet_progress_percent added the fraction of the current *stream* to
+    rows_completed as if a stream were a whole row. In cell streaming mode one stream
+    is one cell, so a single cell drove the bar to a full row's worth and it jumped
+    backwards every time a cell actually completed (observed live: 25% -> 6.25% -> 0.87%).
+    """
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    daemon = PlotterDaemon(settings, store, FakeRemoteRepository(), FluidNCTransport(settings))
+
+    # 5-cell sheet streamed one cell at a time, as the live rig does.
+    daemon._sheet_total_cells = 5
+    daemon._current_row_cell_count = 1
+    daemon.runtime_state.row_count = 3
+    daemon.runtime_state.rows_completed = 0
+
+    seen: list[float] = []
+    for cell_index in range(5):
+        daemon._cells_completed_before_row = cell_index
+        daemon._current_row_sheet_indexes = [cell_index]
+        daemon._current_row_cell_markers = []
+        for sent in (0, 25, 50, 75, 100):
+            daemon._record_gcode_progress(sent, 100)
+            seen.append(daemon.get_state().sheet_progress_percent)
+
+    assert seen == sorted(seen), f"sheet progress ran backwards: {seen}"
+    assert seen[0] == 0.0
+    assert seen[-1] == 100.0
+    # Completing cell 1 of 5 must read 20%, matching the cell-completion writer.
+    assert seen[4] == 20.0

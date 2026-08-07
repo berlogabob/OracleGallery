@@ -454,6 +454,10 @@ class GuiContext:
         if workspace in VALID_WORKSPACES:
             self.active_workspace["value"] = workspace
             self.supervisor.runtime_store.save_json("gui_workspace", {"tab": workspace})
+        # Navigation must never change machine state. Switching tabs used to flip the
+        # system mode, which sets print_enabled=False and silently aborted the sheet.
+        if self.supervisor.is_printing():
+            return
         if workspace in ("tests", "generative", "image"):
             if self.settings.mode != SystemMode.TEST:
                 self.set_system_mode(SystemMode.TEST, notify=False)
@@ -738,6 +742,12 @@ class GuiContext:
             "This sends $X. It clears FluidNC alarm state without moving the machine.",
             lambda: self.fluidnc_action("unlock", self.supervisor.unlock_fluidnc_alarm),
         )
+
+    async def stop_print(self) -> None:
+        state = await self._blocking(self.supervisor.stop_print)
+        ui.notify(state.message, color="warning")
+        self.refresh_status()
+        self.refresh_logs()
 
     async def emergency_stop(self) -> None:
         state = await self._blocking(self.supervisor.emergency_stop_fluidnc)
