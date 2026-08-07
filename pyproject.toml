@@ -5,10 +5,13 @@ description = "Uploader and plotter orchestration stack for the Neje Oracle exhi
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 dependencies = [
+  "ezdxf>=1.4.0",
   "fastapi>=0.115.0",
-  "firebase-admin>=6.7.0",
+  "firebase-admin>=7.0.0",
   "httpx>=0.28.0",
-  "nicegui>=2.14.0",
+  "nicegui>=3.11.0",
+  "numpy>=2.0",
+  "pillow>=12.0",
   "pydantic>=2.9.0",
   "qrcode[pil]>=8.0",
   "svgpathtools>=1.6.1",
@@ -53,20 +56,36 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 64
+# Ratchet: set to just under the current figure so coverage cannot silently erode.
+# Raise it as coverage improves; never lower it to make a build pass.
+fail_under = 74
 show_missing = true
 skip_covered = true
 
 [tool.ruff]
-line-length = 88
+# 120 matches how this code is actually written (p95 line is 96 chars). At 88 the
+# format gate rewrote 55 files and was simply never run; at 120 it is enforceable.
+line-length = 120
 target-version = "py312"
+# TouchDesigner scripts run inside TD's own interpreter, which injects globals such as
+# `absTime` and `run` that do not exist as imports. F821 there is always a false positive.
+extend-exclude = ["ESP32-BTN_Printer/TouchDesigner"]
 
 [tool.ruff.lint]
 select = [
-  "E9",
-  "F63",
-  "F7",
-  "F82",
+  "E4", "E7", "E9",   # pycodestyle errors (E501 left to the formatter)
+  "F",                # pyflakes: unused imports/vars, undefined names
+  "I",                # import sorting
+  "B",                # bugbear: mutable defaults, zip without strict, ...
+  "UP",               # pyupgrade
+  "SIM",              # simplifiable constructs
+  "C4",               # comprehension misuse
+]
+ignore = [
+  # str+Enum -> StrEnum changes str(member) from "Class.MEMBER" to the value.
+  # These enums are persisted to sqlite and JSON; the rewrite is a silent
+  # data-format change for no benefit. Revisit only with a migration.
+  "UP042",
 ]
 
 [tool.ruff.format]
@@ -79,5 +98,5 @@ show_error_codes = true
 show_error_context = true
 
 [[tool.mypy.overrides]]
-module = ["firebase_admin", "svgpathtools", "qrcode"]
+module = ["firebase_admin", "svgpathtools", "qrcode", "ezdxf.*"]
 ignore_missing_imports = true

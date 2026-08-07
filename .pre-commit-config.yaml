@@ -1,24 +1,37 @@
-# Pre-commit config for neje_oracle
-# Implements staged quality gates without blocking on BLE001 until cleanup begins
+# Pre-commit gates for neje_oracle. Mirrors .github/workflows/python-ci.yml so a
+# commit that passes locally passes CI.
+#
+# Keep `rev:` in step with the ruff version in uv.lock — a stale pin silently checks
+# your code against different rules than CI does.
+
+exclude: '^(docs/|dist/|archive/|\.venv/|graphify-out/)'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: "\.DS_Store|coverage/|__pycache__|\.venv"
+        exclude: '\.(svg|gcode)$'
       - id: end-of-file-fixer
-        exclude: "\.DS_Store|coverage/|__pycache__"
+        exclude: '\.(svg|gcode)$'
+      # Maestro flows are legitimately multi-document (--- between config and commands).
       - id: check-yaml
+        args: ['--allow-multiple-documents']
       - id: check-toml
       - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      # This repo holds Firebase service-account keys (gitignored). A committed key
+      # is unrevocable once pushed, so fail closed.
+      - id: detect-private-key
+      # 2 MB. The previous 50 MB ceiling is how ~30 MB of Flutter wasm build output
+      # reached git history. Generated output lives under docs/, excluded above.
       - id: check-added-large-files
-        args: '--maxkb=50000'
+        args: ['--maxkb=2000']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.0
+    rev: v0.16.1
     hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix, --show-source]
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        exclude: ".DS_Store|coverage/|__pycache__"
