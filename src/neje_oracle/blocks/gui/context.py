@@ -12,13 +12,16 @@ state+supervisor bundle, not a DI framework.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from nicegui import run, ui
 
+from ...app.supervisor import SupervisorService
+from ...shared.models import ComponentStatus, SystemCheckLevel, SystemMode
+from ...shared.origin_markers import ALL_ORIGINS
 from .modes import mode_policy
-from .ui import helper_text
 from .support import (
     GUI_DEFAULTS,
     _field_or_default,
@@ -38,16 +41,32 @@ from .support import (
     save_oracle_plotter_config,
     save_symbol_scales,
 )
-from ...shared.models import ComponentStatus, SystemCheckLevel, SystemMode
-from ...shared.origin_markers import ALL_ORIGINS
-from ...app.supervisor import SupervisorService
+from .ui import helper_text
+
+VALID_WORKSPACES = {"connection", "calibration", "tests", "work", "exhibition", "generative", "image"}
 
 
-VALID_WORKSPACES = {"connection", "calibration", "tests", "work", "exhibition", "generative"}
+_T = TypeVar("_T")
 
 
 class GuiContext:
     """Owns shared GUI state and every page-level handler."""
+
+    async def _blocking(self, func: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
+        """Run a blocking call off the event loop and require a result.
+
+        nicegui's ``run.io_bound`` is typed Optional because it yields None when the
+        task is cancelled (client disconnect, shutdown). Callers that consume the
+        result would otherwise raise ``AttributeError: 'NoneType' has no attribute
+        'status'`` deep inside a handler, losing the print outcome silently. Narrow it
+        once here. Fire-and-forget calls keep using ``run.io_bound`` directly, since
+        cancellation is harmless there.
+        """
+        result = await run.io_bound(func, *args, **kwargs)
+        if result is None:
+            name = getattr(func, "__name__", repr(func))
+            raise RuntimeError(f"{name} was cancelled before returning a result")
+        return result
 
     def __init__(self) -> None:
         self.supervisor = SupervisorService()
@@ -112,10 +131,14 @@ class GuiContext:
         settings.sample_max_step_mm = _field_or_default(fields, "sample_max_step_mm")
         settings.streaming_mode = str(fields["streaming_mode"].value or GUI_DEFAULTS["streaming_mode"])
         settings.show_origins = [
-            origin for origin in ALL_ORIGINS if bool(fields.get(f"show_origin:{origin}") and fields[f"show_origin:{origin}"].value)
+            origin
+            for origin in ALL_ORIGINS
+            if bool(fields.get(f"show_origin:{origin}") and fields[f"show_origin:{origin}"].value)
         ] or list(ALL_ORIGINS)
         settings.print_origins = [
-            origin for origin in ALL_ORIGINS if bool(fields.get(f"print_origin:{origin}") and fields[f"print_origin:{origin}"].value)
+            origin
+            for origin in ALL_ORIGINS
+            if bool(fields.get(f"print_origin:{origin}") and fields[f"print_origin:{origin}"].value)
         ] or list(ALL_ORIGINS)
         settings.sheet_width_mm = _field_or_default(fields, "sheet_width_mm")
         settings.sheet_height_mm = _field_or_default(fields, "sheet_height_mm")
@@ -203,7 +226,7 @@ class GuiContext:
         self.pull_settings_from_fields()
         self._save_settings()
         ui.notify("Printing SVG...", color="info")
-        state = await run.io_bound(
+        state = await self._blocking(
             self.supervisor.print_uploaded_svg,
             self.settings,
             svg_bytes=self.uploaded_svg["bytes"],
@@ -215,7 +238,10 @@ class GuiContext:
             self.uploaded_svg_label.set_text("No SVG selected")
             ui.notify(state.message, color="positive")
         else:
-            ui.notify(state.last_error or state.message, color="negative" if state.status == ComponentStatus.ERROR else "warning")
+            ui.notify(
+                state.last_error or state.message,
+                color="negative" if state.status == ComponentStatus.ERROR else "warning",
+            )
         self.refresh_status()
         self.refresh_logs()
 
@@ -229,7 +255,7 @@ class GuiContext:
         self._save_settings()
         if not quiet:
             ui.notify("Printing SVG...", color="info")
-        state = await run.io_bound(
+        state = await self._blocking(
             self.supervisor.print_uploaded_svg,
             self.settings,
             svg_bytes=LATEST["bytes"],
@@ -240,14 +266,43 @@ class GuiContext:
             LATEST["name"] = ""
             ui.notify(state.message, color="positive")
         else:
-            ui.notify(state.last_error or state.message, color="negative" if state.status == ComponentStatus.ERROR else "warning")
+            ui.notify(
+                state.last_error or state.message,
+                color="negative" if state.status == ComponentStatus.ERROR else "warning",
+            )
         self.refresh_status()
         self.refresh_logs()
+
+    async def print_svg_payload(self, svg_bytes: bytes, name: str) -> bool:
+        """Print an SVG built in-process (line text, image conversion). Returns success."""
+        if not svg_bytes:
+            ui.notify("Nothing to print yet", color="warning")
+            return False
+        self.pull_settings_from_fields()
+        self._save_settings()
+        ui.notify("Printing SVG...", color="info")
+        state = await self._blocking(
+            self.supervisor.print_uploaded_svg,
+            self.settings,
+            svg_bytes=svg_bytes,
+            original_name=name,
+        )
+        ok = state.status == ComponentStatus.STOPPED
+        if ok:
+            ui.notify(state.message, color="positive")
+        else:
+            ui.notify(
+                state.last_error or state.message,
+                color="negative" if state.status == ComponentStatus.ERROR else "warning",
+            )
+        self.refresh_status()
+        self.refresh_logs()
+        return ok
 
     async def generate_dry_run(self) -> None:
         self.pull_settings_from_fields()
         try:
-            output = await run.io_bound(generate_dry_run_sheet, self.settings)
+            output = await self._blocking(generate_dry_run_sheet, self.settings)
         except Exception as exc:  # noqa: BLE001
             ui.notify(f"G-code generation failed: {exc}", color="negative")
             return
@@ -315,7 +370,9 @@ class GuiContext:
         if self.live_labels:
             self.live_labels["fluidnc"].set_text(status_text.upper())
             self.live_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
-            self.live_labels["firebase"].set_text("REQUIRED" if mode_policy(self.settings.mode).firebase_required else "TEST BYPASS")
+            self.live_labels["firebase"].set_text(
+                "REQUIRED" if mode_policy(self.settings.mode).firebase_required else "TEST BYPASS"
+            )
             self.live_labels["queue"].set_text("ONLINE" if queue_online else "OFFLINE")
             self.live_labels["sheet"].set_text(current_sheet)
             if not readiness.work_zero_set:
@@ -340,7 +397,9 @@ class GuiContext:
                     f"{total}/{layout_capacity(self.settings)} cells in last sheet"
                 )
             else:
-                self.preview_progress_label.set_text(f"preview tuning | random symbols | {layout_capacity(self.settings)} cells")
+                self.preview_progress_label.set_text(
+                    f"preview tuning | random symbols | {layout_capacity(self.settings)} cells"
+                )
         self.refresh_component_status()
 
     def refresh_component_status(self) -> None:
@@ -377,7 +436,7 @@ class GuiContext:
         self.refresh_status()
 
     async def reset_baseline(self) -> None:
-        state = await run.io_bound(self.supervisor.reset_run_baseline)
+        state = await self._blocking(self.supervisor.reset_run_baseline)
         ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
         self.refresh_status()
 
@@ -395,7 +454,7 @@ class GuiContext:
         if workspace in VALID_WORKSPACES:
             self.active_workspace["value"] = workspace
             self.supervisor.runtime_store.save_json("gui_workspace", {"tab": workspace})
-        if workspace in ("tests", "generative"):
+        if workspace in ("tests", "generative", "image"):
             if self.settings.mode != SystemMode.TEST:
                 self.set_system_mode(SystemMode.TEST, notify=False)
             return
@@ -417,7 +476,7 @@ class GuiContext:
     async def run_system_check(self, *, notify_success: bool = False) -> bool:
         self.pull_settings_from_fields()
         self._save_settings()
-        result = await run.io_bound(self.supervisor.run_system_check, self.settings)
+        result = await self._blocking(self.supervisor.run_system_check, self.settings)
         self.refresh_system_check_result()
         self.refresh_component_status()
         self.refresh_logs()
@@ -449,13 +508,15 @@ class GuiContext:
         if not await self.run_system_check():
             self.refresh_status()
             return
-        plotter_state = await run.io_bound(self.supervisor.start_plotter, gui_settings_to_plotter_config(self.settings))
+        plotter_state = await self._blocking(
+            self.supervisor.start_plotter, gui_settings_to_plotter_config(self.settings)
+        )
         if plotter_state.status == ComponentStatus.ERROR:
             ui.notify(f"Cannot start: {plotter_state.last_error or plotter_state.message}", color="negative")
             self.refresh_status()
             self.refresh_logs()
             return
-        state = await run.io_bound(self.supervisor.start_print, self.settings)
+        state = await self._blocking(self.supervisor.start_print, self.settings)
         ui.notify(state.message, color="positive" if state.status == ComponentStatus.RUNNING else "warning")
         self.refresh_status()
 
@@ -464,13 +525,15 @@ class GuiContext:
         self.pull_settings_from_fields()
         self._save_settings()
         ui.notify("Checking FluidNC before TEST PRINT...", color="info")
-        probe = await run.io_bound(self.supervisor.probe_fluidnc, scan=False)
+        probe = await self._blocking(self.supervisor.probe_fluidnc, scan=False)
         if probe is None:
             ui.notify("FluidNC must be connected and Idle before START TEST PRINT.", color="warning")
             self.refresh_status()
             self.refresh_logs()
             return
-        self.update_fluidnc_labels({**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port})
+        self.update_fluidnc_labels(
+            {**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port}
+        )
         self.supervisor.check_fluidnc(probe)
         if not (probe.online and probe.controller.is_idle):
             ui.notify("FluidNC must be connected and Idle before START TEST PRINT.", color="warning")
@@ -479,14 +542,18 @@ class GuiContext:
             return
         if not await self.run_system_check():
             return
-        plotter_state = await run.io_bound(self.supervisor.start_plotter, gui_settings_to_plotter_config(self.settings))
+        plotter_state = await self._blocking(
+            self.supervisor.start_plotter, gui_settings_to_plotter_config(self.settings)
+        )
         if plotter_state.status == ComponentStatus.ERROR:
             ui.notify(f"Cannot start test print: {plotter_state.last_error or plotter_state.message}", color="negative")
             self.refresh_status()
             self.refresh_logs()
             return
-        state = await run.io_bound(self.supervisor.start_print, self.settings)
-        ui.notify(f"TEST PRINT: {state.message}", color="positive" if state.status == ComponentStatus.RUNNING else "warning")
+        state = await self._blocking(self.supervisor.start_print, self.settings)
+        ui.notify(
+            f"TEST PRINT: {state.message}", color="positive" if state.status == ComponentStatus.RUNNING else "warning"
+        )
         self.refresh_status()
         self.refresh_logs()
 
@@ -557,7 +624,7 @@ class GuiContext:
     ) -> None:
         ui.notify(f"Sending {label}...", color="info")
         try:
-            state = await run.io_bound(action)
+            state = await self._blocking(action)
         except Exception as exc:  # noqa: BLE001
             ui.notify(f"{label} failed: {exc}", color="negative")
             self.refresh_status()
@@ -577,7 +644,7 @@ class GuiContext:
     async def check_fluidnc(self, *, scan: bool = False) -> None:
         ui.notify("Checking FluidNC...", color="info")
         try:
-            probe = await run.io_bound(self.supervisor.probe_fluidnc, scan=scan)
+            probe = await self._blocking(self.supervisor.probe_fluidnc, scan=scan)
         except Exception as exc:  # noqa: BLE001
             ui.notify(f"FluidNC check failed: {exc}", color="negative")
             self.refresh_logs()
@@ -607,7 +674,9 @@ class GuiContext:
         self.confirm_action(
             "SET WORK ZERO",
             "Current XY becomes G54 X0 Y0. Z is not zeroed; Z moves use absolute configured values. Use after placing the tool at the upper-left origin.",
-            lambda: self.fluidnc_action("set work zero", self.supervisor.set_work_zero, success_message="Work zero set"),
+            lambda: self.fluidnc_action(
+                "set work zero", self.supervisor.set_work_zero, success_message="Work zero set"
+            ),
         )
 
     def home_xy(self) -> None:
@@ -654,7 +723,9 @@ class GuiContext:
         await self.jog("Y", 1)
 
     async def pen_up(self) -> None:
-        await self.fluidnc_action("pen up", self.supervisor.pen_up_fluidnc, refresh_probe=False, success_message="Pen up")
+        await self.fluidnc_action(
+            "pen up", self.supervisor.pen_up_fluidnc, refresh_probe=False, success_message="Pen up"
+        )
 
     async def pen_down(self) -> None:
         await self.fluidnc_action(
@@ -662,19 +733,31 @@ class GuiContext:
         )
 
     def unlock_alarm(self) -> None:
-        self.confirm_action("UNLOCK ALARM", "This sends $X. It clears FluidNC alarm state without moving the machine.", lambda: self.fluidnc_action("unlock", self.supervisor.unlock_fluidnc_alarm))
+        self.confirm_action(
+            "UNLOCK ALARM",
+            "This sends $X. It clears FluidNC alarm state without moving the machine.",
+            lambda: self.fluidnc_action("unlock", self.supervisor.unlock_fluidnc_alarm),
+        )
 
     async def emergency_stop(self) -> None:
-        state = await run.io_bound(self.supervisor.emergency_stop_fluidnc)
+        state = await self._blocking(self.supervisor.emergency_stop_fluidnc)
         ui.notify(state.message, color="negative")
         self.refresh_status()
         self.refresh_logs()
 
     def resume_after_hold(self) -> None:
-        self.confirm_action("RESUME AFTER HOLD", "This sends realtime cycle start ~. Confirm only if the machine is safe to resume.", lambda: self.fluidnc_action("resume", self.supervisor.resume_fluidnc))
+        self.confirm_action(
+            "RESUME AFTER HOLD",
+            "This sends realtime cycle start ~. Confirm only if the machine is safe to resume.",
+            lambda: self.fluidnc_action("resume", self.supervisor.resume_fluidnc),
+        )
 
     def soft_reset(self) -> None:
-        self.confirm_action("SOFT RESET / ABORT", "This sends Ctrl-X and disables print. Use only to abort/reset FluidNC.", lambda: self.fluidnc_action("soft reset", self.supervisor.soft_reset_fluidnc))
+        self.confirm_action(
+            "SOFT RESET / ABORT",
+            "This sends Ctrl-X and disables print. Use only to abort/reset FluidNC.",
+            lambda: self.fluidnc_action("soft reset", self.supervisor.soft_reset_fluidnc),
+        )
 
     # ---- Mac mini uploader ----------------------------------------------------
 
@@ -710,19 +793,24 @@ class GuiContext:
 
     async def thermal_printer_status(self) -> None:
         url = self._thermal_url()
-        ok, output = await run.io_bound(self.supervisor.thermal_status, esp32_url=url)
+        ok, output = await self._blocking(self.supervisor.thermal_status, esp32_url=url)
         self._update_thermal_label(output)
-        ui.notify("Thermal printer status updated" if ok else "Thermal printer offline", color="positive" if ok else "warning")
+        ui.notify(
+            "Thermal printer status updated" if ok else "Thermal printer offline", color="positive" if ok else "warning"
+        )
 
     async def thermal_printer_connect(self) -> None:
         url = self._thermal_url()
-        ok, output = await run.io_bound(self.supervisor.thermal_connect, esp32_url=url)
+        ok, output = await self._blocking(self.supervisor.thermal_connect, esp32_url=url)
         self._update_thermal_label(output)
-        ui.notify("Thermal printer connected" if ok else "Thermal printer connection failed", color="positive" if ok else "warning")
+        ui.notify(
+            "Thermal printer connected" if ok else "Thermal printer connection failed",
+            color="positive" if ok else "warning",
+        )
 
     async def thermal_printer_test_receipt(self) -> None:
         url = self._thermal_url()
-        ok, output = await run.io_bound(self.supervisor.thermal_test, message="ORACLE THERMAL TEST", esp32_url=url)
+        ok, output = await self._blocking(self.supervisor.thermal_test, message="ORACLE THERMAL TEST", esp32_url=url)
         self._update_thermal_label(output)
         ui.notify("Thermal test sent" if ok else "Thermal test failed", color="positive" if ok else "warning")
 
@@ -731,9 +819,12 @@ class GuiContext:
             ui.notify("No receipt session folder found", color="warning")
             return
         url = self._thermal_url()
-        ok, output = await run.io_bound(self.supervisor.thermal_print_receipt, session_dir, esp32_url=url)
+        ok, output = await self._blocking(self.supervisor.thermal_print_receipt, session_dir, esp32_url=url)
         self._update_thermal_label(output)
-        ui.notify(f"Thermal receipt sent: {session_dir.name}" if ok else "Thermal receipt failed", color="positive" if ok else "warning")
+        ui.notify(
+            f"Thermal receipt sent: {session_dir.name}" if ok else "Thermal receipt failed",
+            color="positive" if ok else "warning",
+        )
 
     async def thermal_printer_print_latest(self) -> None:
         await self._thermal_print_session(self.latest_receipt_session_dir())
