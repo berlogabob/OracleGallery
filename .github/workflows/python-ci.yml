@@ -9,18 +9,24 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   quality:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -33,25 +39,18 @@ jobs:
       - name: Run coverage
         run: |
           uv run coverage run -m pytest -q
-          uv run coverage report --fail-under=64
+          uv run coverage report --fail-under=74
 
-      - name: Run mypy baseline
-        run: |
-          set +e
-          output=$(uv run mypy src/neje_oracle 2>&1)
-          status=$?
-          printf '%s\n' "$output"
-          if [ "$status" -eq 0 ]; then
-            exit 0
-          fi
-          count=$(printf '%s\n' "$output" | sed -n 's/Found \([0-9][0-9]*\) errors.*/\1/p' | tail -n 1)
-          if [ -n "$count" ] && [ "$count" -le 66 ]; then
-            exit 0
-          fi
-          exit "$status"
+      # The old error-count baseline (tolerated <=66) is gone: the package now
+      # type-checks clean, so plain mypy is the gate.
+      - name: Run mypy
+        run: uv run mypy src/neje_oracle
 
       - name: Run ruff check
         run: uv run ruff check src/neje_oracle tests
 
       - name: Run ruff format check
         run: uv run ruff format --check src/neje_oracle tests
+
+      - name: Audit dependencies
+        run: uv run --with pip-audit pip-audit --strict
