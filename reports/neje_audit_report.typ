@@ -458,4 +458,3 @@ NejeDraw/
     ├── maps/              (this report source)
     └── notes/             Session notes
 ]
-
