@@ -5,12 +5,11 @@ from pathlib import Path
 from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode
 from neje_oracle.blocks.gui.workspaces.generative import should_send_frame
 
-
 SAMPLE_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200mm" height="200mm">'
     '<circle cx="100" cy="100" r="40" fill="none" stroke="black" stroke-width="0.5"/>'
     '<polyline points="10,10 50,50 90,10" fill="none" stroke="black" stroke-width="0.5"/>'
-    '</svg>'
+    "</svg>"
 )
 
 
@@ -18,21 +17,29 @@ def test_generative_svg_produces_valid_gcode(tmp_path: Path) -> None:
     svg_path = tmp_path / "generative_test.svg"
     svg_path.write_text(SAMPLE_SVG)
     gcode = generate_absolute_svg_gcode(
-        svg_path, sample_step_mm=1.0, travel_rate=5000.0, draw_rate=1800.0,
-        pen_up_command="M5", pen_down_command="M3 S15",
+        svg_path,
+        sample_step_mm=1.0,
+        travel_rate=5000.0,
+        draw_rate=1800.0,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
     )
     assert "G21" in gcode and "G90" in gcode
     assert "M3 S15" in gcode and "M5" in gcode
     lines = gcode.splitlines()
-    assert any(l.startswith("G1 ") for l in lines)
+    assert any(line.startswith("G1 ") for line in lines)
 
 
 def test_generative_svg_coordinates_within_bounds(tmp_path: Path) -> None:
     svg_path = tmp_path / "generative_bounds_test.svg"
     svg_path.write_text(SAMPLE_SVG)
     gcode = generate_absolute_svg_gcode(
-        svg_path, sample_step_mm=1.0, travel_rate=5000.0, draw_rate=1800.0,
-        pen_up_command="M5", pen_down_command="M3 S15",
+        svg_path,
+        sample_step_mm=1.0,
+        travel_rate=5000.0,
+        draw_rate=1800.0,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
     )
 
     # Extract all X/Y coordinates from the gcode

@@ -55,3 +55,7 @@ ESP32-BTN_Printer/**/config.local.h
 graphify-out/
 /2026-*.txt
 .claude/scheduled_tasks.lock
+
+# Design reference screenshots (67MB of phone captures). Input material for the
+# pattern generators, not a build input — kept locally, out of git history.
+RAW_Patterns/

@@ -324,4 +324,3 @@ class _HighlightedSessionPanel extends StatelessWidget {
     );
   }
 }
-

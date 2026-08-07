@@ -11,12 +11,13 @@ from typing import Any
 from urllib.parse import quote
 
 import qrcode
+from qrcode.image.pil import PilImage
 
 from ...shared.config import UploaderSettings, _repo_root, ensure_dir
 from ...shared.logging import append_log
-from ..firebase.repository import FirebaseRemoteRepository, record_to_json
 from ...shared.models import PlotStatus, PublicStatus, SessionRecord
 from ...shared.store import UploaderStore
+from ..firebase.repository import FirebaseRemoteRepository, record_to_json
 from ..symbols.svg_normalizer import normalize_svg_file, scale_for_mark_name
 
 
@@ -105,7 +106,9 @@ class SessionUploader:
         return (time.time() - newest_mtime) >= self.settings.stability_seconds
 
     def _has_required_assets(self, session_dir: Path) -> bool:
-        return self._resolve_svg_source(session_dir) is not None and self._resolve_receipt_source(session_dir) is not None
+        return (
+            self._resolve_svg_source(session_dir) is not None and self._resolve_receipt_source(session_dir) is not None
+        )
 
     def _has_ready_marker(self, session_dir: Path) -> bool:
         candidates = [
@@ -175,7 +178,7 @@ class SessionUploader:
 
         qr_url = f"{self.gallery_base_url.rstrip('/')}/#/session/{quote(session_id)}"
         qr_target = public_dir / "qr.png"
-        qrcode.make(qr_url).save(qr_target)
+        qrcode.make(qr_url, image_factory=PilImage).save(qr_target)
         record = SessionRecord(
             session_id=session_id,
             created_at=created_at,

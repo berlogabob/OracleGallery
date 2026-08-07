@@ -4,7 +4,7 @@ Date: 2026-05-20
 
 ## Scope
 
-Implemented the physical thermal receipt path from `printer_plan.md` for the ESP32 printer bridge and Mac GUI workflow.
+Implemented the physical thermal receipt path (original plan superseded; see git history) for the ESP32 printer bridge and Mac GUI workflow.
 
 ## Current Receipt Contract
 

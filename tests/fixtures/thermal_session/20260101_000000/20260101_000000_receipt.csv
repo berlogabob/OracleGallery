@@ -1,0 +1,2 @@
+session_id,date,symbol,mark_type,reply_text,keywords,voice_intensity,instability,confidence
+20260101_000000,2026-01-01 00:00,THE_TEST_MARK,the_test_mark,A synthetic reply held only for tests.,"['signal', 'voice', 'mark', 'question', 'room', 'trace', 'pressure', 'memory']",0.8,0.2,0.9

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 
-from neje_oracle.shared.config import FirebaseSettings, UploaderSettings
-from datetime import UTC, datetime
-
 from neje_oracle.blocks.firebase.repository import FirebaseRemoteRepository
-from neje_oracle.shared.models import PlotStatus, PublicationResult, PublicStatus, SessionRecord
 from neje_oracle.blocks.macmini.session_uploader import SessionUploader
+from neje_oracle.shared.config import FirebaseSettings, UploaderSettings
+from neje_oracle.shared.models import PlotStatus, PublicationResult, PublicStatus, SessionRecord
 from neje_oracle.shared.store import UploaderStore
 
 
@@ -42,7 +41,7 @@ class FakeRemoteRepository:
         if self.fail_qr_download:
             raise RuntimeError("QR download failed")
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(f"firebase:{storage_path}".encode("utf-8"))
+        destination.write_bytes(f"firebase:{storage_path}".encode())
 
 
 class FakeBlob:
@@ -57,7 +56,7 @@ class FakeBlob:
         self.uploads.append((payload, content_type))
 
     def download_to_filename(self, filename: str) -> None:
-        Path(filename).write_bytes(f"firebase:{self.path}".encode("utf-8"))
+        Path(filename).write_bytes(f"firebase:{self.path}".encode())
 
 
 class FakeBucket:
@@ -216,12 +215,17 @@ def test_firebase_publish_separates_qr_deeplink_and_qr_image_url(tmp_path: Path)
     publication = repo.publish_session(record, public_dir)
 
     session_doc = db.collection("sessions").document(record.session_id).set_calls[-1]
-    expected_qr_image_url = "https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/sessions%2F20260426_130000%2Fqr.png?alt=media"
+    expected_qr_image_url = (
+        "https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/sessions%2F20260426_130000%2Fqr.png?alt=media"
+    )
     assert session_doc["sessionUrl"] == record.qr_url
     assert session_doc["qrUrl"] == record.qr_url
     assert session_doc["qrImageUrl"] == expected_qr_image_url
     assert session_doc["assetUrls"]["qr"] == expected_qr_image_url
-    assert session_doc["assetUrls"]["tarot"] == "https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/sessions%2F20260426_130000%2Ftarot.jpg?alt=media"
+    assert (
+        session_doc["assetUrls"]["tarot"]
+        == "https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/sessions%2F20260426_130000%2Ftarot.jpg?alt=media"
+    )
     assert session_doc["assetPaths"]["qr"] == "sessions/20260426_130000/qr.png"
     assert session_doc["assetPaths"]["tarot"] == "sessions/20260426_130000/tarot.jpg"
     assert session_doc["origin"] == "real_macmini"
@@ -676,7 +680,9 @@ def test_touchdesigner_plotter_and_receipt_assets_are_imported_without_visitor_p
     assert (public_root / session_id / "tarot.jpg").read_bytes() == b"public-tarot"
     assert not (public_root / session_id / "preview.png").exists()
     assert 'data-neje-normalized="true"' in (public_root / session_id / "artwork.svg").read_text(encoding="utf-8")
-    assert 'data-neje-normalized="true"' not in (public_root / session_id / "artwork_raw.svg").read_text(encoding="utf-8")
+    assert 'data-neje-normalized="true"' not in (public_root / session_id / "artwork_raw.svg").read_text(
+        encoding="utf-8"
+    )
 
     row = store.get_session(session_id)
     assert row is not None

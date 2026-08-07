@@ -4,16 +4,15 @@ import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 
+from neje_oracle.blocks.fluidnc.transport import FluidNCTransport
+from neje_oracle.blocks.plotter.daemon import PlotterDaemon, _apply_current_mark_scale, _materialize_scaled_placeholder
+from neje_oracle.blocks.symbols.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
 from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.shared.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
 from neje_oracle.shared.origin_markers import origin_allowed
-from unittest.mock import patch
-from neje_oracle.blocks.plotter.daemon import PlotterDaemon, _apply_current_mark_scale, _materialize_scaled_placeholder
 from neje_oracle.shared.store import OracleRuntimeStore, PlotterStore
-from neje_oracle.blocks.symbols.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
-from neje_oracle.blocks.fluidnc.transport import FluidNCTransport
-
 
 SVG = (
     "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
@@ -35,7 +34,9 @@ class FakeRemoteRepository:
         self.fail_claim = fail_claim
         self.updates: list[tuple[str, str, str]] = []
 
-    def claim_next_plot_job(self, consumer_id: str, *, run_started_at=None, allowed_origins=None) -> PlotJobLease | None:
+    def claim_next_plot_job(
+        self, consumer_id: str, *, run_started_at=None, allowed_origins=None
+    ) -> PlotJobLease | None:
         if self.fail_claim:
             raise RuntimeError("firestore down")
         for index, job in enumerate(self.jobs):
@@ -148,7 +149,9 @@ def test_plotter_finishes_sheet_and_stops_before_next_sheet(tmp_path: Path) -> N
     ]
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository(jobs)
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -182,7 +185,9 @@ def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Pat
 
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository(fail_claim=True)
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -201,7 +206,9 @@ def test_plotter_stops_before_next_sheet_when_operator_disabled(tmp_path: Path) 
 
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=False, operator_paused=True, run_mode="exhibition", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=False, operator_paused=True, run_mode="exhibition", dry_run=True)
+    )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -220,7 +227,9 @@ def test_plotter_transport_failure_does_not_mark_job_printed(tmp_path: Path) -> 
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
     oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
-    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=False))
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="exhibition", dry_run=False)
+    )
     remote = FakeRemoteRepository(
         [
             PlotJobLease(
@@ -257,7 +266,9 @@ def test_plotter_uses_oracle_runtime_config_for_next_sheet(tmp_path: Path) -> No
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
     oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
-    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     oracle_store.save_plotter_config(
         PlotterRuntimeConfig(
             layout_mode="grid",
@@ -302,7 +313,9 @@ def test_plotter_writes_explicit_post_sheet_safety_gcode(tmp_path: Path) -> None
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
     oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
-    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     oracle_store.save_plotter_config(
         PlotterRuntimeConfig(
             layout_mode="grid",
@@ -339,7 +352,9 @@ def test_plotter_progress_uses_cell_markers_instead_of_row_fraction(tmp_path: Pa
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
     oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
-    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     oracle_store.save_plotter_config(
         PlotterRuntimeConfig(
             layout_mode="grid",
@@ -392,7 +407,9 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
         layout_mode="hex",
     )
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository([])
 
     class RowTransport:
@@ -443,7 +460,9 @@ def test_plotter_stops_sending_rows_when_operator_pauses_mid_sheet(tmp_path: Pat
     )
     store = PlotterStore(settings.db_path)
     oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
-    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository()
 
     class PausingTransport:
@@ -454,7 +473,9 @@ def test_plotter_stops_sending_rows_when_operator_pauses_mid_sheet(tmp_path: Pat
             self.calls += 1
             path = settings.spool_root / f"{sheet_id}.gcode"
             path.write_text(gcode, encoding="utf-8")
-            oracle_store.save_print_control(PlotterControlState(print_enabled=False, operator_paused=True, run_mode="test", dry_run=True))
+            oracle_store.save_print_control(
+                PlotterControlState(print_enabled=False, operator_paused=True, run_mode="test", dry_run=True)
+            )
             return path
 
     transport = PausingTransport()
@@ -481,7 +502,9 @@ def test_plotter_origin_filter_leaves_disallowed_job_pending_and_fills_row(tmp_p
     )
     store = PlotterStore(settings.db_path)
     oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
-    oracle_store.save_print_control(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     oracle_store.save_origin_filters(show_origins=["real_macmini", "test_macbook"], print_origins=["real_macmini"])
     remote = FakeRemoteRepository(
         [
@@ -529,7 +552,9 @@ def test_plotter_can_use_filler_session_package_folders(tmp_path: Path) -> None:
         layout_mode="grid",
     )
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -551,7 +576,9 @@ def test_plotter_materializes_remote_filler_queue_job_as_placeholder(tmp_path: P
         layout_mode="grid",
     )
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository(
         [
             PlotJobLease(
@@ -616,7 +643,9 @@ def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
         streaming_mode="row",
     )
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -632,6 +661,7 @@ def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
     assert sample_steps
     assert all(step == 0.4 for step in sample_steps)
     assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
+
 
 def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
     placeholder_root = tmp_path / "placeholders"
@@ -654,7 +684,9 @@ def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
         streaming_mode="row",
     )
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
     daemon = PlotterDaemon(settings, store, remote, transport)
@@ -689,7 +721,9 @@ def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: P
         streaming_mode="cell",
     )
     store = PlotterStore(settings.db_path)
-    store.save_control_state(PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True))
+    store.save_control_state(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
     remote = FakeRemoteRepository(
         [
             PlotJobLease(

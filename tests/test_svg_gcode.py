@@ -3,10 +3,10 @@ from random import Random
 
 import pytest
 
-from neje_oracle.shared.models import SheetItem, SheetPlacement
-from neje_oracle.blocks.symbols.session_generator import build_variant_svg
 from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode, generate_sheet_gcode
+from neje_oracle.blocks.symbols.session_generator import build_variant_svg
 from neje_oracle.blocks.symbols.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
+from neje_oracle.shared.models import SheetItem, SheetPlacement
 
 
 def test_gcode_fits_symbol_inside_cell_with_internal_safety_ratio(tmp_path: Path) -> None:
@@ -246,9 +246,15 @@ def test_sheet_placement_rotation_and_symbol_scale_affect_gcode(tmp_path: Path) 
         encoding="utf-8",
     )
 
-    base = _gcode_points_for_placement(svg_path, SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80))
-    scaled = _gcode_points_for_placement(svg_path, SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80, symbol_scale=0.5))
-    rotated = _gcode_points_for_placement(svg_path, SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80, rotation_deg=90))
+    base = _gcode_points_for_placement(
+        svg_path, SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80)
+    )
+    scaled = _gcode_points_for_placement(
+        svg_path, SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80, symbol_scale=0.5)
+    )
+    rotated = _gcode_points_for_placement(
+        svg_path, SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=80, rotation_deg=90)
+    )
 
     assert _axis_span(scaled, axis=0) < _axis_span(base, axis=0) * 0.6
     assert _axis_span(rotated, axis=1) > _axis_span(rotated, axis=0) * 5
@@ -415,9 +421,7 @@ def test_symbol_sheet_gcode_filters_tiny_svg_segments() -> None:
         include_rings=False,
     )
     points = [
-        tuple(float(axis[1:]) for axis in line.split()[1:3])
-        for line in gcode.splitlines()
-        if line.startswith("G1 X")
+        tuple(float(axis[1:]) for axis in line.split()[1:3]) for line in gcode.splitlines() if line.startswith("G1 X")
     ]
     distances = [_distance(points[index - 1], points[index]) for index in range(1, len(points))]
 

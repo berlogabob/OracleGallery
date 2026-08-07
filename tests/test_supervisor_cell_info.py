@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from neje_oracle.shared.models import SheetItem, SheetPlacement
 from neje_oracle.blocks.gcode.svg_gcode import generate_sheet_gcode, parse_cell_progress_markers
+from neje_oracle.shared.models import SheetItem, SheetPlacement
 
 
 def _svg(path: Path) -> Path:
@@ -17,12 +17,10 @@ def _svg(path: Path) -> Path:
 def test_parse_cell_progress_markers_from_generated_gcode(tmp_path: Path) -> None:
     svg_path = _svg(tmp_path / "test.svg")
     items = [
-        SheetItem(source_kind="user", session_id=f"test{i}", title=f"Test{i}", svg_path=svg_path)
-        for i in range(3)
+        SheetItem(source_kind="user", session_id=f"test{i}", title=f"Test{i}", svg_path=svg_path) for i in range(3)
     ]
     placements = [
-        SheetPlacement(index=i, center_x_mm=100 + (i * 50), center_y_mm=100, diameter_mm=40)
-        for i in range(3)
+        SheetPlacement(index=i, center_x_mm=100 + (i * 50), center_y_mm=100, diameter_mm=40) for i in range(3)
     ]
 
     gcode = generate_sheet_gcode(

@@ -10,18 +10,17 @@ import pytest
 from nicegui.elements.upload_files import SmallFileUpload
 
 from neje_oracle.blocks.gui import support as gui_support
-from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.blocks.gui.support import (
     GUI_DEFAULTS,
+    PREVIEW_PX_PER_MM,
     GuiSettings,
     _field_or_default,
     build_preview_svg,
-    PREVIEW_PX_PER_MM,
     build_realtime_preview_svg,
-    create_idle_bank_from_gui,
-    create_filler_packages_from_gui,
-    create_next_filler_upload_from_gui,
     create_direct_svg_print_job_from_gui,
+    create_filler_packages_from_gui,
+    create_idle_bank_from_gui,
+    create_next_filler_upload_from_gui,
     create_user_sessions_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
@@ -33,8 +32,8 @@ from neje_oracle.blocks.gui.support import (
     save_gui_settings,
     save_symbol_scales,
 )
+from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.shared.models import RuntimeStatus, SystemMode
-
 
 SIMPLE_SYMBOL = (
     "<svg width='800' height='800' xmlns='http://www.w3.org/2000/svg'>"
@@ -200,7 +199,9 @@ def test_preview_svg_can_randomize_symbol_distribution(tmp_path: Path) -> None:
     save_symbol_scales({f"symbol_{index}.svg": 1.0 for index in range(3)}, scale_path, root)
     settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80)
 
-    ordered = build_preview_svg(settings, user_count=layout_capacity(settings), idle_count=0, symbol_root=root, scale_path=scale_path)
+    ordered = build_preview_svg(
+        settings, user_count=layout_capacity(settings), idle_count=0, symbol_root=root, scale_path=scale_path
+    )
     randomized = build_preview_svg(
         settings,
         user_count=layout_capacity(settings),
@@ -232,7 +233,7 @@ def test_preview_svg_shows_organic_rotation_and_scale(tmp_path: Path) -> None:
     preview = build_preview_svg(settings, symbol_root=root, scale_path=scale_path)
 
     assert preview.count("<image") == layout_capacity(settings)
-    assert "transform=\"rotate(" in preview
+    assert 'transform="rotate(' in preview
     assert 'data-placement-scale="' in preview
 
 
@@ -503,8 +504,12 @@ def test_gui_user_and_idle_generation_helpers(tmp_path: Path) -> None:
         randomness=0,
     )
 
-    user_dirs = create_user_sessions_from_gui(settings, output_root=tmp_path / "sessions", symbol_root=root, scale_path=scale_path)
-    idle_svgs = create_idle_bank_from_gui(settings, output_root=tmp_path / "idle", symbol_root=root, scale_path=scale_path)
+    user_dirs = create_user_sessions_from_gui(
+        settings, output_root=tmp_path / "sessions", symbol_root=root, scale_path=scale_path
+    )
+    idle_svgs = create_idle_bank_from_gui(
+        settings, output_root=tmp_path / "idle", symbol_root=root, scale_path=scale_path
+    )
 
     assert (user_dirs[0] / f"{user_dirs[0].name}_plotter.svg").exists()
     assert (user_dirs[0] / "READY").exists()
@@ -543,7 +548,9 @@ def test_idle_variations_per_symbol_generates_more_than_base_bank(tmp_path: Path
     save_symbol_scales({"symbol_0.svg": 1.0, "symbol_1.svg": 1.0}, scale_path, root)
     settings = GuiSettings(idle_count=1, idle_variations_per_symbol=3, randomness=0)
 
-    idle_svgs = create_idle_bank_from_gui(settings, output_root=tmp_path / "idle", symbol_root=root, scale_path=scale_path)
+    idle_svgs = create_idle_bank_from_gui(
+        settings, output_root=tmp_path / "idle", symbol_root=root, scale_path=scale_path
+    )
 
     assert len(idle_svgs) == 6
     assert [path.name for path in idle_svgs][:4] == [
@@ -733,7 +740,9 @@ def test_read_queue_status_fetches_on_cold_cache(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(queue_status, "_QUEUE_STATUS_CACHE", None)
     monkeypatch.setattr(queue_status, "firebase_enabled", lambda: True)
     monkeypatch.setattr(queue_status, "FirebaseSettings", lambda: SimpleNamespace(enabled=True))
-    monkeypatch.setattr(queue_status, "OracleSupervisorSettings", lambda: SimpleNamespace(runtime_db_path=Path("unused")))
+    monkeypatch.setattr(
+        queue_status, "OracleSupervisorSettings", lambda: SimpleNamespace(runtime_db_path=Path("unused"))
+    )
     monkeypatch.setattr(queue_status, "OracleRuntimeStore", lambda _: store)
     monkeypatch.setattr(queue_status, "FirebaseRemoteRepository", lambda _: remote)
 
@@ -744,6 +753,7 @@ def test_read_queue_status_fetches_on_cold_cache(monkeypatch: pytest.MonkeyPatch
 
 def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter():
     from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+
     result = fn(
         sample_step_mm=1.0,
         cell_diameter_mm=80.0,
@@ -757,6 +767,7 @@ def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter()
 
 def test_compute_effective_sample_step_bigger_cell_denser_gcode():
     from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+
     ref_result = fn(
         sample_step_mm=1.0,
         cell_diameter_mm=80.0,
@@ -779,6 +790,7 @@ def test_compute_effective_sample_step_bigger_cell_denser_gcode():
 
 def test_compute_effective_sample_step_clamps_to_min():
     from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+
     result = fn(
         sample_step_mm=0.1,
         cell_diameter_mm=200.0,
@@ -792,6 +804,7 @@ def test_compute_effective_sample_step_clamps_to_min():
 
 def test_compute_effective_sample_step_clamps_to_max():
     from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+
     result = fn(
         sample_step_mm=5.0,
         cell_diameter_mm=20.0,
@@ -805,6 +818,7 @@ def test_compute_effective_sample_step_clamps_to_max():
 
 def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
     from neje_oracle.blocks.gui.support import GuiSettings, load_gui_settings, save_gui_settings
+
     settings_path = tmp_path / "gui_settings.json"
     settings = GuiSettings(
         cell_diameter_mm=160.0,
@@ -850,6 +864,7 @@ def test_gui_optimisation_settings_preserve_zero_xy_acceleration(tmp_path: Path)
 def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
     from neje_oracle.blocks.gui.support import GuiSettings, gui_settings_to_plotter_config
     from neje_oracle.shared.models import PlotterRuntimeConfig
+
     settings = GuiSettings(
         cell_diameter_mm=160.0,
         organic_enabled=True,
@@ -883,9 +898,10 @@ def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
 
 def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
     from neje_oracle.blocks.gui.support import (
-        GuiSettings, generate_dry_run_sheet, latest_spool_manifest,
-        compute_effective_sample_step,
+        GuiSettings,
+        generate_dry_run_sheet,
     )
+
     symbol_root = tmp_path / "symbols"
     symbol_root.mkdir()
     (symbol_root / "s.svg").write_text(
@@ -894,10 +910,16 @@ def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
         encoding="utf-8",
     )
     settings = GuiSettings(
-        sheet_width_mm=120.0, sheet_height_mm=120.0, cell_diameter_mm=40.0,
-        organic_enabled=True, organic_cell_size_mm=6.0, organic_rotation_ramp=1.0,
-        organic_scale_ramp=0.5, organic_seed=55,
-        sample_step_mm=2.0, sample_density_exponent=2.0,
+        sheet_width_mm=120.0,
+        sheet_height_mm=120.0,
+        cell_diameter_mm=40.0,
+        organic_enabled=True,
+        organic_cell_size_mm=6.0,
+        organic_rotation_ramp=1.0,
+        organic_scale_ramp=0.5,
+        organic_seed=55,
+        sample_step_mm=2.0,
+        sample_density_exponent=2.0,
         xy_acceleration_mm_s2=1.0,
     )
     spool_root = tmp_path / "spool"
@@ -932,3 +954,41 @@ def test_batch_generation_controls_are_not_operator_facing() -> None:
     assert "Generate next filler" not in exhibition_panel
     assert "START GENERATOR" not in work_panel
     assert "START GENERATOR" not in exhibition_panel
+
+
+def test_blocking_helper_returns_result_and_does_not_recurse() -> None:
+    """Guards the _blocking wrapper: it must call run.io_bound, not itself."""
+    import asyncio
+    from unittest.mock import patch
+
+    from neje_oracle.blocks.gui.context import GuiContext
+
+    ctx = GuiContext.__new__(GuiContext)  # no __init__: avoids touching runtime state
+
+    async def fake_io_bound(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    with patch("neje_oracle.blocks.gui.context.run.io_bound", fake_io_bound):
+        assert asyncio.run(ctx._blocking(lambda x: x * 2, 21)) == 42
+
+
+def test_blocking_helper_raises_when_task_was_cancelled() -> None:
+    """run.io_bound yields None on cancellation; that must not become AttributeError."""
+    import asyncio
+    from unittest.mock import patch
+
+    from neje_oracle.blocks.gui.context import GuiContext
+
+    ctx = GuiContext.__new__(GuiContext)
+
+    async def cancelled_io_bound(func, *args, **kwargs):
+        return None
+
+    def print_uploaded_svg() -> str:
+        return "unreachable"
+
+    with (
+        patch("neje_oracle.blocks.gui.context.run.io_bound", cancelled_io_bound),
+        pytest.raises(RuntimeError, match="print_uploaded_svg was cancelled"),
+    ):
+        asyncio.run(ctx._blocking(print_uploaded_svg))

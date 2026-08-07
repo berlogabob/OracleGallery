@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from neje_oracle.shared.config import FirebaseSettings
 from neje_oracle.blocks.firebase.repository import FirebaseRemoteRepository
+from neje_oracle.shared.config import FirebaseSettings
 
 
 def main() -> None:

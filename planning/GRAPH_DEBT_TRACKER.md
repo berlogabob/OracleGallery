@@ -9,7 +9,7 @@ Branch: `graph-debt`. Status legend: ⏳ pending · 🔄 in progress · ✅ done
 | W1 | tests passing | 202 | all green | **204 passed** (202 + 2 new geometry tests) | ✅ |
 | W2 | contradictory working-area claims | 3 docs disagree (255×420 vs 255×440 vs 250×440) | 0 — GEOMETRY.md single source | **0** — GEOMETRY.md authoritative; hardware README fixed to 255×420; root README links it | ✅ |
 | W2 | sheet-vs-travel guard test | none | 1 test tracking sheet 440mm > Y-travel 420mm | **2 tests** in `tests/test_geometry_consistency.py` (width fits; height overshoot made visible) | ✅ |
-| W3 | INFERRED graph edges audited | 0/22 flagged (16 unique after dedup) | all verdicts with file:line evidence | **16/16**: 1 CORRECT, 15 WRONG (LLM mistook injected test doubles for real deps) — `planning/GRAPH_EDGE_AUDIT.md` | ✅ |
+| W3 | INFERRED graph edges audited | 0/22 flagged (16 unique after dedup) | all verdicts with file:line evidence | **16/16**: 1 CORRECT, 15 WRONG (LLM mistook injected test doubles for real deps); root cause fixed in Round 2 (F1) by excluding `tests/`/`docs/` from the graph | ✅ |
 | W4 | dead block stubs | 1 (`blocks/direct_print/`) | 0 | **0** — deleted, references cleaned, `grep -r direct_print src tests` empty | ✅ |
 | info | god-node degree GuiSettings / SupervisorService / GuiContext | 89 / 83 / 78 | re-measured post-refactor | **92 / 83 / 78** (graph 2026-08-04b: 1,780 nodes / 4,828 edges / 114 communities) | ✅ |
 

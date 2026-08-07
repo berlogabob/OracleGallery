@@ -3,17 +3,16 @@ from __future__ import annotations
 import re
 import socket
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from ipaddress import ip_network
 from pathlib import Path
-from typing import Callable
 
 import httpx
 
 from ...shared.config import PlotterSettings, ensure_dir
 from ...shared.models import FluidNCCommandResult, FluidNCControllerState, FluidNCProbeResult, FluidNCState
-
 
 STATUS_RE = re.compile(r"<([^|>]+)(?:\|([^>]*))?>")
 
@@ -93,6 +92,27 @@ def _local_ipv4() -> str:
         return ""
 
 
+def prune_spool(spool_root: Path, retention_days: int) -> int:
+    """Delete spool files older than the retention window. Returns the count removed.
+
+    Pruning must never block a print: any failure here is swallowed and reported as 0.
+    """
+    if retention_days <= 0 or not spool_root.is_dir():
+        return 0
+    cutoff = time.time() - (retention_days * 86_400)
+    removed = 0
+    for path in spool_root.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+                removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 class FluidNCTransport:
     def __init__(self, settings: PlotterSettings) -> None:
         self.settings = settings
@@ -139,7 +159,9 @@ class FluidNCTransport:
         probe = self.probe(timeout_seconds=timeout_seconds)
         return probe.online, probe.message
 
-    def send_command(self, command: str, *, wait_for_ok: bool = True, timeout_seconds: float | None = None) -> FluidNCCommandResult:
+    def send_command(
+        self, command: str, *, wait_for_ok: bool = True, timeout_seconds: float | None = None
+    ) -> FluidNCCommandResult:
         timeout = timeout_seconds or self.settings.fluidnc_ack_timeout_seconds
         try:
             with self._connect(self.settings.fluidnc_connect_timeout_seconds) as conn:
@@ -183,7 +205,9 @@ class FluidNCTransport:
 
     def home(self, axis: str | None = None) -> FluidNCCommandResult:
         command = "$H" if not axis else f"$H={axis.upper()}"
-        return self.send_command(command, wait_for_ok=True, timeout_seconds=max(self.settings.fluidnc_ack_timeout_seconds, 60.0))
+        return self.send_command(
+            command, wait_for_ok=True, timeout_seconds=max(self.settings.fluidnc_ack_timeout_seconds, 60.0)
+        )
 
     def unlock_alarm(self) -> FluidNCCommandResult:
         return self.send_command("$X", wait_for_ok=True)
@@ -218,6 +242,7 @@ class FluidNCTransport:
         dry_run: bool | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
     ) -> Path:
+        prune_spool(self.settings.spool_root, self.settings.spool_retention_days)
         gcode_path = self.settings.spool_root / f"{sheet_id}.gcode"
         gcode_path.write_text(gcode, encoding="utf-8")
         all_lines = gcode.splitlines()
@@ -390,7 +415,9 @@ class FluidNCTransport:
                 return match.group(0)
         raise TimeoutError("Timed out waiting for FluidNC status response")
 
-    def _send_regular_command_on_connection(self, conn: socket.socket, command: str, *, timeout_seconds: float) -> FluidNCCommandResult:
+    def _send_regular_command_on_connection(
+        self, conn: socket.socket, command: str, *, timeout_seconds: float
+    ) -> FluidNCCommandResult:
         conn.sendall((command.rstrip() + "\n").encode("utf-8"))
         lines: list[str] = []
         deadline = time.monotonic() + timeout_seconds
@@ -408,7 +435,9 @@ class FluidNCTransport:
                     return FluidNCCommandResult(ok=True, command=command, response_lines=lines)
                 if lower.startswith("error") or "alarm" in lower:
                     return FluidNCCommandResult(ok=False, command=command, response_lines=lines, error=line)
-        return FluidNCCommandResult(ok=False, command=command, response_lines=lines, error=f"Timed out waiting for ok after {command}")
+        return FluidNCCommandResult(
+            ok=False, command=command, response_lines=lines, error=f"Timed out waiting for ok after {command}"
+        )
 
     def _drain(self, conn: socket.socket, *, timeout_seconds: float) -> str:
         previous_timeout = conn.gettimeout()
@@ -435,7 +464,7 @@ class FluidNCTransport:
                 if not data:
                     raise ConnectionAbortedError("Connection closed by FluidNC")
                 return data.decode("utf-8", "replace")
-            except socket.timeout:
+            except TimeoutError:
                 return ""
         finally:
             conn.settimeout(previous_timeout)
@@ -472,7 +501,9 @@ def parse_status_response(response: str) -> FluidNCControllerState:
 
     for field in fields:
         if field.startswith("MPos:"):
-            machine_position = _parse_float_tuple(field.removeprefix("MPos:"), 3)
+            values = _parse_float_tuple(field.removeprefix("MPos:"), 3)
+            if values is not None:
+                machine_position = values[0], values[1], values[2]
         elif field.startswith("FS:"):
             values = _parse_float_tuple(field.removeprefix("FS:"), 2)
             if values is not None:
@@ -480,7 +511,7 @@ def parse_status_response(response: str) -> FluidNCControllerState:
         elif field.startswith("Ov:"):
             values = _parse_int_tuple(field.removeprefix("Ov:"), 3)
             if values is not None:
-                overrides = values
+                overrides = values[0], values[1], values[2]
         elif field.startswith("Pn:"):
             pins = field.removeprefix("Pn:")
 

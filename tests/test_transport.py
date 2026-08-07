@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import socket
 import threading
 import time
@@ -7,8 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from neje_oracle.shared.config import PlotterSettings
-from neje_oracle.shared.models import FluidNCState
 from neje_oracle.blocks.fluidnc.transport import (
     RX_BUFFER,
     FluidNCTransport,
@@ -16,6 +15,8 @@ from neje_oracle.blocks.fluidnc.transport import (
     parse_status_response,
     settings_for_fluidnc_host,
 )
+from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.shared.models import FluidNCState
 
 
 class FakeFluidNCServer:
@@ -41,7 +42,7 @@ class FakeFluidNCServer:
         self.host = "127.0.0.1"
         self.port = 0
 
-    def __enter__(self) -> "FakeFluidNCServer":
+    def __enter__(self) -> FakeFluidNCServer:
         self._thread.start()
         assert self._ready.wait(timeout=2)
         return self
@@ -66,7 +67,7 @@ class FakeFluidNCServer:
             while not self._stop.is_set():
                 try:
                     conn, _ = server.accept()
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 threading.Thread(target=self._handle, args=(conn,), daemon=True).start()
 
@@ -77,7 +78,7 @@ class FakeFluidNCServer:
             while not self._stop.is_set():
                 try:
                     data = conn.recv(1024)
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 if not data:
                     break
@@ -113,7 +114,7 @@ class FakeFluidNCServer:
             index = min(self.status_queries, len(self.status_states) - 1)
             state = self.status_states[index]
             self.status_queries += 1
-        return f"<{state}|MPos:1.000,2.000,3.000|FS:0,0|Ov:100,100,100>\r\n".encode("utf-8")
+        return f"<{state}|MPos:1.000,2.000,3.000|FS:0,0|Ov:100,100,100>\r\n".encode()
 
 
 def _settings(
@@ -157,7 +158,7 @@ class FakeCharCountServer:
         self.host = "127.0.0.1"
         self.port = 0
 
-    def __enter__(self) -> "FakeCharCountServer":
+    def __enter__(self) -> FakeCharCountServer:
         self._thread.start()
         assert self._ready.wait(timeout=2)
         return self
@@ -182,7 +183,7 @@ class FakeCharCountServer:
             while not self._stop.is_set():
                 try:
                     conn, _ = server.accept()
-                except socket.timeout:
+                except TimeoutError:
                     continue
                 self._handle(conn)
 
@@ -216,7 +217,7 @@ class FakeCharCountServer:
                         outstanding_bytes += len(command) + 1
                         self.max_outstanding_bytes = max(self.max_outstanding_bytes, outstanding_bytes)
                         self.max_outstanding_lines = max(self.max_outstanding_lines, len(pending))
-                except socket.timeout:
+                except TimeoutError:
                     pass
 
                 if pending:
@@ -424,3 +425,36 @@ def test_char_count_streaming_times_out_like_ok_wait(tmp_path: Path) -> None:
         transport = FluidNCTransport(_settings(tmp_path, server, streaming="char_count", ack_timeout_seconds=0.3))
         with pytest.raises(RuntimeError, match="rejected line 1: G1 X1 :: Timed out waiting for ok after G1 X1"):
             transport.send(gcode="G1 X1\n", sheet_id="sheet", dry_run=False)
+
+
+def test_prune_spool_removes_only_expired_files(tmp_path: Path) -> None:
+    from neje_oracle.blocks.fluidnc.transport import prune_spool
+
+    old = tmp_path / "gui_sheet_old.gcode"
+    recent = tmp_path / "gui_sheet_recent.gcode"
+    nested = tmp_path / "uploaded_svg" / "old.svg"
+    nested.parent.mkdir()
+    for path in (old, recent, nested):
+        path.write_text("G21\n", encoding="utf-8")
+
+    stale = time.time() - (40 * 86_400)
+    os.utime(old, (stale, stale))
+    os.utime(nested, (stale, stale))
+
+    assert prune_spool(tmp_path, retention_days=30) == 2
+    assert not old.exists()
+    assert not nested.exists()
+    assert recent.exists(), "files inside the retention window must survive"
+
+
+def test_prune_spool_disabled_and_missing_dir_are_safe(tmp_path: Path) -> None:
+    from neje_oracle.blocks.fluidnc.transport import prune_spool
+
+    stale_file = tmp_path / "old.gcode"
+    stale_file.write_text("G21\n", encoding="utf-8")
+    ancient = time.time() - (400 * 86_400)
+    os.utime(stale_file, (ancient, ancient))
+
+    assert prune_spool(tmp_path, retention_days=0) == 0
+    assert stale_file.exists(), "retention_days=0 must disable pruning entirely"
+    assert prune_spool(tmp_path / "does-not-exist", retention_days=30) == 0

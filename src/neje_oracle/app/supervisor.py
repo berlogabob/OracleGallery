@@ -5,19 +5,23 @@ import re
 import subprocess
 import sys
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
 from urllib.parse import urlparse
 
 import httpx
 
-from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
 from ..blocks.firebase.repository import FirebaseRemoteRepository
-from ..blocks.gui.modes import mode_to_control
-from ..blocks.gui.support import GuiSettings, create_direct_svg_print_job_from_gui
+from ..blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
+from ..blocks.gcode.direct_svg import create_direct_svg_print_job_from_gui
+from ..blocks.gcode.svg_gcode import Z_SERVO_PEN_DOWN_COMMAND
+from ..blocks.plotter.daemon import PlotterDaemon
+from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
+from ..shared.gui_settings import GuiSettings
+from ..shared.logging import append_log
 from ..shared.models import (
     ComponentState,
     ComponentStatus,
@@ -30,21 +34,27 @@ from ..shared.models import (
     PlotterReadinessState,
     PlotterRuntimeConfig,
     PlotterRuntimeState,
+    RuntimeStatus,
     SystemCheckLevel,
     SystemCheckResult,
-    RuntimeStatus,
     SystemMode,
 )
-from ..shared.logging import append_log
-from ..blocks.plotter.daemon import PlotterDaemon
-from .system_checks import SystemCheckService
+from ..shared.modes import mode_to_control
 from ..shared.store import OracleRuntimeStore, PlotterStore
-from ..blocks.gcode.svg_gcode import Z_SERVO_PEN_DOWN_COMMAND
-from ..blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
+from .system_checks import SystemCheckService
 
 
-class _LocalOnlyPlotterRemote:
-    def claim_next_plot_job(self, consumer_id: str, *, run_started_at: datetime | None = None) -> PlotJobLease | None:
+class _LocalOnlyPlotterRemote(FirebaseRemoteRepository):
+    def __init__(self) -> None:
+        pass
+
+    def claim_next_plot_job(
+        self,
+        consumer_id: str,
+        *,
+        run_started_at: datetime | None = None,
+        allowed_origins: set[str] | list[str] | tuple[str, ...] | None = None,
+    ) -> PlotJobLease | None:
         return None
 
     def update_plot_job(
@@ -88,11 +98,15 @@ class SupervisorService:
     def start_system(self, config: PlotterRuntimeConfig) -> dict[str, ComponentState]:
         self.runtime_store.save_plotter_config(config)
         self.runtime_store.save_print_control(
-            PlotterControlState(print_enabled=False, operator_paused=True, run_mode=config.run_mode, dry_run=config.dry_run)
+            PlotterControlState(
+                print_enabled=False, operator_paused=True, run_mode=config.run_mode, dry_run=config.dry_run
+            )
         )
         append_log("system", "Start system requested", settings=self.settings)
         self.reset_run_baseline()
-        self.runtime_store.set_component("system", ComponentStatus.STARTING, message="Starting supervised system", started=True)
+        self.runtime_store.set_component(
+            "system", ComponentStatus.STARTING, message="Starting supervised system", started=True
+        )
         firebase_state = self.check_firebase()
         macmini_state = self.check_macmini_agent()
         if macmini_state.status != ComponentStatus.OFFLINE:
@@ -110,11 +124,23 @@ class SupervisorService:
             "plotter": plotter_state,
         }
         if plotter_state.status == ComponentStatus.ERROR:
-            self.runtime_store.set_component("system", ComponentStatus.ERROR, message="Supervisor started with plotter error", last_error=plotter_state.last_error)
-        elif any(state.status in {ComponentStatus.ERROR, ComponentStatus.WARNING, ComponentStatus.OFFLINE} for state in component_states.values()):
-            self.runtime_store.set_component("system", ComponentStatus.WARNING, message="Supervisor running with warnings", heartbeat=True)
+            self.runtime_store.set_component(
+                "system",
+                ComponentStatus.ERROR,
+                message="Supervisor started with plotter error",
+                last_error=plotter_state.last_error,
+            )
+        elif any(
+            state.status in {ComponentStatus.ERROR, ComponentStatus.WARNING, ComponentStatus.OFFLINE}
+            for state in component_states.values()
+        ):
+            self.runtime_store.set_component(
+                "system", ComponentStatus.WARNING, message="Supervisor running with warnings", heartbeat=True
+            )
         else:
-            self.runtime_store.set_component("system", ComponentStatus.RUNNING, message="Supervisor is running", heartbeat=True)
+            self.runtime_store.set_component(
+                "system", ComponentStatus.RUNNING, message="Supervisor is running", heartbeat=True
+            )
         return self.refresh_all_status()
 
     def stop_system(self) -> dict[str, ComponentState]:
@@ -144,8 +170,14 @@ class SupervisorService:
                 message=f"Run baseline set; old Firebase jobs not skipped: {exc}",
                 last_error=str(exc),
             )
-        append_log("queue", f"Run baseline set at {started_at.isoformat()}; skipped {skipped} old pending job(s)", settings=self.settings)
-        return self.runtime_store.set_component("queue", ComponentStatus.RUNNING, message=f"Run baseline set; skipped {skipped} old job(s)", heartbeat=True)
+        append_log(
+            "queue",
+            f"Run baseline set at {started_at.isoformat()}; skipped {skipped} old pending job(s)",
+            settings=self.settings,
+        )
+        return self.runtime_store.set_component(
+            "queue", ComponentStatus.RUNNING, message=f"Run baseline set; skipped {skipped} old job(s)", heartbeat=True
+        )
 
     def set_system_mode(self, mode: SystemMode) -> ComponentState:
         mode = SystemMode(mode)
@@ -181,10 +213,17 @@ class SupervisorService:
         critical_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.CRITICAL)
         warning_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.WARNING)
         ok_count = sum(1 for check in result.checks if check.level == SystemCheckLevel.OK)
-        message = f"System check {result.status.value}: {critical_count} critical, {warning_count} warning, {ok_count} ok"
+        message = (
+            f"System check {result.status.value}: {critical_count} critical, {warning_count} warning, {ok_count} ok"
+        )
         append_log("checks", message, level=level, settings=self.settings)
         for check in result.checks:
-            append_log("checks", f"{check.level.value}: {check.name}: {check.message}", level=check.level.value if check.level != SystemCheckLevel.OK else "info", settings=self.settings)
+            append_log(
+                "checks",
+                f"{check.level.value}: {check.name}: {check.message}",
+                level=check.level.value if check.level != SystemCheckLevel.OK else "info",
+                settings=self.settings,
+            )
         self.runtime_store.set_component("checks", status, message=message, heartbeat=True)
         return result
 
@@ -213,16 +252,29 @@ class SupervisorService:
         readiness = self.runtime_store.load_plotter_readiness()
         if not readiness.work_zero_set:
             append_log("plotter", "Start print blocked: work zero is not set", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="Set work zero before START PRINT")
+            return self.runtime_store.set_component(
+                "print", ComponentStatus.WARNING, message="Set work zero before START PRINT"
+            )
         if not control.dry_run:
             fluidnc_state = self.check_fluidnc()
             if fluidnc_state.status != ComponentStatus.RUNNING:
-                append_log("plotter", "Start print blocked: FluidNC not Idle/online", level="warning", settings=self.settings)
-                return self.runtime_store.set_component("print", ComponentStatus.WARNING, message="FluidNC must be online and Idle before plotter motion")
+                append_log(
+                    "plotter", "Start print blocked: FluidNC not Idle/online", level="warning", settings=self.settings
+                )
+                return self.runtime_store.set_component(
+                    "print", ComponentStatus.WARNING, message="FluidNC must be online and Idle before plotter motion"
+                )
         self.runtime_store.save_print_control(control)
         PlotterStore(self.plotter_settings.db_path).save_control_state(control)
-        append_log("plotter", f"Print enabled in {mode.value}", level="warning" if not control.dry_run else "info", settings=self.settings)
-        return self.runtime_store.set_component("print", ComponentStatus.RUNNING, message=f"Print enabled: {mode.value}", heartbeat=True)
+        append_log(
+            "plotter",
+            f"Print enabled in {mode.value}",
+            level="warning" if not control.dry_run else "info",
+            settings=self.settings,
+        )
+        return self.runtime_store.set_component(
+            "print", ComponentStatus.RUNNING, message=f"Print enabled: {mode.value}", heartbeat=True
+        )
 
     def print_uploaded_svg(self, gui_settings: GuiSettings, *, svg_bytes: bytes, original_name: str) -> ComponentState:
         gui_settings.apply_system_mode()
@@ -241,7 +293,9 @@ class SupervisorService:
         if not probe.online:
             message = f"FluidNC is offline; cannot print SVG directly: {probe.message}"
             append_log("plotter", message, level="warning", settings=self.settings)
-            return self.runtime_store.set_component("print", ComponentStatus.WARNING, message=message, last_error=probe.last_error)
+            return self.runtime_store.set_component(
+                "print", ComponentStatus.WARNING, message=message, last_error=probe.last_error
+            )
         if not probe.controller.is_idle:
             state = probe.controller.state.value
             message = f"FluidNC is {state}; wait for Idle before PRINT SVG"
@@ -259,10 +313,14 @@ class SupervisorService:
         except Exception as exc:  # noqa: BLE001
             message = f"SVG is not printable: {exc}"
             append_log("plotter", message, level="error", settings=self.settings)
-            return self.runtime_store.set_component("print", ComponentStatus.ERROR, message=message, last_error=str(exc))
+            return self.runtime_store.set_component(
+                "print", ComponentStatus.ERROR, message=message, last_error=str(exc)
+            )
 
         plotter_store = PlotterStore(self.plotter_settings.db_path)
-        total_lines = len([line for line in job.gcode.splitlines() if line.strip() and not line.lstrip().startswith(";")])
+        total_lines = len(
+            [line for line in job.gcode.splitlines() if line.strip() and not line.lstrip().startswith(";")]
+        )
 
         def record_progress(sent: int, total: int) -> None:
             percent = (sent / total * 100.0) if total else 0.0
@@ -293,7 +351,9 @@ class SupervisorService:
                 row_cell_count=1,
             )
         )
-        self.runtime_store.set_component("print", ComponentStatus.RUNNING, message=f"Printing uploaded SVG: {job.label}", heartbeat=True)
+        self.runtime_store.set_component(
+            "print", ComponentStatus.RUNNING, message=f"Printing uploaded SVG: {job.label}", heartbeat=True
+        )
         try:
             gcode_path = self.transport_factory(self.plotter_settings).send(
                 gcode=job.gcode,
@@ -312,7 +372,9 @@ class SupervisorService:
                 )
             )
             append_log("plotter", message, level="error", settings=self.settings)
-            return self.runtime_store.set_component("print", ComponentStatus.ERROR, message=message, last_error=str(exc))
+            return self.runtime_store.set_component(
+                "print", ComponentStatus.ERROR, message=message, last_error=str(exc)
+            )
 
         plotter_store.save_runtime_state(
             PlotterRuntimeState(
@@ -334,15 +396,21 @@ class SupervisorService:
             )
         )
         append_log("plotter", f"Uploaded SVG printed directly: {job.label} -> {gcode_path}", settings=self.settings)
-        return self.runtime_store.set_component("print", ComponentStatus.STOPPED, message=f"Uploaded SVG printed: {job.label}")
+        return self.runtime_store.set_component(
+            "print", ComponentStatus.STOPPED, message=f"Uploaded SVG printed: {job.label}"
+        )
 
     def start_plotter(self, config: PlotterRuntimeConfig | None = None) -> ComponentState:
         with self._lock:
             if self._plotter_thread and self._plotter_thread.is_alive():
-                return self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message="Plotter already running", heartbeat=True)
+                return self.runtime_store.set_component(
+                    "plotter", ComponentStatus.RUNNING, message="Plotter already running", heartbeat=True
+                )
             if config is not None:
                 self.runtime_store.save_plotter_config(config)
-            self.runtime_store.set_component("plotter", ComponentStatus.STARTING, message="Starting local plotter daemon", started=True)
+            self.runtime_store.set_component(
+                "plotter", ComponentStatus.STARTING, message="Starting local plotter daemon", started=True
+            )
             try:
                 plotter_store = PlotterStore(self.plotter_settings.db_path)
                 remote = self._create_plotter_remote(config)
@@ -357,10 +425,14 @@ class SupervisorService:
                 self._plotter_thread = threading.Thread(target=self._plotter_daemon.run_forever, daemon=True)
                 self._plotter_thread.start()
             except Exception as exc:  # noqa: BLE001
-                return self.runtime_store.set_component("plotter", ComponentStatus.ERROR, message="Plotter failed to start", last_error=str(exc))
-        return self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message="Local plotter daemon running", heartbeat=True)
+                return self.runtime_store.set_component(
+                    "plotter", ComponentStatus.ERROR, message="Plotter failed to start", last_error=str(exc)
+                )
+        return self.runtime_store.set_component(
+            "plotter", ComponentStatus.RUNNING, message="Local plotter daemon running", heartbeat=True
+        )
 
-    def _create_plotter_remote(self, config: PlotterRuntimeConfig | None) -> FirebaseRemoteRepository | _LocalOnlyPlotterRemote:
+    def _create_plotter_remote(self, config: PlotterRuntimeConfig | None) -> FirebaseRemoteRepository:
         try:
             return self.remote_factory()
         except Exception as exc:
@@ -398,21 +470,31 @@ class SupervisorService:
                     )
             self._plotter_daemon = None
             self._plotter_thread = None
-        return self.runtime_store.set_component("plotter", ComponentStatus.STOPPED, message="Local plotter daemon stopped")
+        return self.runtime_store.set_component(
+            "plotter", ComponentStatus.STOPPED, message="Local plotter daemon stopped"
+        )
 
     def check_firebase(self) -> ComponentState:
         firebase = self.firebase_settings
         if not firebase.enabled:
             append_log("system", "Firebase is not configured", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("firebase", ComponentStatus.WARNING, message="Firebase is not configured")
+            return self.runtime_store.set_component(
+                "firebase", ComponentStatus.WARNING, message="Firebase is not configured"
+            )
         append_log("system", f"Firebase configured: {firebase.project_id}", settings=self.settings)
-        return self.runtime_store.set_component("firebase", ComponentStatus.RUNNING, message=f"Configured: {firebase.project_id}", heartbeat=True)
+        return self.runtime_store.set_component(
+            "firebase", ComponentStatus.RUNNING, message=f"Configured: {firebase.project_id}", heartbeat=True
+        )
 
     def check_fluidnc(self, probe: FluidNCProbeResult | None = None) -> ComponentState:
         probe = probe or self.probe_fluidnc()
         online = probe.online and probe.controller.is_idle
-        status = ComponentStatus.RUNNING if online else ComponentStatus.WARNING if probe.online else ComponentStatus.OFFLINE
-        append_log("plotter", f"FluidNC check: {probe.message}", level="info" if online else "warning", settings=self.settings)
+        status = (
+            ComponentStatus.RUNNING if online else ComponentStatus.WARNING if probe.online else ComponentStatus.OFFLINE
+        )
+        append_log(
+            "plotter", f"FluidNC check: {probe.message}", level="info" if online else "warning", settings=self.settings
+        )
         return self.runtime_store.set_component(
             "fluidnc",
             status,
@@ -422,7 +504,9 @@ class SupervisorService:
         )
 
     def probe_fluidnc(self, *, scan: bool = True) -> FluidNCProbeResult:
-        probe = self.transport_factory(self.plotter_settings).probe(timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds)
+        probe = self.transport_factory(self.plotter_settings).probe(
+            timeout_seconds=self.plotter_settings.fluidnc_connect_timeout_seconds
+        )
         if probe.online:
             self._save_fluidnc_endpoint(probe)
             self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
@@ -430,11 +514,20 @@ class SupervisorService:
         if not scan:
             self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
             return probe
-        append_log("plotter", f"FluidNC configured endpoint failed, scanning current subnet: {probe.message}", level="warning", settings=self.settings)
+        append_log(
+            "plotter",
+            f"FluidNC configured endpoint failed, scanning current subnet: {probe.message}",
+            level="warning",
+            settings=self.settings,
+        )
         discovered = discover_fluidnc(self.plotter_settings)
         if discovered.online:
             self._save_fluidnc_endpoint(discovered)
-            append_log("plotter", f"FluidNC discovered at {discovered.telnet_host}:{discovered.telnet_port}", settings=self.settings)
+            append_log(
+                "plotter",
+                f"FluidNC discovered at {discovered.telnet_host}:{discovered.telnet_port}",
+                settings=self.settings,
+            )
             self.runtime_store.save_json("fluidnc_probe", discovered.to_dict())
             return discovered
         self.runtime_store.save_json("fluidnc_probe", probe.to_dict())
@@ -447,9 +540,13 @@ class SupervisorService:
         command = self._work_zero_command(config)
         result = self.transport_factory(self.plotter_settings).send_command(command, wait_for_ok=True)
         if not result.ok:
-            self.runtime_store.save_plotter_readiness(PlotterReadinessState(message=f"Set work zero failed: {result.message}"))
+            self.runtime_store.save_plotter_readiness(
+                PlotterReadinessState(message=f"Set work zero failed: {result.message}")
+            )
             return self._record_fluidnc_command(result, "Set work zero")
-        readiness = PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="Work zero set; plotter ready")
+        readiness = PlotterReadinessState(
+            work_zero_set=True, plotter_ready=True, message="Work zero set; plotter ready"
+        )
         self.runtime_store.save_plotter_readiness(readiness)
         self.runtime_store.set_component("ready", ComponentStatus.RUNNING, message=readiness.message, heartbeat=True)
         return self._record_fluidnc_command(result, "Set work zero")
@@ -516,7 +613,9 @@ class SupervisorService:
 
     def emergency_stop_fluidnc(self) -> ComponentState:
         result = self.transport_factory(self.plotter_settings).feed_hold()
-        self.runtime_store.save_plotter_readiness(PlotterReadinessState(message="Emergency stop sent; readiness cleared"))
+        self.runtime_store.save_plotter_readiness(
+            PlotterReadinessState(message="Emergency stop sent; readiness cleared")
+        )
         control = self.runtime_store.load_print_control()
         control.print_enabled = False
         control.operator_paused = True
@@ -524,7 +623,9 @@ class SupervisorService:
         PlotterStore(self.plotter_settings.db_path).save_control_state(control)
         level = "warning" if result.ok else "error"
         append_log("plotter", f"Emergency stop/feed hold: {result.message}", level=level, settings=self.settings)
-        self.runtime_store.set_component("print", ComponentStatus.STOPPED, message="Emergency stop sent; print disabled")
+        self.runtime_store.set_component(
+            "print", ComponentStatus.STOPPED, message="Emergency stop sent; print disabled"
+        )
         return self.runtime_store.set_component(
             "fluidnc",
             ComponentStatus.WARNING if result.ok else ComponentStatus.ERROR,
@@ -536,7 +637,11 @@ class SupervisorService:
     def resume_fluidnc(self) -> ComponentState:
         probe = self.probe_fluidnc()
         if not probe.controller.is_hold:
-            return self.runtime_store.set_component("fluidnc", ComponentStatus.WARNING, message=f"Resume skipped: FluidNC state is {probe.controller.state.value}")
+            return self.runtime_store.set_component(
+                "fluidnc",
+                ComponentStatus.WARNING,
+                message=f"Resume skipped: FluidNC state is {probe.controller.state.value}",
+            )
         result = self.transport_factory(self.plotter_settings).cycle_start()
         return self._record_fluidnc_command(result, "Resume/cycle start")
 
@@ -553,7 +658,9 @@ class SupervisorService:
     def check_macmini_agent(self) -> ComponentState:
         agent_url = self._macmini_agent_url()
         if not agent_url:
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set")
+            return self.runtime_store.set_component(
+                "macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set"
+            )
         try:
             payload = httpx.get(
                 f"{agent_url.rstrip('/')}/status",
@@ -562,7 +669,12 @@ class SupervisorService:
             ).json()
         except Exception as exc:  # noqa: BLE001
             append_log("uploader", f"Mac mini uploader offline: {exc}", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini uploader agent offline", last_error=str(exc))
+            return self.runtime_store.set_component(
+                "macmini_uploader",
+                ComponentStatus.OFFLINE,
+                message="Mac mini uploader agent offline",
+                last_error=str(exc),
+            )
         status = ComponentStatus.RUNNING if payload.get("running") else ComponentStatus.STOPPED
         message = str(payload.get("message") or payload.get("status") or "Mac mini uploader agent reachable")
         append_log("uploader", f"Mac mini uploader status: {message}", settings=self.settings)
@@ -585,7 +697,9 @@ class SupervisorService:
                 return discovered
             agent_url = self._macmini_agent_url()
         if not agent_url:
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini uploader was not found")
+            return self.runtime_store.set_component(
+                "macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini uploader was not found"
+            )
         try:
             payload = httpx.post(
                 f"{agent_url.rstrip('/')}/scan-once",
@@ -593,11 +707,21 @@ class SupervisorService:
                 trust_env=False,
             ).json()
         except Exception as exc:  # noqa: BLE001
-            append_log("uploader", f"Mac mini scan failed: {exc}; trying LAN discovery", level="warning", settings=self.settings)
+            append_log(
+                "uploader",
+                f"Mac mini scan failed: {exc}; trying LAN discovery",
+                level="warning",
+                settings=self.settings,
+            )
             discovered = self.discover_macmini_uploader()
             agent_url = self._macmini_agent_url()
             if discovered.status == ComponentStatus.OFFLINE or not agent_url:
-                return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini scan failed and discovery found no uploader", last_error=str(exc))
+                return self.runtime_store.set_component(
+                    "macmini_uploader",
+                    ComponentStatus.OFFLINE,
+                    message="Mac mini scan failed and discovery found no uploader",
+                    last_error=str(exc),
+                )
             try:
                 payload = httpx.post(
                     f"{agent_url.rstrip('/')}/scan-once",
@@ -605,9 +729,18 @@ class SupervisorService:
                     trust_env=False,
                 ).json()
             except Exception as retry_exc:  # noqa: BLE001
-                append_log("uploader", f"Mac mini scan retry failed: {retry_exc}", level="warning", settings=self.settings)
-                return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="Mac mini scan failed", last_error=str(retry_exc))
-        append_log("uploader", f"Mac mini scan imported {len(payload.get('imported', []))} session(s)", settings=self.settings)
+                append_log(
+                    "uploader", f"Mac mini scan retry failed: {retry_exc}", level="warning", settings=self.settings
+                )
+                return self.runtime_store.set_component(
+                    "macmini_uploader",
+                    ComponentStatus.OFFLINE,
+                    message="Mac mini scan failed",
+                    last_error=str(retry_exc),
+                )
+        append_log(
+            "uploader", f"Mac mini scan imported {len(payload.get('imported', []))} session(s)", settings=self.settings
+        )
         return self.runtime_store.set_component(
             "macmini_uploader",
             ComponentStatus.RUNNING,
@@ -617,7 +750,11 @@ class SupervisorService:
 
     def discover_macmini_uploader(self) -> ComponentState:
         candidates = _candidate_macmini_agent_urls(self._macmini_agent_url())
-        append_log("uploader", f"Scanning LAN for Mac mini uploader across {len(candidates)} candidate host(s)", settings=self.settings)
+        append_log(
+            "uploader",
+            f"Scanning LAN for Mac mini uploader across {len(candidates)} candidate host(s)",
+            settings=self.settings,
+        )
         discovered_url = _discover_uploader_url(candidates, timeout_seconds=0.25)
         if not discovered_url:
             return self.runtime_store.set_component(
@@ -649,12 +786,16 @@ class SupervisorService:
     def save_thermal_printer_url(self, url: str) -> None:
         self.runtime_store.save_json("thermal_printer", {"url": url.strip()})
 
-    def _run_thermal(self, action: str, *, esp32_url: str = "", extra_args: tuple[str, ...] = (), timeout: float = 90.0) -> tuple[bool, str]:
+    def _run_thermal(
+        self, action: str, *, esp32_url: str = "", extra_args: tuple[str, ...] = (), timeout: float = 90.0
+    ) -> tuple[bool, str]:
         script = self._THERMAL_REPO_ROOT / "ESP32-BTN_Printer" / "tools" / "printer_connect.py"
         url_args = ["--esp32", esp32_url] if esp32_url.strip() else []
         command = [sys.executable, str(script), action, *url_args, *extra_args]
         try:
-            result = subprocess.run(command, cwd=self._THERMAL_REPO_ROOT, text=True, capture_output=True, timeout=timeout, check=False)
+            result = subprocess.run(
+                command, cwd=self._THERMAL_REPO_ROOT, text=True, capture_output=True, timeout=timeout, check=False
+            )
         except Exception as exc:  # noqa: BLE001
             return False, str(exc)
         output = (result.stdout + "\n" + result.stderr).strip()
@@ -687,16 +828,37 @@ class SupervisorService:
 
     def refresh_all_status(self) -> dict[str, ComponentState]:
         states = self.runtime_store.load_all_component_states()
-        for name in ("system", "macmini_uploader", "firebase", "plotter", "fluidnc", "queue", "print", "ready", "live_generator"):
+        for name in (
+            "system",
+            "macmini_uploader",
+            "firebase",
+            "plotter",
+            "fluidnc",
+            "queue",
+            "print",
+            "ready",
+            "live_generator",
+        ):
             states.setdefault(name, self.runtime_store.load_component_state(name))
-        if self._plotter_thread and self._plotter_thread.is_alive() and states["plotter"].status not in (ComponentStatus.ERROR, ComponentStatus.WARNING):
-            states["plotter"] = self.runtime_store.set_component("plotter", ComponentStatus.RUNNING, message=states["plotter"].message or "Local plotter daemon running", heartbeat=True)
+        if (
+            self._plotter_thread
+            and self._plotter_thread.is_alive()
+            and states["plotter"].status not in (ComponentStatus.ERROR, ComponentStatus.WARNING)
+        ):
+            states["plotter"] = self.runtime_store.set_component(
+                "plotter",
+                ComponentStatus.RUNNING,
+                message=states["plotter"].message or "Local plotter daemon running",
+                heartbeat=True,
+            )
         return states
 
     def _manual_control_allowed(self, action: str) -> bool:
         state = PlotterStore(self.plotter_settings.db_path).load_runtime_state()
         if state.status == RuntimeStatus.PRINTING:
-            self.runtime_store.set_component("fluidnc", ComponentStatus.WARNING, message=f"{action} blocked while plotter is printing")
+            self.runtime_store.set_component(
+                "fluidnc", ComponentStatus.WARNING, message=f"{action} blocked while plotter is printing"
+            )
             return False
         control = self.runtime_store.load_print_control()
         if control.print_enabled:
@@ -704,7 +866,9 @@ class SupervisorService:
             control.operator_paused = True
             self.runtime_store.save_print_control(control)
             PlotterStore(self.plotter_settings.db_path).save_control_state(control)
-            self.runtime_store.set_component("print", ComponentStatus.STOPPED, message=f"Print paused before manual {action}")
+            self.runtime_store.set_component(
+                "print", ComponentStatus.STOPPED, message=f"Print paused before manual {action}"
+            )
             append_log("plotter", f"Print paused before manual {action}", level="warning", settings=self.settings)
         return True
 
@@ -717,7 +881,9 @@ class SupervisorService:
             control.operator_paused = True
             self.runtime_store.save_print_control(control)
             PlotterStore(self.plotter_settings.db_path).save_control_state(control)
-            self.runtime_store.set_component("print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {result.message}")
+            self.runtime_store.set_component(
+                "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {result.message}"
+            )
         return self.runtime_store.set_component(
             "fluidnc",
             ComponentStatus.RUNNING if result.ok else ComponentStatus.ERROR,
@@ -728,14 +894,23 @@ class SupervisorService:
 
     def _record_homing_result(self, result: FluidNCCommandResult, label: str) -> ComponentState:
         if result.ok:
-            append_log("plotter", f"FluidNC {label}: {result.message}; verifying post-home state", settings=self.settings)
+            append_log(
+                "plotter", f"FluidNC {label}: {result.message}; verifying post-home state", settings=self.settings
+            )
         else:
-            append_log("plotter", f"FluidNC {label}: {result.message}; connection closed during homing, probing controller", level="warning", settings=self.settings)
+            append_log(
+                "plotter",
+                f"FluidNC {label}: {result.message}; connection closed during homing, probing controller",
+                level="warning",
+                settings=self.settings,
+            )
         probe = self.probe_fluidnc_after_delay()
         if probe.online and probe.controller.state != FluidNCState.UNKNOWN:
             if probe.controller.is_idle:
                 message = f"{label}: homing complete; FluidNC {probe.controller.state.value}"
-                return self.runtime_store.set_component("fluidnc", ComponentStatus.RUNNING, message=message, heartbeat=True)
+                return self.runtime_store.set_component(
+                    "fluidnc", ComponentStatus.RUNNING, message=message, heartbeat=True
+                )
             self._disable_print_after_fluidnc_issue(f"{label} ended in FluidNC {probe.controller.state.value}")
             return self.runtime_store.set_component(
                 "fluidnc",
@@ -804,7 +979,9 @@ class SupervisorService:
                 agent_url = self._macmini_agent_url()
                 if discovered.status != ComponentStatus.OFFLINE and agent_url:
                     return self._post_macmini_control(action)
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set")
+            return self.runtime_store.set_component(
+                "macmini_uploader", ComponentStatus.OFFLINE, message="NEJE_MACMINI_AGENT_URL is not set"
+            )
         try:
             payload = httpx.post(
                 f"{agent_url.rstrip('/')}/control/{action}",
@@ -813,7 +990,12 @@ class SupervisorService:
             ).json()
         except Exception as exc:  # noqa: BLE001
             append_log("uploader", f"Mac mini uploader {action} failed: {exc}", level="warning", settings=self.settings)
-            return self.runtime_store.set_component("macmini_uploader", ComponentStatus.OFFLINE, message=f"Mac mini uploader {action} failed", last_error=str(exc))
+            return self.runtime_store.set_component(
+                "macmini_uploader",
+                ComponentStatus.OFFLINE,
+                message=f"Mac mini uploader {action} failed",
+                last_error=str(exc),
+            )
         running = bool(payload.get("running", action != "stop"))
         append_log("uploader", f"Mac mini uploader {action}: {payload.get('message', '')}", settings=self.settings)
         return self.runtime_store.set_component(
@@ -871,8 +1053,7 @@ def _discover_uploader_url(candidate_urls: list[str], *, timeout_seconds: float)
         return ""
     with ThreadPoolExecutor(max_workers=min(64, len(candidate_urls))) as executor:
         futures = {
-            executor.submit(_probe_uploader_url, url, timeout_seconds=timeout_seconds): url
-            for url in candidate_urls
+            executor.submit(_probe_uploader_url, url, timeout_seconds=timeout_seconds): url for url in candidate_urls
         }
         for future in as_completed(futures):
             if future.result():
@@ -927,3 +1108,6 @@ def _enrich_fluidnc_error(result: FluidNCCommandResult) -> FluidNCCommandResult:
             "Open the FluidNC WebUI/serial boot messages and fix config.yaml before unlock, homing, or jogging will work."
         ),
     )
+
+
+OracleSupervisor = SupervisorService

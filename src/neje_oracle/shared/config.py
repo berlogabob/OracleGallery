@@ -107,6 +107,10 @@ class PlotterSettings:
     db_path: Path = Path(os.getenv("NEJE_PLOTTER_DB_PATH", str(_repo_root() / "runtime" / "plotter.sqlite3")))
     placeholder_root: Path = Path(os.getenv("NEJE_PLOTTER_PLACEHOLDER_ROOT", str(_repo_root() / "assets" / "symbols")))
     spool_root: Path = Path(os.getenv("NEJE_PLOTTER_SPOOL_ROOT", str(_repo_root() / "spool")))
+    # Spool files are the forensic record of what the machine was told to do, so keep a
+    # generous window. 0 disables pruning. An exhibition run left unattended otherwise
+    # grows the spool without bound.
+    spool_retention_days: int = int(os.getenv("NEJE_PLOTTER_SPOOL_RETENTION_DAYS", "30"))
     poll_seconds: float = _env_float("NEJE_PLOTTER_POLL_SECONDS", 4.0)
     sheet_width_mm: float = _env_float("NEJE_PLOTTER_SHEET_WIDTH_MM", 250.0)
     sheet_height_mm: float = _env_float("NEJE_PLOTTER_SHEET_HEIGHT_MM", 440.0)
@@ -136,7 +140,9 @@ class PlotterSettings:
     z_up_mm: float = _env_float("NEJE_PLOTTER_Z_UP_MM", 0.0)
     z_feed_mm_min: float = _env_float("NEJE_PLOTTER_Z_FEED_MM_MIN", 1000.0)
     work_zero_command: str = os.getenv("NEJE_PLOTTER_WORK_ZERO_COMMAND", "G10 L20 P1 X0 Y0")
-    tinybee_config_path: Path = Path(os.getenv("NEJE_PLOTTER_TINYBEE_CONFIG_PATH", str(_repo_root() / "assets" / "tinybee.json")))
+    tinybee_config_path: Path = Path(
+        os.getenv("NEJE_PLOTTER_TINYBEE_CONFIG_PATH", str(_repo_root() / "assets" / "tinybee.json"))
+    )
     dry_run: bool = _env_bool("NEJE_PLOTTER_DRY_RUN", True)
     include_markers: bool = _env_bool("NEJE_PLOTTER_INCLUDE_MARKERS", True)
     marker_diameter_mm: float = _env_float("NEJE_PLOTTER_MARKER_DIAMETER_MM", 1.5)

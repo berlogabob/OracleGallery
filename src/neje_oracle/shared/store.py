@@ -11,14 +11,13 @@ from .config import ensure_parent
 from .models import (
     ComponentState,
     ComponentStatus,
-    SystemCheckResult,
+    PlotStatus,
     PlotterControlState,
+    PlotterReadinessState,
     PlotterRuntimeConfig,
     PlotterRuntimeState,
-    PlotStatus,
-    PlotterReadinessState,
-    PublicStatus,
     SessionRecord,
+    SystemCheckResult,
     SystemMode,
 )
 from .origin_markers import ALL_ORIGINS, normalize_origin
@@ -178,10 +177,7 @@ class UploaderStore(_SQLiteStore):
 
     def _ensure_columns(self, table: str, columns: dict[str, str]) -> None:
         with self._lock:
-            existing = {
-                row["name"]
-                for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()
-            }
+            existing = {row["name"] for row in self._connection.execute(f"PRAGMA table_info({table})").fetchall()}
         for name, definition in columns.items():
             if name not in existing:
                 self._execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")

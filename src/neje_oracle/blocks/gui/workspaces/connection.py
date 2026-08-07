@@ -23,8 +23,12 @@ def build(ctx: GuiContext) -> None:
                 safe_action_button("SCAN LAN", ctx.scan_fluidnc)
             with ui.grid(columns=2).classes("w-full gap-1"):
                 for key, label in (
-                    ("webui", "WebUI"), ("telnet", "Telnet"), ("state", "State"),
-                    ("mpos", "MPos"), ("pins", "Inputs"), ("modal", "Modal"),
+                    ("webui", "WebUI"),
+                    ("telnet", "Telnet"),
+                    ("state", "State"),
+                    ("mpos", "MPos"),
+                    ("pins", "Inputs"),
+                    ("modal", "Modal"),
                 ):
                     ctx.fluidnc_labels[key] = mini_metric(label)
             ctx.fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")

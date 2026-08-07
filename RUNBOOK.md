@@ -381,11 +381,63 @@ Firestore uses separate QR fields:
 
 ## 9. Firebase Setup and Deploy
 
+Firebase is used for public receipt data, public SVG/TXT/QR assets, and real user plot jobs. It is not used to control idle/filler printing, and the Flutter app is read-only (no Auth, no Storage SDK, no writes).
+
+Project:
+
+```text
+Project ID: oraclegallery
+Storage bucket: oraclegallery.firebasestorage.app
+Gallery URL: https://berlogabob.github.io/OracleGallery
+```
+
+Enable Cloud Firestore and Firebase Storage. Firebase Auth and Cloud Messaging are not required.
+
+Download the Firebase service account JSON and keep it outside git, then set:
+
+```bash
+NEJE_FIREBASE_PROJECT_ID=oraclegallery
+NEJE_FIREBASE_STORAGE_BUCKET=oraclegallery.firebasestorage.app
+NEJE_FIREBASE_CREDENTIALS=/absolute/path/to/serviceAccountKey.json
+NEJE_GALLERY_BASE_URL=https://berlogabob.github.io/OracleGallery
+```
+
+Do not put the service account file in `public_gallery`, `docs`, or any committed folder. The public web config (safe to expose) lives in `public_gallery/lib/firebase_config.dart`.
+
+Firestore contract — public session document `sessions/{session_id}` carries `sessionId`, `createdAt`, `status`, `plotStatus`, `markName`, `oracleText`, `themes`, `measures`, `svgUrl`, `receiptUrl`, `sessionUrl`, `qrUrl`, `qrImageUrl`, `assetUrls.*`, `assetPaths.*`, `origin`, `tags`, `visibleInLibrary`. `sessionUrl`/`qrUrl` are page links; `qrImageUrl`/`assetUrls.qr` are PNG Storage URLs. Print job document `plot_jobs/{session_id}` carries `sessionId`, `createdAt`, `status`, `priority`, `queue`, `svgStoragePath`, `svgUrl`, `origin`, `tags`, `visibleInQueue`.
+
+Origin values actually used by the code (`shared/origin_markers.py`) and GUI/debug views: `real_macmini`, `test_macbook`, `test_macmini`, `filler_macbook` — see the Session Contract in `README.md`.
+
+Firestore v1 rules (public read, no client writes):
+
+```javascript
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /sessions/{sessionId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /plot_jobs/{jobId} {
+      allow read, write: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+```
+
+Storage v1 rules follow the same pattern: public read under `sessions/{sessionId}/{fileName}`, no writes.
+
 Deploy Firestore rules, indexes, and Storage rules:
 
 ```bash
 npx firebase-tools deploy --project oraclegallery --config firebase/firebase.json --only firestore:rules,firestore:indexes,storage
 ```
+
+If deployment fails with `serviceusage.services.use`, log in to the Firebase CLI with the Google account that owns the project or grant that account Service Usage Consumer/Owner on the Google Cloud project.
 
 Apply Storage CORS for SVG loading in Flutter Web:
 
@@ -398,6 +450,8 @@ Expected result:
 ```text
 Updated CORS for gs://oraclegallery.firebasestorage.app
 ```
+
+Manual verification: upload one session folder with SVG/TXT/READY, then confirm Storage has `artwork.svg`, `artwork_raw.svg`, `receipt.txt`, `qr.png`, `manifest.json`; confirm no visitor PNG/audio/transcript was uploaded; confirm `sessions/{id}.sessionUrl` opens `/#/session/<id>` and `sessions/{id}.qrImageUrl` opens the PNG; confirm `plot_jobs/{id}` exists for a real user session.
 
 ## 10. Smoke Tests
 

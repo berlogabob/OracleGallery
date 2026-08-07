@@ -1,0 +1,11 @@
+╔══════════════════════════╗
+║      THE ORACLE SPEAKS   ║
+╠══════════════════════════╣
+
+  Your symbol: THE_TEST_MARK
+
+  A synthetic reply held only for tests. The signal bends where the voice refuses to break, and the mark remains after the question has left the room.
+
+  Themes: ['signal', 'voice', 'mark', 'question', 'room', 'trace', 'pressure', 'memory']
+
+╚══════════════════════════╝

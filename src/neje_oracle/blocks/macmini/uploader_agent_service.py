@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import threading
-import time
-import os
 import argparse
+import os
+import threading
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,9 +10,9 @@ import uvicorn
 from fastapi import FastAPI
 
 from ...shared.config import FirebaseSettings, UploaderSettings
+from ...shared.store import UploaderStore
 from ..firebase.repository import FirebaseRemoteRepository
 from .session_uploader import SessionUploader
-from ...shared.store import UploaderStore
 
 
 class UploaderAgentController:

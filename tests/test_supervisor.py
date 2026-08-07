@@ -4,23 +4,22 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
+from neje_oracle.app.supervisor import SupervisorService
 from neje_oracle.blocks.gui.support import GuiSettings
+from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
 from neje_oracle.shared.models import (
     ComponentStatus,
     FluidNCCommandResult,
     FluidNCControllerState,
     FluidNCProbeResult,
     FluidNCState,
-    PlotterControlState,
-    PlotterRuntimeConfig,
     PlotterReadinessState,
+    PlotterRuntimeConfig,
     PlotterRuntimeState,
     RuntimeStatus,
     SystemMode,
 )
 from neje_oracle.shared.store import OracleRuntimeStore, PlotterStore
-from neje_oracle.app.supervisor import SupervisorService
 
 
 class EmptyRemote:
@@ -160,7 +159,9 @@ def _plotter_settings(tmp_path: Path) -> PlotterSettings:
     )
 
 
-def _write_tinybee_config(path: Path, *, x_travel: float = 255.0, y_travel: float = 440.0, z_travel: float = 25.0) -> None:
+def _write_tinybee_config(
+    path: Path, *, x_travel: float = 255.0, y_travel: float = 440.0, z_travel: float = 25.0
+) -> None:
     settings = {
         "Flash": {"Settings": [{"id": "Telnet/Enable", "value": "1"}, {"id": "Telnet/Port", "value": "23"}]},
         "Running": {
@@ -182,7 +183,9 @@ def _write_tinybee_config(path: Path, *, x_travel: float = 255.0, y_travel: floa
 def _firebase_settings(tmp_path: Path) -> FirebaseSettings:
     credentials = tmp_path / "firebase.json"
     credentials.write_text("{}", encoding="utf-8")
-    return FirebaseSettings(project_id="test-project", storage_bucket="test-project.appspot.com", credentials_path=credentials)
+    return FirebaseSettings(
+        project_id="test-project", storage_bucket="test-project.appspot.com", credentials_path=credentials
+    )
 
 
 def _supervisor(tmp_path: Path, transport_cls=DryTransport) -> SupervisorService:

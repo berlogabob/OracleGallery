@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import random
 
+from ...shared.gui_settings import GuiSettings
 from ...shared.models import SheetPlacement
 
 
@@ -226,6 +227,34 @@ def calculate_layout_capacity(
             diameter_mm=diameter_mm,
             gap_mm=gap_mm,
         )
+    )
+
+
+def layout_capacity(settings: GuiSettings) -> int:
+    return calculate_layout_capacity(
+        mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        margin_mm=settings.sheet_margin_mm,
+        diameter_mm=max(settings.cell_diameter_mm, 1.0),
+        gap_mm=max(settings.gap_mm, 0.0),
+    )
+
+
+def _build_layout_for_settings(settings: GuiSettings, count: int) -> list[SheetPlacement]:
+    return build_sheet_layout(
+        count,
+        mode=settings.layout_mode,
+        sheet_width_mm=settings.sheet_width_mm,
+        sheet_height_mm=settings.sheet_height_mm,
+        margin_mm=settings.sheet_margin_mm,
+        diameter_mm=max(settings.cell_diameter_mm, 1.0),
+        gap_mm=max(settings.gap_mm, 0.0),
+        organic_enabled=settings.organic_enabled,
+        organic_cell_size_mm=settings.organic_cell_size_mm,
+        organic_rotation_ramp=settings.organic_rotation_ramp,
+        organic_scale_ramp=settings.organic_scale_ramp,
+        organic_seed=settings.organic_seed,
     )
 
 

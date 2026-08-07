@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import socket
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -12,7 +11,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from ipaddress import ip_network
 from pathlib import Path
 from typing import Any
-
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SAMPLE_PAYLOAD = REPO_ROOT / "ESP32-BTN_Printer" / "examples" / "receipt_payload.json"
@@ -72,7 +70,9 @@ def main() -> None:
         if args.protocol == "ilabel" and "receipt_raster_rle_base64" in payload:
             print_json(post_ilabel_raster_chunks(base_url, payload, timeout=args.timeout))
             return
-        print_json(post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout))
+        print_json(
+            post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout)
+        )
         return
 
     if args.action == "receipt":
@@ -81,7 +81,9 @@ def main() -> None:
         if args.protocol == "ilabel" and "receipt_raster_rle_base64" in payload:
             print_json(post_ilabel_raster_chunks(base_url, payload, timeout=args.timeout))
             return
-        print_json(post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout))
+        print_json(
+            post_json(base_url, query_path("/print", {"protocol": args.protocol}), payload, timeout=args.timeout)
+        )
         return
 
     raise SystemExit(f"Unsupported action: {args.action}")
@@ -136,7 +138,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--write-response", action="store_true", help="Use BLE write-with-response for action=test.")
     parser.add_argument("--characteristic", help="BLE characteristic UUID to use for action=test.")
     parser.add_argument("--hex", help="Hex bytes for action=raw, for example '1b 40 0a'.")
-    parser.add_argument("--dry-run", action="store_true", help="Build sample/receipt JSON without posting to the ESP32.")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Build sample/receipt JSON without posting to the ESP32."
+    )
     parser.add_argument("--preview-png", type=Path, help="Write a local thermal preview PNG for action=receipt.")
     parser.add_argument(
         "--session-dir",
@@ -171,7 +175,9 @@ def resolve_base_url(args: argparse.Namespace) -> str:
     bridge = discover_bridge(subnet=args.subnet, port=args.port, timeout=args.scan_timeout, workers=args.workers)
     if bridge:
         return bridge
-    raise SystemExit("No ESP32 printer bridge found. Check that this Mac is on the same phone hotspot, then try --subnet 10.60.149.0/24.")
+    raise SystemExit(
+        "No ESP32 printer bridge found. Check that this Mac is on the same phone hotspot, then try --subnet 10.60.149.0/24."
+    )
 
 
 def discover_bridge(*, subnet: str | None, port: int, timeout: float, workers: int) -> str | None:
