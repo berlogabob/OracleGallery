@@ -52,5 +52,8 @@ jobs:
       - name: Run ruff format check
         run: uv run ruff format --check src/neje_oracle tests
 
+      # Not --strict: that also fails on dependencies pip-audit cannot resolve, and
+      # neje-oracle is the local project itself, which will never be on PyPI. Plain
+      # pip-audit still exits non-zero when it finds an actual advisory.
       - name: Audit dependencies
-        run: uv run --with pip-audit pip-audit --strict
+        run: uv run --with pip-audit pip-audit
