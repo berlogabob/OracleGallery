@@ -10,7 +10,7 @@ on:
     branches: [main]
 
 jobs:
-  quality:
+  flutter-quality:
     runs-on: ubuntu-latest
 
     steps:
