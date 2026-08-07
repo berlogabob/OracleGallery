@@ -66,6 +66,7 @@ class PlotterDaemon:
         self._current_row_cell_count = 0
         self._current_row_cell_markers: list[tuple[int, int, int]] = []
         self._cells_completed_before_row = 0
+        self._sheet_total_cells = 0
         ensure_dir(self.settings.placeholder_root)
         ensure_dir(self.settings.spool_root)
 
@@ -260,6 +261,7 @@ class PlotterDaemon:
                 self._current_row_cell_count = len(active_placements)
                 self._current_row_cell_markers = self._build_cell_progress_markers(row_gcode, active_placements)
                 self._cells_completed_before_row = cells_completed
+                self._sheet_total_cells = sum(len(row) for row in layout_rows)
                 self._set_state(
                     RuntimeStatus.PRINTING,
                     f"Streaming row {row_index}/{len(layout_rows)} of {sheet_id}",
@@ -475,6 +477,7 @@ class PlotterDaemon:
                 self._current_row_cell_count = 1
                 self._current_row_cell_markers = self._build_cell_progress_markers(cell_gcode, [placement])
                 self._cells_completed_before_row = cells_completed
+                self._sheet_total_cells = total_cells
                 self._set_state(
                     RuntimeStatus.PRINTING,
                     f"Streaming cell {placement.index + 1}/{total_cells} of {sheet_id}",
@@ -928,14 +931,17 @@ class PlotterDaemon:
                     self.runtime_state.cells_completed = self._cells_completed_before_row + max(
                         0, current_cell_in_row - 1
                     )
-                self.runtime_state.sheet_progress_percent = min(
-                    max(
-                        ((self.runtime_state.rows_completed + completed_fraction) / self.runtime_state.row_count)
-                        * 100.0,
-                        0.0,
-                    ),
-                    100.0,
-                )
+                # Sheet progress is measured in cells, the same unit the cell-completion
+                # writer uses. This used to add `completed_fraction` (the fraction of the
+                # *current stream*) to `rows_completed` as if a stream were always a whole
+                # row -- in cell streaming mode one stream is one cell, so a single cell
+                # advanced the bar by a full row and it jumped backwards on each completion.
+                # Scaling by the cells this stream covers is correct in both modes.
+                cells_in_stream = max(self._current_row_cell_count, 1)
+                total_cells = self._sheet_total_cells
+                if total_cells > 0:
+                    cells_done = self._cells_completed_before_row + completed_fraction * cells_in_stream
+                    self.runtime_state.sheet_progress_percent = min(max((cells_done / total_cells) * 100.0, 0.0), 100.0)
             cell_label = ""
             if self.runtime_state.row_cell_count:
                 cell_label = f" cell {self.runtime_state.current_cell_in_row}/{self.runtime_state.row_cell_count},"

@@ -300,6 +300,9 @@ class ComponentState:
 class FluidNCControllerState:
     state: FluidNCState = FluidNCState.UNKNOWN
     machine_position: tuple[float, float, float] | None = None
+    # G54 work offset (WCO). FluidNC only reports this periodically, not on every status
+    # poll, so treat None as "not seen in this response" rather than "no offset".
+    work_offset: tuple[float, float, float] | None = None
     feed_rate: float | None = None
     spindle_speed: float | None = None
     overrides: tuple[int, int, int] | None = None
@@ -484,6 +487,10 @@ class PlotterRuntimeConfig:
 class PlotterReadinessState:
     work_zero_set: bool = False
     plotter_ready: bool = False
+    # Set when the controller reports Alarm, which means it has lost its position
+    # reference (reboot, panic, limit hit). Cleared only by a successful homing cycle.
+    # G54 survives in flash, so the operator must re-home but need not re-set work zero.
+    homing_required: bool = False
     message: str = "Not ready"
     updated_at: datetime = field(default_factory=utcnow)
 
@@ -491,6 +498,7 @@ class PlotterReadinessState:
         return {
             "work_zero_set": self.work_zero_set,
             "plotter_ready": self.plotter_ready,
+            "homing_required": self.homing_required,
             "message": self.message,
             "updated_at": self.updated_at.isoformat(),
         }
@@ -500,6 +508,7 @@ class PlotterReadinessState:
         return cls(
             work_zero_set=bool(payload.get("work_zero_set", False)),
             plotter_ready=bool(payload.get("plotter_ready", False)),
+            homing_required=bool(payload.get("homing_required", False)),
             message=str(payload.get("message", "Not ready")),
             updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )

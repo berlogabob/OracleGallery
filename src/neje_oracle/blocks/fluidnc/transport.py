@@ -194,6 +194,28 @@ class FluidNCTransport:
         except OSError as exc:
             return FluidNCCommandResult(ok=False, command=command_label, response_lines=response_lines, error=str(exc))
 
+    def read_board_identity(self) -> str | None:
+        """Board name from the controller's *running* config, via ``$CD``.
+
+        After a panic FluidNC silently boots its built-in "Default (Test Drive)" config --
+        no motor pins, no limits, wrong steps_per_mm -- while ``$Config/Filename`` keeps
+        reporting the intended file. The filename therefore cannot detect the fallback;
+        the board name can (it reads ``None`` instead of the real board).
+
+        Returns None when the controller cannot be queried, so callers can distinguish
+        "wrong config" from "could not ask".
+        """
+        # Deliberately not gated on result.ok: $CD dumps ~200 lines and frequently does not
+        # deliver its terminating "ok" inside the ack window, so ok=False is normal here even
+        # when the dump arrived intact. Verified against the real board -- gating on ok made
+        # this return None on a perfectly healthy controller.
+        result = self.send_command("$CD", wait_for_ok=True)
+        for line in result.response_lines:
+            stripped = line.strip()
+            if stripped.startswith("board:"):
+                return stripped.removeprefix("board:").strip()
+        return None
+
     def send_realtime(self, byte_command: str | bytes) -> FluidNCCommandResult:
         payload = byte_command.encode("latin1") if isinstance(byte_command, str) else byte_command
         try:
@@ -494,6 +516,7 @@ def parse_status_response(response: str) -> FluidNCControllerState:
     fields = (match.group(2) or "").split("|")
     state = _parse_state(raw_state)
     machine_position: tuple[float, float, float] | None = None
+    work_offset: tuple[float, float, float] | None = None
     feed_rate: float | None = None
     spindle_speed: float | None = None
     overrides: tuple[int, int, int] | None = None
@@ -504,6 +527,10 @@ def parse_status_response(response: str) -> FluidNCControllerState:
             values = _parse_float_tuple(field.removeprefix("MPos:"), 3)
             if values is not None:
                 machine_position = values[0], values[1], values[2]
+        elif field.startswith("WCO:"):
+            values = _parse_float_tuple(field.removeprefix("WCO:"), 3)
+            if values is not None:
+                work_offset = values[0], values[1], values[2]
         elif field.startswith("FS:"):
             values = _parse_float_tuple(field.removeprefix("FS:"), 2)
             if values is not None:
@@ -518,6 +545,7 @@ def parse_status_response(response: str) -> FluidNCControllerState:
     return FluidNCControllerState(
         state=state,
         machine_position=machine_position,
+        work_offset=work_offset,
         feed_rate=feed_rate,
         spindle_speed=spindle_speed,
         overrides=overrides,

@@ -478,7 +478,10 @@ def test_manual_z_control_uses_absolute_servo_z_not_jog(tmp_path: Path) -> None:
         "G21",
         "G90",
         "G54",
-        "G0 Z-25.000",
+        # Honours the configured z_down_mm (-12.0) at the configured feed, matching the
+        # sheet G-code path. Previously this was a hardcoded rapid "G0 Z-25.000", which
+        # ignored the config and slammed the servo to a depth the operator never chose.
+        "G1 Z-12.000 F1000.00",
     ]
     assert all(not command.startswith("$J=") for command in transport.commands)
 
@@ -622,3 +625,150 @@ def test_start_print_blocked_without_ready_state(tmp_path: Path) -> None:
 
     assert blocked.status == ComponentStatus.WARNING
     assert supervisor.runtime_store.load_print_control().print_enabled is False
+
+
+def test_stop_print_disables_printing_in_both_stores(tmp_path: Path) -> None:
+    """STOP PRINT must reach the store the daemon actually polls.
+
+    The daemon re-reads print_enabled from PlotterStore, so writing only the oracle
+    runtime store would leave the sheet streaming.
+    """
+    supervisor = _supervisor(tmp_path)
+    control = supervisor.runtime_store.load_print_control()
+    control.print_enabled = True
+    control.operator_paused = False
+    supervisor.runtime_store.save_print_control(control)
+    PlotterStore(supervisor.plotter_settings.db_path).save_control_state(control)
+
+    state = supervisor.stop_print()
+
+    assert state.status == ComponentStatus.STOPPED
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
+    assert PlotterStore(supervisor.plotter_settings.db_path).load_control_state().print_enabled is False
+
+
+def test_is_printing_reflects_plotter_runtime_state(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path)
+    store = PlotterStore(supervisor.plotter_settings.db_path)
+
+    store.save_runtime_state(PlotterRuntimeState(status=RuntimeStatus.OPERATOR_PAUSED))
+    assert supervisor.is_printing() is False
+
+    store.save_runtime_state(PlotterRuntimeState(status=RuntimeStatus.PRINTING))
+    assert supervisor.is_printing() is True
+
+
+def _probe_in_state(state: FluidNCState, position: tuple[float, float, float]) -> FluidNCProbeResult:
+    return FluidNCProbeResult(
+        http_online=True,
+        telnet_online=True,
+        ok=True,
+        message=state.value,
+        controller=FluidNCControllerState(state=state, machine_position=position),
+    )
+
+
+def _alarm_probe() -> FluidNCProbeResult:
+    return _probe_in_state(FluidNCState.ALARM, (0.0, 0.0, 0.0))
+
+
+def _idle_probe() -> FluidNCProbeResult:
+    return _probe_in_state(FluidNCState.IDLE, (0.0, 0.0, 0.0))
+
+
+def test_controller_alarm_invalidates_readiness(tmp_path: Path) -> None:
+    """A panic/reboot must not leave the app reporting "plotter ready".
+
+    Observed live 2026-08-07: FluidNC panicked mid-print and came back in Alarm with its
+    position reference gone, while readiness still said work_zero_set/plotter_ready True
+    and the UI invited START PRINT.
+    """
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="Work zero set; plotter ready")
+    )
+
+    supervisor.check_fluidnc(_alarm_probe())
+
+    readiness = supervisor.runtime_store.load_plotter_readiness()
+    assert readiness.homing_required is True
+    assert readiness.plotter_ready is False
+    assert readiness.work_zero_set is True  # G54 survives; only homing is needed
+
+
+def test_unlocking_an_alarm_does_not_make_the_plotter_printable(tmp_path: Path) -> None:
+    """$X clears the alarm to Idle without restoring the reference.
+
+    This is the hazard path: after a reboot the head sat at ~(129, 142) while the
+    controller believed 0,0,0. Unlock made it read Idle, which was the single condition
+    guarding START PRINT.
+    """
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="Work zero set; plotter ready")
+    )
+    supervisor.check_fluidnc(_alarm_probe())
+
+    # Operator presses UNLOCK; controller now reports Idle again.
+    supervisor.check_fluidnc(_idle_probe())
+
+    blocked = supervisor.start_print(GuiSettings(system_mode=SystemMode.TEST.value))
+    assert blocked.status == ComponentStatus.WARNING
+    assert "HOME ALL" in blocked.message
+    assert supervisor.runtime_store.load_print_control().print_enabled is False
+
+
+def test_feed_hold_does_not_require_rehoming(tmp_path: Path) -> None:
+    """Hold preserves MPos and G54, so it must not force a re-home."""
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="Work zero set; plotter ready")
+    )
+
+    supervisor.check_fluidnc(_probe_in_state(FluidNCState.HOLD, (57.5, 45.2, -17.4)))
+
+    assert supervisor.runtime_store.load_plotter_readiness().homing_required is False
+
+
+def test_set_work_zero_does_not_clear_an_outstanding_homing_requirement(tmp_path: Path) -> None:
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
+    supervisor.check_fluidnc(_alarm_probe())
+
+    supervisor.set_work_zero()
+
+    readiness = supervisor.runtime_store.load_plotter_readiness()
+    assert readiness.homing_required is True
+    assert readiness.plotter_ready is False
+
+
+def test_full_homing_clears_the_requirement_and_keeps_work_zero(tmp_path: Path) -> None:
+    """Homing is what restores safety; G54 lives in flash so no re-zero is needed."""
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
+    supervisor.check_fluidnc(_alarm_probe())
+    assert supervisor.runtime_store.load_plotter_readiness().homing_required is True
+
+    supervisor.home_fluidnc()
+
+    readiness = supervisor.runtime_store.load_plotter_readiness()
+    assert readiness.homing_required is False
+    assert readiness.work_zero_set is True
+    assert readiness.plotter_ready is True
+
+
+def test_single_axis_homing_does_not_clear_the_requirement(tmp_path: Path) -> None:
+    """$H=Z restores nothing about XY, so it must not mark the machine safe."""
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
+    supervisor.check_fluidnc(_alarm_probe())
+
+    supervisor.home_fluidnc("Z")
+
+    assert supervisor.runtime_store.load_plotter_readiness().homing_required is True

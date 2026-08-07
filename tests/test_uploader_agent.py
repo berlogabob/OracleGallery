@@ -23,6 +23,9 @@ class FakeStore:
     def save_run_started_at(self, value):
         self.run_started_at = value
 
+    def load_run_started_at(self):
+        return self.run_started_at
+
 
 @dataclass
 class FakeUploaderSettings:

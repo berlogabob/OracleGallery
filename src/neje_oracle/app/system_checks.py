@@ -23,12 +23,16 @@ class SystemCheckService:
         uploader_settings: UploaderSettings | None = None,
         firebase_settings: FirebaseSettings | None = None,
         fluidnc_checker: Callable[[float], tuple[bool, str]] | None = None,
+        work_offset_provider: Callable[[], tuple[float, float, float] | None] | None = None,
+        board_identity_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self.supervisor_settings = supervisor_settings or OracleSupervisorSettings()
         self.plotter_settings = plotter_settings or PlotterSettings()
         self.uploader_settings = uploader_settings or UploaderSettings()
         self.firebase_settings = firebase_settings or FirebaseSettings()
         self.fluidnc_checker = fluidnc_checker
+        self.work_offset_provider = work_offset_provider
+        self.board_identity_provider = board_identity_provider
 
     def run(self, *, mode: SystemMode, gui_settings: GuiSettings) -> SystemCheckResult:
         checks = [
@@ -112,6 +116,22 @@ class SystemCheckService:
         board = str(values.get("/board", ""))
         if "TinyBee" not in board or "XXYYZ" not in board:
             problems.append(f"unexpected board {board or '<missing>'}; expected MKS TinyBee XXYYZ")
+
+        # Everything above describes the checked-in JSON snapshot -- what the board *should*
+        # be. Ask the controller what it is actually running. After a FluidNC panic it boots
+        # a built-in fallback config with no motor pins and no limits, while every value in
+        # the snapshot still looks perfect. Without this the check reports green on a machine
+        # that cannot home.
+        live_board = self.board_identity_provider() if self.board_identity_provider is not None else None
+        if live_board is not None:
+            if "TinyBee" not in live_board or "XXYYZ" not in live_board:
+                problems.append(
+                    f"controller is running config '{live_board or '<none>'}', not {board or 'the expected board'}; "
+                    "FluidNC has most likely panicked into its built-in default -- power-cycle the board and "
+                    "confirm $CD reports the real board before printing"
+                )
+            elif board and live_board != board:
+                warnings.append(f"controller board '{live_board}' differs from {config_path.name} '{board}'")
         if values.get("Telnet/Enable") != "1":
             problems.append("Telnet/Enable must be 1")
         telnet_port = _float_value(values.get("Telnet/Port"), 0)
@@ -123,10 +143,28 @@ class SystemCheckService:
         x_travel = _float_value(values.get("/axes/X/max_travel_mm"), 0)
         y_travel = _float_value(values.get("/axes/Y/max_travel_mm"), 0)
         z_travel = _float_value(values.get("/axes/Z/max_travel_mm"), 0)
-        if x_travel < gui_settings.sheet_width_mm:
-            problems.append(f"sheet width {gui_settings.sheet_width_mm:.1f}mm exceeds X travel {x_travel:.1f}mm")
-        if y_travel < gui_settings.sheet_height_mm:
-            problems.append(f"sheet height {gui_settings.sheet_height_mm:.1f}mm exceeds Y travel {y_travel:.1f}mm")
+        # Work zero consumes travel: a sheet starting at G54 (5, 5) has 5mm less room on
+        # each axis. Comparing sheet size against raw travel passed a setup that would
+        # have driven past the Y limit switch mid-sheet.
+        offset_x, offset_y = 0.0, 0.0
+        if self.work_offset_provider is not None:
+            work_offset = self.work_offset_provider()
+            if work_offset is not None:
+                offset_x, offset_y = max(0.0, work_offset[0]), max(0.0, work_offset[1])
+        usable_x = x_travel - offset_x
+        usable_y = y_travel - offset_y
+        offset_note_x = f" from work zero X{offset_x:.1f}" if offset_x else ""
+        offset_note_y = f" from work zero Y{offset_y:.1f}" if offset_y else ""
+        if usable_x < gui_settings.sheet_width_mm:
+            problems.append(
+                f"sheet width {gui_settings.sheet_width_mm:.1f}mm exceeds "
+                f"{usable_x:.1f}mm of usable X travel{offset_note_x}"
+            )
+        if usable_y < gui_settings.sheet_height_mm:
+            problems.append(
+                f"sheet height {gui_settings.sheet_height_mm:.1f}mm exceeds "
+                f"{usable_y:.1f}mm of usable Y travel{offset_note_y}"
+            )
         if abs(z_travel - 25.0) > 0.5:
             warnings.append(f"Z travel is {z_travel:.1f}mm; expected 25mm servo travel")
         for axis in ("X", "Y", "Z"):

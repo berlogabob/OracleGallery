@@ -190,3 +190,32 @@ def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypat
 )
 def test_mode_params_covers_every_image_mode(mode: str, detail: float, expected: dict) -> None:
     assert image_workspace._mode_params(mode, detail) == expected
+
+
+def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Navigation must never mutate machine state.
+
+    Regression: workspace_changed() flipped the system mode on every tab switch, and
+    set_system_mode() writes print_enabled=False -- so merely looking at another tab
+    silently aborted the sheet mid-print.
+    """
+    ctx = _new_ctx(monkeypatch)
+    changed: list[object] = []
+    monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
+    monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: True)
+
+    ctx.workspace_changed("tests")
+
+    assert changed == []
+    assert ctx.active_workspace["value"] == "tests"
+
+
+def test_tab_switch_still_sets_system_mode_when_not_printing(monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx = _new_ctx(monkeypatch)
+    changed: list[object] = []
+    monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
+    monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: False)
+
+    ctx.workspace_changed("tests")
+
+    assert changed, "tab-linked mode default should still apply when idle"

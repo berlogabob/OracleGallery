@@ -154,3 +154,96 @@ def test_system_check_blocks_layout_larger_than_tinybee_travel(tmp_path: Path) -
     )
 
     assert any(check.name == "tinybee hardware" and check.level == SystemCheckLevel.CRITICAL for check in result.checks)
+
+
+def test_tinybee_check_counts_work_zero_offset_against_travel(tmp_path: Path) -> None:
+    """A 440mm sheet does not fit in 440mm of travel once work zero is at Y5.
+
+    Regression: the check compared sheet size against raw travel and ignored the G54
+    offset, so it passed a setup whose G-code reached 443.2mm on a 440mm axis -- i.e.
+    straight into the Y limit switch, mid-sheet.
+    """
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, x_travel=255.0, y_travel=440.0)
+    gui_settings = GuiSettings(sheet_width_mm=250.0, sheet_height_mm=440.0)
+
+    without_offset = SystemCheckService(
+        supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3"),
+        plotter_settings=settings,
+        uploader_settings=UploaderSettings(session_root=tmp_path / "sessions", public_root=tmp_path / "public"),
+        firebase_settings=FirebaseSettings(),
+        work_offset_provider=lambda: None,
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+    tinybee = next(c for c in without_offset.checks if c.name == "tinybee hardware")
+    assert tinybee.level != SystemCheckLevel.CRITICAL
+
+    with_offset = SystemCheckService(
+        supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3"),
+        plotter_settings=settings,
+        uploader_settings=UploaderSettings(session_root=tmp_path / "sessions", public_root=tmp_path / "public"),
+        firebase_settings=FirebaseSettings(),
+        work_offset_provider=lambda: (5.0, 5.0, 0.0),
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+    tinybee = next(c for c in with_offset.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.CRITICAL
+    assert "usable Y travel" in tinybee.message
+    assert "work zero Y5.0" in tinybee.message
+
+
+def _service(tmp_path: Path, settings: PlotterSettings, **kwargs: object) -> SystemCheckService:
+    return SystemCheckService(
+        supervisor_settings=OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3"),
+        plotter_settings=settings,
+        uploader_settings=UploaderSettings(session_root=tmp_path / "sessions", public_root=tmp_path / "public"),
+        firebase_settings=FirebaseSettings(),
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
+def test_tinybee_check_fails_when_controller_runs_the_fallback_config(tmp_path: Path) -> None:
+    """The snapshot on disk says TinyBee; the controller says otherwise.
+
+    Regression: after a FluidNC panic the board boots "Default (Test Drive)" -- no motor
+    pins, no limits, steps_per_mm 80 against the real 40 -- while assets/tinybee.json still
+    describes a perfect machine. Preflight validated only the JSON and reported green on a
+    board that could not even home (observed live 2026-08-07, HOME ALL -> error:152).
+    """
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(tmp_path, settings, board_identity_provider=lambda: "None").run(
+        mode=SystemMode.TEST, gui_settings=gui_settings
+    )
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.CRITICAL
+    assert "panicked" in tinybee.message
+    assert "power-cycle" in tinybee.message
+
+
+def test_tinybee_check_passes_when_controller_matches_snapshot(tmp_path: Path) -> None:
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(tmp_path, settings, board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ").run(
+        mode=SystemMode.TEST, gui_settings=gui_settings
+    )
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level != SystemCheckLevel.CRITICAL
+
+
+def test_tinybee_check_tolerates_unreachable_controller(tmp_path: Path) -> None:
+    """An unaskable controller must not fail this check -- the fluidnc check covers offline."""
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(tmp_path, settings, board_identity_provider=lambda: None).run(
+        mode=SystemMode.TEST, gui_settings=gui_settings
+    )
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level != SystemCheckLevel.CRITICAL

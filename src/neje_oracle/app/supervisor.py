@@ -17,7 +17,6 @@ import httpx
 from ..blocks.firebase.repository import FirebaseRemoteRepository
 from ..blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
 from ..blocks.gcode.direct_svg import create_direct_svg_print_job_from_gui
-from ..blocks.gcode.svg_gcode import Z_SERVO_PEN_DOWN_COMMAND
 from ..blocks.plotter.daemon import PlotterDaemon
 from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
 from ..shared.gui_settings import GuiSettings
@@ -197,6 +196,8 @@ class SupervisorService:
             uploader_settings=self.uploader_settings,
             firebase_settings=self.firebase_settings,
             fluidnc_checker=self._system_check_fluidnc,
+            work_offset_provider=self._current_work_offset,
+            board_identity_provider=self._live_board_identity,
         ).run(
             mode=mode,
             gui_settings=gui_settings,
@@ -255,6 +256,17 @@ class SupervisorService:
             return self.runtime_store.set_component(
                 "print", ComponentStatus.WARNING, message="Set work zero before START PRINT"
             )
+        if readiness.homing_required:
+            # The controller alarmed since the last home, so its position is not trustworthy
+            # even if it now reports Idle -- $X clears an alarm without restoring reference.
+            append_log(
+                "plotter", "Start print blocked: homing required after alarm", level="warning", settings=self.settings
+            )
+            return self.runtime_store.set_component(
+                "print",
+                ComponentStatus.WARNING,
+                message="Controller alarmed since the last homing cycle; HOME ALL before START PRINT",
+            )
         if not control.dry_run:
             fluidnc_state = self.check_fluidnc()
             if fluidnc_state.status != ComponentStatus.RUNNING:
@@ -274,6 +286,23 @@ class SupervisorService:
         )
         return self.runtime_store.set_component(
             "print", ComponentStatus.RUNNING, message=f"Print enabled: {mode.value}", heartbeat=True
+        )
+
+    def stop_print(self) -> ComponentState:
+        """Graceful stop: let the current cell finish, then pause before the next one.
+
+        The daemon only re-reads print_enabled at row/cell boundaries, so the in-flight
+        cell always completes -- including its trailing pen-up. Use emergency_stop_fluidnc()
+        when motion must halt immediately instead.
+        """
+        control = self.runtime_store.load_print_control()
+        control.print_enabled = False
+        control.operator_paused = True
+        self.runtime_store.save_print_control(control)
+        PlotterStore(self.plotter_settings.db_path).save_control_state(control)
+        append_log("plotter", "Stop print requested by operator", level="warning", settings=self.settings)
+        return self.runtime_store.set_component(
+            "print", ComponentStatus.STOPPED, message="Stop requested; finishing the current cell, then pausing"
         )
 
     def print_uploaded_svg(self, gui_settings: GuiSettings, *, svg_bytes: bytes, original_name: str) -> ComponentState:
@@ -486,8 +515,40 @@ class SupervisorService:
             "firebase", ComponentStatus.RUNNING, message=f"Configured: {firebase.project_id}", heartbeat=True
         )
 
+    def _reconcile_readiness_with_controller(self, probe: FluidNCProbeResult) -> None:
+        """Invalidate readiness when the controller says its position reference is gone.
+
+        Readiness used to be latched: set once by set_work_zero() and cleared only by
+        app-initiated actions. A panic, a reboot or an externally triggered alarm left the
+        UI reporting "Work zero set; plotter ready" on a machine that had lost its
+        reference -- observed three separate times during hardware testing on 2026-08-07.
+
+        Alarm is the signal that the reference is gone. Hold is not: a feed hold, and a
+        soft reset after it, both preserve MPos and G54, so those must stay ready.
+        """
+        if not probe.online or probe.controller.state != FluidNCState.ALARM:
+            return
+        readiness = self.runtime_store.load_plotter_readiness()
+        if readiness.homing_required:
+            return
+        self.runtime_store.save_plotter_readiness(
+            PlotterReadinessState(
+                work_zero_set=readiness.work_zero_set,
+                plotter_ready=False,
+                homing_required=True,
+                message="Controller alarm: position reference lost. Home before printing.",
+            )
+        )
+        append_log(
+            "plotter",
+            "Controller reported alarm; homing is required before the next print",
+            level="warning",
+            settings=self.settings,
+        )
+
     def check_fluidnc(self, probe: FluidNCProbeResult | None = None) -> ComponentState:
         probe = probe or self.probe_fluidnc()
+        self._reconcile_readiness_with_controller(probe)
         online = probe.online and probe.controller.is_idle
         status = (
             ComponentStatus.RUNNING if online else ComponentStatus.WARNING if probe.online else ComponentStatus.OFFLINE
@@ -544,8 +605,19 @@ class SupervisorService:
                 PlotterReadinessState(message=f"Set work zero failed: {result.message}")
             )
             return self._record_fluidnc_command(result, "Set work zero")
+        # Preserve an outstanding homing requirement: zeroing at an unknown position does
+        # not make the machine safe, and a fresh PlotterReadinessState would silently
+        # default homing_required back to False.
+        previous = self.runtime_store.load_plotter_readiness()
         readiness = PlotterReadinessState(
-            work_zero_set=True, plotter_ready=True, message="Work zero set; plotter ready"
+            work_zero_set=True,
+            plotter_ready=not previous.homing_required,
+            homing_required=previous.homing_required,
+            message=(
+                "Work zero set, but homing is still required"
+                if previous.homing_required
+                else "Work zero set; plotter ready"
+            ),
         )
         self.runtime_store.save_plotter_readiness(readiness)
         self.runtime_store.set_component("ready", ComponentStatus.RUNNING, message=readiness.message, heartbeat=True)
@@ -568,7 +640,8 @@ class SupervisorService:
         if not result.ok:
             result = _enrich_fluidnc_error(result)
         if result.ok or _homing_disconnect_is_recoverable(result):
-            return self._record_homing_result(result, label)
+            # Only a full home restores the XY reference; "$H=Z" must not clear the flag.
+            return self._record_homing_result(result, label, full_home=axis is None)
         return self._record_fluidnc_command(result, label)
 
     def home_xy_fluidnc(self) -> ComponentState:
@@ -597,7 +670,12 @@ class SupervisorService:
             return self.runtime_store.load_component_state("fluidnc")
         config = self.runtime_store.load_plotter_config()
         if config.use_z_servo or self.plotter_settings.use_z_servo:
-            command = Z_SERVO_PEN_DOWN_COMMAND
+            # Match the sheet G-code path (svg_gcode._pen_down_command): a fed G1, honouring
+            # the configured depth and feed. This used to send a hardcoded "G0 Z-25.000",
+            # which rapided the servo and ignored z_down_mm entirely.
+            z_down = config.z_down_mm if config.use_z_servo else self.plotter_settings.z_down_mm
+            z_feed = config.z_feed_mm_min if config.use_z_servo else self.plotter_settings.z_feed_mm_min
+            command = f"G1 Z{z_down:.3f} F{z_feed:.2f}"
             result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
             return self._record_fluidnc_command(result, f"Z down servo {command}")
         result = self.transport_factory(self.plotter_settings).pen_down()
@@ -853,6 +931,28 @@ class SupervisorService:
             )
         return states
 
+    def _live_board_identity(self) -> str | None:
+        """Board name the controller is actually running, or None if it cannot be asked."""
+        try:
+            return self.transport_factory(self.plotter_settings).read_board_identity()
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _current_work_offset(self) -> tuple[float, float, float] | None:
+        """G54 offset from the controller, or None if it cannot be read.
+
+        FluidNC reports WCO only periodically, so a miss here is normal and must not fail
+        the check -- callers treat None as "no offset information", not "no offset".
+        """
+        try:
+            return self.probe_fluidnc().controller.work_offset
+        except Exception:  # noqa: BLE001
+            return None
+
+    def is_printing(self) -> bool:
+        """True while a sheet is actively streaming to the controller."""
+        return PlotterStore(self.plotter_settings.db_path).load_runtime_state().status == RuntimeStatus.PRINTING
+
     def _manual_control_allowed(self, action: str) -> bool:
         state = PlotterStore(self.plotter_settings.db_path).load_runtime_state()
         if state.status == RuntimeStatus.PRINTING:
@@ -892,7 +992,26 @@ class SupervisorService:
             heartbeat=result.ok,
         )
 
-    def _record_homing_result(self, result: FluidNCCommandResult, label: str) -> ComponentState:
+    def _clear_homing_requirement(self) -> None:
+        readiness = self.runtime_store.load_plotter_readiness()
+        if not readiness.homing_required:
+            return
+        self.runtime_store.save_plotter_readiness(
+            PlotterReadinessState(
+                work_zero_set=readiness.work_zero_set,
+                plotter_ready=readiness.work_zero_set,
+                homing_required=False,
+                message=(
+                    "Homing complete; work zero preserved"
+                    if readiness.work_zero_set
+                    else "Homing complete; set work zero"
+                ),
+            )
+        )
+
+    def _record_homing_result(
+        self, result: FluidNCCommandResult, label: str, *, full_home: bool = True
+    ) -> ComponentState:
         if result.ok:
             append_log(
                 "plotter", f"FluidNC {label}: {result.message}; verifying post-home state", settings=self.settings
@@ -907,6 +1026,8 @@ class SupervisorService:
         probe = self.probe_fluidnc_after_delay()
         if probe.online and probe.controller.state != FluidNCState.UNKNOWN:
             if probe.controller.is_idle:
+                if full_home:
+                    self._clear_homing_requirement()
                 message = f"{label}: homing complete; FluidNC {probe.controller.state.value}"
                 return self.runtime_store.set_component(
                     "fluidnc", ComponentStatus.RUNNING, message=message, heartbeat=True
