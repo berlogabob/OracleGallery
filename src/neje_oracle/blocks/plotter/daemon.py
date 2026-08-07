@@ -5,7 +5,7 @@ import random
 import threading
 import time
 import xml.etree.ElementTree as ET
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ...shared.config import SYMBOL_FIT_RATIO, PlotterSettings, _repo_root, ensure_dir
@@ -44,6 +44,10 @@ from ..symbols.svg_normalizer import (
     scale_for_mark_name,
 )
 
+# A sheet takes minutes, so anything claimed for an hour without finishing is a casualty
+# of an interrupted run rather than work in progress.
+STALE_PLOT_JOB_AFTER = timedelta(hours=1)
+
 
 class PlotterDaemon:
     def __init__(
@@ -70,7 +74,37 @@ class PlotterDaemon:
         ensure_dir(self.settings.placeholder_root)
         ensure_dir(self.settings.spool_root)
 
+    def _requeue_stale_jobs_on_start(self) -> None:
+        """Recover jobs a previous run claimed but never finished.
+
+        Without this an interrupted print (panic, E-stop, restart, network drop) leaves
+        the job claimed forever -- claim_next_plot_job() only looks at PENDING.
+        """
+        requeue = getattr(self.remote, "requeue_stale_plot_jobs", None)
+        if requeue is None:
+            return
+        try:
+            requeued = requeue(stale_after=STALE_PLOT_JOB_AFTER)
+        except Exception as exc:  # noqa: BLE001
+            if self.oracle_store is not None:
+                self.oracle_store.set_component(
+                    "queue",
+                    ComponentStatus.WARNING,
+                    message="Could not requeue unfinished plot jobs",
+                    last_error=str(exc),
+                    heartbeat=True,
+                )
+            return
+        if requeued and self.oracle_store is not None:
+            self.oracle_store.set_component(
+                "queue",
+                ComponentStatus.WARNING,
+                message=f"Requeued {len(requeued)} unfinished job(s) from a previous run: {', '.join(requeued)}",
+                heartbeat=True,
+            )
+
     def run_forever(self) -> None:
+        self._requeue_stale_jobs_on_start()
         while not self.stop_event.is_set():
             try:
                 self.run_cycle()
