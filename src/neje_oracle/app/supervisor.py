@@ -8,7 +8,7 @@ import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -55,6 +55,10 @@ class _LocalOnlyPlotterRemote(FirebaseRemoteRepository):
         allowed_origins: set[str] | list[str] | tuple[str, ...] | None = None,
     ) -> PlotJobLease | None:
         return None
+
+    def requeue_stale_plot_jobs(self, *, stale_after: timedelta, now: datetime | None = None) -> list[str]:
+        # No Firestore behind this stand-in, so there is nothing to recover.
+        return []
 
     def update_plot_job(
         self,

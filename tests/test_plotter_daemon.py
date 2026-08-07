@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from neje_oracle.blocks.fluidnc.transport import FluidNCTransport
-from neje_oracle.blocks.plotter.daemon import PlotterDaemon, _apply_current_mark_scale, _materialize_scaled_placeholder
+from neje_oracle.blocks.plotter.daemon import (
+    STALE_PLOT_JOB_AFTER,
+    PlotterDaemon,
+    _apply_current_mark_scale,
+    _materialize_scaled_placeholder,
+)
 from neje_oracle.blocks.symbols.svg_normalizer import normalize_svg_file, read_normalized_svg_metadata
 from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.shared.models import PlotJobLease, PlotStatus, PlotterControlState, PlotterRuntimeConfig, RuntimeStatus
@@ -805,3 +810,54 @@ def test_sheet_progress_is_cell_based_and_never_runs_backwards(tmp_path: Path) -
     assert seen[-1] == 100.0
     # Completing cell 1 of 5 must read 20%, matching the cell-completion writer.
     assert seen[4] == 20.0
+
+
+class RequeueTrackingRemote(FakeRemoteRepository):
+    """Remote that records the requeue sweep the daemon performs on start."""
+
+    def __init__(self, requeued: list[str] | None = None, fail: bool = False) -> None:
+        super().__init__()
+        self._requeued = requeued or []
+        self._fail = fail
+        self.requeue_calls: list[timedelta] = []
+
+    def requeue_stale_plot_jobs(self, *, stale_after: timedelta, now=None) -> list[str]:
+        self.requeue_calls.append(stale_after)
+        if self._fail:
+            raise RuntimeError("firestore unavailable")
+        return self._requeued
+
+
+def test_daemon_requeues_unfinished_jobs_on_start(tmp_path: Path) -> None:
+    """An interrupted run must not strand its claimed job.
+
+    claim_next_plot_job() only queries PENDING, so before this a panic/E-stop/restart left
+    the job claimed forever. Live evidence: session 20260413_192853 sat in `plotting` for
+    nearly four months.
+    """
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "oracle.sqlite3")
+    remote = RequeueTrackingRemote(requeued=["20260413_192853"])
+    daemon = PlotterDaemon(settings, store, remote, FluidNCTransport(settings), oracle_store=oracle_store)
+
+    daemon._requeue_stale_jobs_on_start()
+
+    assert remote.requeue_calls == [STALE_PLOT_JOB_AFTER]
+    queue_state = oracle_store.load_component_state("queue")
+    assert "20260413_192853" in queue_state.message
+    assert "Requeued 1" in queue_state.message
+
+
+def test_daemon_start_survives_a_failing_requeue(tmp_path: Path) -> None:
+    """Recovery is best-effort: an unreachable queue must not stop the daemon starting."""
+    settings = _settings(tmp_path)
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "oracle.sqlite3")
+    daemon = PlotterDaemon(
+        settings, store, RequeueTrackingRemote(fail=True), FluidNCTransport(settings), oracle_store=oracle_store
+    )
+
+    daemon._requeue_stale_jobs_on_start()
+
+    assert "Could not requeue" in oracle_store.load_component_state("queue").message

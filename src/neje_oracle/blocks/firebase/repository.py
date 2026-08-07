@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -219,6 +219,10 @@ class FirebaseRemoteRepository:
             {
                 "status": PlotStatus.LEASED.value,
                 "consumerId": consumer_id,
+                # Stamped so an interrupted job can be recognised as stale later. Without
+                # it a job that never reaches PRINTED is indistinguishable from one that
+                # is legitimately still plotting, and stays claimed forever.
+                "leasedAt": firestore.SERVER_TIMESTAMP,
                 "updatedAt": firestore.SERVER_TIMESTAMP,
                 "error": "",
             }
@@ -242,6 +246,45 @@ class FirebaseRemoteRepository:
             tags=normalize_tags(payload.get("tags")),
             visible_in_queue=payload.get("visibleInQueue") is not False,
         )
+
+    def requeue_stale_plot_jobs(self, *, stale_after: timedelta, now: datetime | None = None) -> list[str]:
+        """Return jobs stuck in LEASED/PLOTTING to PENDING and report which ones.
+
+        claim_next_plot_job() only ever queries PENDING, so a job interrupted between
+        claim and completion is never reconsidered: no lease expiry, no reaper, no
+        requeue-on-start. Any panic, E-stop, daemon restart or network drop stranded that
+        visitor's artwork permanently and silently. Observed live: session
+        20260413_192853 sat in `plotting` for nearly four months.
+
+        Jobs claimed before leases existed carry no `leasedAt`; those are treated as
+        stale, since a claim with no timestamp cannot be in progress now.
+        """
+        moment = now or datetime.now(tz=UTC)
+        requeued: list[str] = []
+        for status in (PlotStatus.LEASED, PlotStatus.PLOTTING):
+            query = self._db.collection("plot_jobs").where("status", "==", status.value).limit(500)
+            for doc in query.stream():
+                payload = doc.to_dict() or {}
+                leased_at = payload.get("leasedAt")
+                if leased_at is not None:
+                    age = moment - recorded_datetime(leased_at)
+                    if age < stale_after:
+                        continue
+                doc.reference.update(
+                    {
+                        "status": PlotStatus.PENDING.value,
+                        "consumerId": "",
+                        "leasedAt": None,
+                        "updatedAt": firestore.SERVER_TIMESTAMP,
+                        "error": "requeued: previous run did not finish this job",
+                    }
+                )
+                self._db.collection("sessions").document(doc.id).set(
+                    {"plotStatus": PlotStatus.PENDING.value},
+                    merge=True,
+                )
+                requeued.append(doc.id)
+        return requeued
 
     def skip_pending_before(self, cutoff: datetime, *, reason: str = "before_run_started_at") -> int:
         query = (
