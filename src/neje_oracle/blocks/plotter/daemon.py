@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from ...shared.config import SYMBOL_FIT_RATIO, PlotterSettings, _repo_root, ensure_dir
+from ...shared.config import SYMBOL_FIT_RATIO, PlotterSettings, ensure_dir
 from ...shared.models import (
     ComponentStatus,
     PlotJobLease,
@@ -28,6 +28,7 @@ from ...shared.origin_markers import (
     normalize_tags,
 )
 from ...shared.store import OracleRuntimeStore, PlotterStore
+from ...shared.symbols import default_scale_config_path, default_symbol_root
 from ..firebase.repository import FirebaseRemoteRepository
 from ..fluidnc.transport import FluidNCTransport
 from ..gcode.layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
@@ -1051,9 +1052,9 @@ def _bounded_symbol_scale(value: float) -> float:
     return max(MIN_SCALE, min(MAX_SCALE, float(value)))
 
 
-def _symbol_root() -> Path:
-    return _repo_root() / "assets" / "symbols"
-
-
-def _scale_config_path() -> Path:
-    return _symbol_root() / "symbol_scales.json"
+# Aliased rather than reimplemented; the module-level names are kept because tests patch
+# daemon._symbol_root / daemon._scale_config_path. _load_scale_payload above is NOT
+# shared.symbols.load_symbol_scales: that one intersects with the symbols present on disk,
+# while the daemon needs the raw entries for downloaded artwork that is not a base symbol.
+_symbol_root = default_symbol_root
+_scale_config_path = default_scale_config_path
