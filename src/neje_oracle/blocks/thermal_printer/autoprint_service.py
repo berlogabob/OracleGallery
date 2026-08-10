@@ -19,36 +19,20 @@ from ipaddress import ip_network
 from pathlib import Path
 from typing import Any
 
-from ...shared.config import FirebaseSettings, firebase_enabled
+from ...shared.config import (
+    FirebaseSettings,
+    _env_float,
+    _env_int,
+    _load_dotenv_file,
+    _repo_root,
+    firebase_enabled,
+)
 from ..firebase.repository import FirebaseRemoteRepository, recorded_datetime
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = _repo_root()
 SEND_RECEIPT_SCRIPT = REPO_ROOT / "ESP32-BTN_Printer" / "tools" / "send_receipt.py"
 
-
-def _load_dotenv_file() -> None:
-    env_path = REPO_ROOT / ".env"
-    if not env_path.exists():
-        return
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
-
-
 _load_dotenv_file()
-
-
-def _env_float(name: str, default: float) -> float:
-    value = os.getenv(name)
-    return float(value) if value is not None else default
-
-
-def _env_int(name: str, default: int) -> int:
-    value = os.getenv(name)
-    return int(value) if value is not None else default
 
 
 @dataclass(frozen=True)
