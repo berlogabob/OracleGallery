@@ -11,7 +11,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from ...shared.config import OracleSupervisorSettings, PlotterSettings, ensure_parent
+from ...shared.config import OracleSupervisorSettings, ensure_parent
 from ...shared.gui_settings import GuiSettings, _repair_xy_acceleration, gui_settings_to_plotter_config
 from ...shared.models import SystemMode
 from ...shared.store import OracleRuntimeStore
@@ -24,9 +24,9 @@ from ...shared.symbols import (
 from .support import default_gui_settings_path
 
 
-def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSettings | None = None) -> GuiSettings:
+def load_gui_settings(path: Path | None = None) -> GuiSettings:
     settings_path = path or default_gui_settings_path()
-    base = GuiSettings.from_plotter_settings(plotter_settings or PlotterSettings())
+    base = GuiSettings()
     if not settings_path.exists():
         base.apply_system_mode()
         return base
@@ -41,10 +41,6 @@ def load_gui_settings(path: Path | None = None, plotter_settings: PlotterSetting
     merged.update({key: value for key, value in payload.items() if key in merged})
     merged["xy_acceleration_mm_s2"] = _repair_xy_acceleration(float(merged.get("xy_acceleration_mm_s2", 0.0) or 0.0))
     settings = GuiSettings(**merged)
-    plotter_defaults = plotter_settings or PlotterSettings()
-    if plotter_defaults.use_z_servo and settings.z_up_mm == 25.0 and settings.z_down_mm == 0.0:
-        settings.z_up_mm = plotter_defaults.z_up_mm
-        settings.z_down_mm = plotter_defaults.z_down_mm
     settings.apply_system_mode()
     return settings
 

@@ -846,39 +846,13 @@ class PlotterDaemon:
         return markers
 
     def _load_plotter_config(self) -> PlotterRuntimeConfig:
-        default = PlotterRuntimeConfig(
-            layout_mode=self.settings.layout_mode,
-            sheet_width_mm=self.settings.sheet_width_mm,
-            sheet_height_mm=self.settings.sheet_height_mm,
-            sheet_margin_mm=self.settings.sheet_margin_mm,
-            cell_diameter_mm=self.settings.cell_diameter_mm,
-            gap_mm=self.settings.cell_gap_mm,
-            organic_enabled=self.settings.organic_enabled,
-            organic_cell_size_mm=self.settings.organic_cell_size_mm,
-            organic_rotation_ramp=self.settings.organic_rotation_ramp,
-            organic_scale_ramp=self.settings.organic_scale_ramp,
-            organic_seed=self.settings.organic_seed,
-            run_mode="exhibition",
-            dry_run=self.settings.dry_run,
-            include_rings=True,
-            include_markers=self.settings.include_markers,
-            marker_diameter_mm=self.settings.marker_diameter_mm,
-            xy_acceleration_mm_s2=self.settings.xy_acceleration_mm_s2,
-            use_z_servo=self.settings.use_z_servo,
-            z_down_mm=self.settings.z_down_mm,
-            z_up_mm=self.settings.z_up_mm,
-            z_feed_mm_min=self.settings.z_feed_mm_min,
-            work_zero_command=self.settings.work_zero_command,
-            sample_step_mm=self.settings.sample_step_mm,
-            sample_reference_cell_mm=self.settings.sample_reference_cell_mm,
-            sample_density_exponent=self.settings.sample_density_exponent,
-            sample_min_step_mm=self.settings.sample_min_step_mm,
-            sample_max_step_mm=self.settings.sample_max_step_mm,
-            streaming_mode=self.settings.streaming_mode,
-        )
+        # The operator's GUI settings are the only source of geometry. This used to build a
+        # 28-field default out of PlotterSettings first, which was never used in production
+        # (the store row always exists) but did let PlotterSettings advertise a sheet size
+        # the machine was not running.
         if self.oracle_store is None:
-            return default
-        return self.oracle_store.load_plotter_config(default)
+            return PlotterRuntimeConfig()
+        return self.oracle_store.load_plotter_config()
 
     def _load_control_state(self) -> PlotterControlState:
         default = self.store.load_control_state()

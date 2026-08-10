@@ -163,39 +163,6 @@ class GuiSettings:
     def mode(self) -> SystemMode:
         return SystemMode(self.system_mode)
 
-    @classmethod
-    def from_plotter_settings(cls, settings: PlotterSettings) -> GuiSettings:
-        return cls(
-            layout_mode=settings.layout_mode,
-            sheet_width_mm=settings.sheet_width_mm,
-            sheet_height_mm=settings.sheet_height_mm,
-            sheet_margin_mm=settings.sheet_margin_mm,
-            cell_diameter_mm=settings.cell_diameter_mm,
-            gap_mm=settings.cell_gap_mm,
-            organic_enabled=settings.organic_enabled,
-            organic_cell_size_mm=settings.organic_cell_size_mm,
-            organic_rotation_ramp=settings.organic_rotation_ramp,
-            organic_scale_ramp=settings.organic_scale_ramp,
-            organic_seed=settings.organic_seed,
-            dry_run=settings.dry_run,
-            travel_rate=settings.travel_rate,
-            draw_rate=settings.draw_rate,
-            xy_acceleration_mm_s2=_repair_xy_acceleration(settings.xy_acceleration_mm_s2),
-            z_down_mm=settings.z_down_mm,
-            z_up_mm=settings.z_up_mm,
-            z_feed_mm_min=settings.z_feed_mm_min,
-            direct_svg_origin_x_mm=GUI_DEFAULTS["direct_svg_origin_x_mm"],
-            direct_svg_origin_y_mm=GUI_DEFAULTS["direct_svg_origin_y_mm"],
-            include_markers=settings.include_markers,
-            marker_diameter_mm=settings.marker_diameter_mm,
-            sample_step_mm=settings.sample_step_mm,
-            sample_reference_cell_mm=settings.sample_reference_cell_mm,
-            sample_density_exponent=settings.sample_density_exponent,
-            sample_min_step_mm=settings.sample_min_step_mm,
-            sample_max_step_mm=settings.sample_max_step_mm,
-            streaming_mode=settings.streaming_mode,
-        )
-
 
 def _repair_xy_acceleration(value: float) -> float:
     if 0.0 < value < 100.0:

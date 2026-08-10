@@ -63,8 +63,8 @@ def test_field_or_default_uses_gui_defaults_for_cleared_fields() -> None:
 
 def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     settings_path = tmp_path / "runtime" / "gui_settings.json"
-    settings = load_gui_settings(settings_path, PlotterSettings(sheet_width_mm=300, sheet_height_mm=200))
-    assert settings.sheet_width_mm == 300
+    settings = load_gui_settings(settings_path)
+    assert settings.sheet_width_mm == GUI_DEFAULTS["sheet_width_mm"]
     assert settings.system_mode == GUI_DEFAULTS["system_mode"]
     assert settings.gap_mm == 0
     assert settings.streaming_mode == "row"
@@ -78,19 +78,12 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     assert reloaded.layout_mode == "grid"
 
 
-def test_gui_settings_missing_file_uses_plotter_streaming_default(tmp_path: Path) -> None:
-    settings_path = tmp_path / "runtime" / "gui_settings.json"
-    settings = load_gui_settings(settings_path, PlotterSettings(streaming_mode="cell"))
-
-    assert settings.streaming_mode == "cell"
-
-
 def test_gui_settings_preserves_saved_cell_streaming(tmp_path: Path) -> None:
     settings_path = tmp_path / "runtime" / "gui_settings.json"
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text('{"streaming_mode": "cell"}', encoding="utf-8")
 
-    settings = load_gui_settings(settings_path, PlotterSettings(streaming_mode="row"))
+    settings = load_gui_settings(settings_path)
 
     assert settings.streaming_mode == "cell"
 
@@ -501,7 +494,7 @@ def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
         svg_bytes=SIMPLE_SYMBOL.encode("utf-8"),
         original_name="label-test.svg",
         output_root=tmp_path / "uploaded_svg",
-        plotter_settings=PlotterSettings(sheet_width_mm=800, sheet_height_mm=800),
+        plotter_settings=PlotterSettings(),
     )
 
     assert job.sheet_id.startswith("testsvg_")
@@ -520,9 +513,10 @@ def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
 def test_direct_svg_bounds_use_operator_sheet_not_plotter_defaults(tmp_path: Path) -> None:
     """Art larger than the operator's configured sheet must be rejected.
 
-    Regression: the bound was read from PlotterSettings (default 250x440) instead of
-    the operator's GuiSettings sheet, so a 200x200 sheet silently accepted art that
-    drew 25mm off the paper.
+    Regression: the bound was read from PlotterSettings' own sheet fields instead of the
+    operator's GuiSettings sheet, so a 200x200 sheet silently accepted art that drew 25mm
+    off the paper. PlotterSettings no longer carries geometry at all, which is what makes
+    that class of mismatch unrepresentable rather than merely fixed.
     """
     svg = (
         "<svg xmlns='http://www.w3.org/2000/svg' width='200mm' height='200mm' viewBox='0 0 200 200'>"
@@ -543,7 +537,7 @@ def test_direct_svg_bounds_use_operator_sheet_not_plotter_defaults(tmp_path: Pat
             original_name="oversized.svg",
             output_root=tmp_path / "uploaded_svg",
             # Deliberately generous: this must NOT be what the bound is taken from.
-            plotter_settings=PlotterSettings(sheet_width_mm=800, sheet_height_mm=800),
+            plotter_settings=PlotterSettings(),
         )
 
 

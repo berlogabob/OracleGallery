@@ -64,12 +64,13 @@ class FakeRemoteRepository:
         destination.write_text(SVG, encoding="utf-8")
 
 
-def _settings(tmp_path: Path) -> PlotterSettings:
-    return PlotterSettings(
-        db_path=tmp_path / "runtime" / "plotter.sqlite3",
-        placeholder_root=tmp_path / "placeholders",
-        spool_root=tmp_path / "spool",
-        poll_seconds=0.0,
+def _config() -> PlotterRuntimeConfig:
+    """Sheet geometry for these tests.
+
+    The daemon reads geometry from the oracle runtime store, not PlotterSettings, so tests
+    must seed it there. These are the values the suite was written against.
+    """
+    return PlotterRuntimeConfig(
         sheet_width_mm=594,
         sheet_height_mm=841,
         sheet_margin_mm=24,
@@ -78,6 +79,22 @@ def _settings(tmp_path: Path) -> PlotterSettings:
         sample_step_mm=8.0,
         travel_rate=5000,
         draw_rate=1800,
+        dry_run=True,
+    )
+
+
+def _seeded_oracle_store(tmp_path: Path, **overrides: object) -> OracleRuntimeStore:
+    store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    store.save_plotter_config(replace(_config(), **overrides))  # type: ignore[arg-type]
+    return store
+
+
+def _settings(tmp_path: Path) -> PlotterSettings:
+    return PlotterSettings(
+        db_path=tmp_path / "runtime" / "plotter.sqlite3",
+        placeholder_root=tmp_path / "placeholders",
+        spool_root=tmp_path / "spool",
+        poll_seconds=0.0,
         pen_up_command="M5",
         pen_down_command="M3 S15",
         dry_run=True,
@@ -159,7 +176,7 @@ def test_plotter_finishes_sheet_and_stops_before_next_sheet(tmp_path: Path) -> N
     )
     remote = FakeRemoteRepository(jobs)
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=_seeded_oracle_store(tmp_path))
 
     daemon.run_cycle()
 
@@ -195,7 +212,7 @@ def test_plotter_can_fall_back_to_placeholders_when_remote_is_down(tmp_path: Pat
     )
     remote = FakeRemoteRepository(fail_claim=True)
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=_seeded_oracle_store(tmp_path))
 
     daemon.run_cycle()
 
@@ -216,7 +233,7 @@ def test_plotter_stops_before_next_sheet_when_operator_disabled(tmp_path: Path) 
     )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=_seeded_oracle_store(tmp_path))
 
     daemon.run_cycle()
 
@@ -405,6 +422,9 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
 
     settings = replace(
         _settings(tmp_path),
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=300,
         sheet_height_mm=260,
         sheet_margin_mm=0,
@@ -443,7 +463,7 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
                 )
             return path
 
-    daemon = PlotterDaemon(settings, store, remote, RowTransport())  # type: ignore[arg-type]
+    daemon = PlotterDaemon(settings, store, remote, RowTransport(), oracle_store=oracle_store)  # type: ignore[arg-type]
 
     daemon.run_cycle()
 
@@ -457,6 +477,9 @@ def test_plotter_stops_sending_rows_when_operator_pauses_mid_sheet(tmp_path: Pat
 
     settings = replace(
         _settings(tmp_path),
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=80,
         sheet_height_mm=160,
         sheet_margin_mm=0,
@@ -499,6 +522,9 @@ def test_plotter_origin_filter_leaves_disallowed_job_pending_and_fills_row(tmp_p
 
     settings = replace(
         _settings(tmp_path),
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=100,
         sheet_height_mm=100,
         sheet_margin_mm=0,
@@ -550,6 +576,9 @@ def test_plotter_can_use_filler_session_package_folders(tmp_path: Path) -> None:
     settings = replace(
         _settings(tmp_path),
         placeholder_root=placeholder_root,
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=100,
         sheet_height_mm=100,
         sheet_margin_mm=0,
@@ -562,7 +591,7 @@ def test_plotter_can_use_filler_session_package_folders(tmp_path: Path) -> None:
     )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
 
     daemon.run_cycle()
 
@@ -574,6 +603,9 @@ def test_plotter_can_use_filler_session_package_folders(tmp_path: Path) -> None:
 def test_plotter_materializes_remote_filler_queue_job_as_placeholder(tmp_path: Path) -> None:
     settings = replace(
         _settings(tmp_path),
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=100,
         sheet_height_mm=100,
         sheet_margin_mm=0,
@@ -601,7 +633,7 @@ def test_plotter_materializes_remote_filler_queue_job_as_placeholder(tmp_path: P
         ]
     )
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
 
     daemon.run_cycle()
 
@@ -636,6 +668,9 @@ def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
     settings = replace(
         _settings(tmp_path),
         placeholder_root=placeholder_root,
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=200.0,
         sheet_height_mm=200.0,
         sheet_margin_mm=0.0,
@@ -653,7 +688,7 @@ def test_daemon_uses_effective_sample_step_not_raw_config_step(tmp_path: Path):
     )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
     sample_steps: list[float] = []
 
     def fake_generate_sheet_gcode(*args, **kwargs):
@@ -676,6 +711,9 @@ def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
     settings = replace(
         _settings(tmp_path),
         placeholder_root=placeholder_root,
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=200.0,
         sheet_height_mm=200.0,
         sheet_margin_mm=0.0,
@@ -694,7 +732,7 @@ def test_daemon_manifest_has_raw_sample_settings(tmp_path: Path):
     )
     remote = FakeRemoteRepository()
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
     daemon.run_cycle()
 
     manifests = sorted(settings.spool_root.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -718,6 +756,9 @@ def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: P
     settings = replace(
         _settings(tmp_path),
         placeholder_root=placeholder_root,
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
         sheet_width_mm=240,
         sheet_height_mm=80,
         sheet_margin_mm=0,
@@ -758,7 +799,7 @@ def test_cell_streaming_sends_one_file_per_cell_and_records_manifest(tmp_path: P
         ]
     )
     transport = FluidNCTransport(settings)
-    daemon = PlotterDaemon(settings, store, remote, transport)
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)
 
     daemon.run_cycle()
 
@@ -788,7 +829,9 @@ def test_sheet_progress_is_cell_based_and_never_runs_backwards(tmp_path: Path) -
     """
     settings = _settings(tmp_path)
     store = PlotterStore(settings.db_path)
-    daemon = PlotterDaemon(settings, store, FakeRemoteRepository(), FluidNCTransport(settings))
+    daemon = PlotterDaemon(
+        settings, store, FakeRemoteRepository(), FluidNCTransport(settings), oracle_store=_seeded_oracle_store(tmp_path)
+    )
 
     # 5-cell sheet streamed one cell at a time, as the live rig does.
     daemon._sheet_total_cells = 5
