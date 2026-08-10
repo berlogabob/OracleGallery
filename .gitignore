@@ -59,3 +59,7 @@ graphify-out/
 # Design reference screenshots (67MB of phone captures). Input material for the
 # pattern generators, not a build input — kept locally, out of git history.
 RAW_Patterns/
+
+# Archived chat logs: kept locally, not worth repo history
+archive/conversations/
+archive/Grok-*.json
