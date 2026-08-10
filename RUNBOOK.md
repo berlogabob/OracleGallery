@@ -193,7 +193,7 @@ Output:
 assets/generated_idle_symbols/
 ```
 
-If this folder exists and contains SVG files, `start_plotter_daemon.sh` uses it automatically. Otherwise the plotter falls back to `assets/symbols`.
+If this folder exists and contains SVG files, the plotter daemon uses it automatically. Otherwise it falls back to `assets/symbols`.
 
 The GUI marks filler cells as `origin=filler_macbook`. Filler symbols are local and do not create Firestore `plot_jobs`.
 
@@ -270,17 +270,9 @@ Preferred exhibition start:
 uv run neje-gui
 ```
 
-Legacy direct daemon start for backup/debugging:
-
-```bash
-NEJE_PLOTTER_DRY_RUN=true uv run neje-plotter
-```
-
-Double-click:
-
-```text
-start_plotter_daemon.command
-```
+The plotter daemon runs inside `neje-gui`; there is no separate daemon process or
+launcher. The former `neje-plotter` entry point and `start_plotter_daemon.command` were
+removed.
 
 Operator dashboard:
 
