@@ -71,7 +71,7 @@ class SystemCheckService:
             return SystemCheck(
                 "local filler fallback",
                 SystemCheckLevel.WARNING,
-                "No legacy local filler SVGs found; production uses queue jobs or Generate next filler",
+                "No legacy local filler SVGs found; production uses queue jobs",
             )
         return SystemCheck(
             "local filler fallback",

@@ -18,10 +18,6 @@ from neje_oracle.blocks.gui.support import (
     build_preview_svg,
     build_realtime_preview_svg,
     create_direct_svg_print_job_from_gui,
-    create_filler_packages_from_gui,
-    create_idle_bank_from_gui,
-    create_next_filler_upload_from_gui,
-    create_user_sessions_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
     load_gui_settings,
@@ -490,127 +486,6 @@ def test_effective_randomness_combines_coarse_and_fine() -> None:
     assert effective_randomness(GuiSettings(randomness=20, randomness_fine=2.5)) == 12.5
     assert effective_randomness(GuiSettings(randomness=98, randomness_fine=10)) == 59
     assert effective_randomness(GuiSettings(randomness=2, randomness_fine=-10)) == 0
-
-
-def test_gui_user_and_idle_generation_helpers(tmp_path: Path) -> None:
-    root = _symbol_root(tmp_path)
-    scale_path = tmp_path / "symbol_scales.json"
-    save_symbol_scales({"symbol_0.svg": 1.0, "symbol_1.svg": 1.0}, scale_path, root)
-    settings = GuiSettings(
-        user_count=1,
-        idle_count=2,
-        idle_variations_per_symbol=1,
-        selected_symbol="symbol_0.svg",
-        randomness=0,
-    )
-
-    user_dirs = create_user_sessions_from_gui(
-        settings, output_root=tmp_path / "sessions", symbol_root=root, scale_path=scale_path
-    )
-    idle_svgs = create_idle_bank_from_gui(
-        settings, output_root=tmp_path / "idle", symbol_root=root, scale_path=scale_path
-    )
-
-    assert (user_dirs[0] / f"{user_dirs[0].name}_plotter.svg").exists()
-    assert (user_dirs[0] / "READY").exists()
-    assert len(idle_svgs) == 2
-    assert idle_svgs[0].read_text(encoding="utf-8").count("<circle") == 0
-
-
-def test_gui_cycle_start_index_advances_selected_base_symbol(tmp_path: Path) -> None:
-    root = _symbol_root(tmp_path)
-    scale_path = tmp_path / "symbol_scales.json"
-    save_symbol_scales({"symbol_0.svg": 1.0, "symbol_1.svg": 1.0}, scale_path, root)
-    settings = GuiSettings(user_count=1, selected_symbol="__cycle__", randomness=0)
-
-    first = create_user_sessions_from_gui(
-        settings,
-        output_root=tmp_path / "sessions",
-        symbol_root=root,
-        scale_path=scale_path,
-        start_index=0,
-    )[0]
-    second = create_user_sessions_from_gui(
-        settings,
-        output_root=tmp_path / "sessions",
-        symbol_root=root,
-        scale_path=scale_path,
-        start_index=1,
-    )[0]
-
-    assert json.loads((first / "metadata.json").read_text(encoding="utf-8"))["baseSymbol"] == "symbol_0.svg"
-    assert json.loads((second / "metadata.json").read_text(encoding="utf-8"))["baseSymbol"] == "symbol_1.svg"
-
-
-def test_idle_variations_per_symbol_generates_more_than_base_bank(tmp_path: Path) -> None:
-    root = _symbol_root(tmp_path)
-    scale_path = tmp_path / "symbol_scales.json"
-    save_symbol_scales({"symbol_0.svg": 1.0, "symbol_1.svg": 1.0}, scale_path, root)
-    settings = GuiSettings(idle_count=1, idle_variations_per_symbol=3, randomness=0)
-
-    idle_svgs = create_idle_bank_from_gui(
-        settings, output_root=tmp_path / "idle", symbol_root=root, scale_path=scale_path
-    )
-
-    assert len(idle_svgs) == 6
-    assert [path.name for path in idle_svgs][:4] == [
-        "idle_01_symbol_0.svg",
-        "idle_02_symbol_1.svg",
-        "idle_03_symbol_0.svg",
-        "idle_04_symbol_1.svg",
-    ]
-
-
-def test_idle_generation_clears_stale_svg_files(tmp_path: Path) -> None:
-    root = _symbol_root(tmp_path)
-    output_root = tmp_path / "idle"
-    output_root.mkdir()
-    (output_root / "stale.svg").write_text(SIMPLE_SYMBOL, encoding="utf-8")
-    settings = GuiSettings(idle_count=1, idle_variations_per_symbol=1, randomness=0)
-
-    idle_svgs = create_idle_bank_from_gui(settings, output_root=output_root, symbol_root=root)
-
-    assert len(idle_svgs) == 2
-    assert not (output_root / "stale.svg").exists()
-
-
-def test_filler_package_generation_uses_session_folder_shape(tmp_path: Path) -> None:
-    root = _symbol_root(tmp_path)
-    output_root = tmp_path / "filler"
-    settings = GuiSettings(idle_count=1, idle_variations_per_symbol=1, randomness=0)
-
-    filler_dirs = create_filler_packages_from_gui(settings, output_root=output_root, symbol_root=root)
-
-    assert len(filler_dirs) == 2
-    first = filler_dirs[0]
-    assert first.name.startswith("filler_")
-    assert (first / f"{first.name}_plotter.svg").exists()
-    assert (first / f"{first.name}_receipt.txt").exists()
-    assert (first / "metadata.json").exists()
-    assert (first / "READY").exists()
-
-
-def test_next_filler_upload_uses_uploader_session_shape_and_tags(tmp_path: Path) -> None:
-    root = _symbol_root(tmp_path)
-    output_root = tmp_path / "sessions"
-    settings = GuiSettings(idle_count=1, idle_variations_per_symbol=1, randomness=0)
-
-    filler_dirs = create_next_filler_upload_from_gui(settings, output_root=output_root, symbol_root=root)
-
-    assert len(filler_dirs) == 1
-    first = filler_dirs[0]
-    metadata = json.loads((first / "metadata.json").read_text(encoding="utf-8"))
-    assert first.parent == output_root
-    assert first.name.startswith("filler_")
-    assert (first / f"{first.name}_plotter.svg").exists()
-    assert (first / f"{first.name}_receipt.txt").exists()
-    assert (first / "READY").exists()
-    assert metadata["origin"] == "filler_macbook"
-    assert metadata["tags"] == ["filler", "local", "macbook"]
-    assert metadata["visibleInLibrary"] is False
-    assert metadata["uploadToFirebase"] is True
-    assert metadata["queue"] == "filler"
-    assert metadata["priority"] == "filler"
 
 
 def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:
