@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import random
-import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,24 +77,6 @@ def normalize_svg_file(
         single_stroke=single_stroke,
         simplify_tolerance_mm=simplify_tolerance_mm,
     )
-
-
-def normalize_svg_text(
-    svg_text: str,
-    *,
-    marker_kind: str = "user",
-    scale: float = 1.0,
-    include_rings: bool = False,
-) -> str:
-    root = ET.fromstring(svg_text)
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".svg", delete=False) as handle:
-        handle.write(svg_text)
-        temporary_path = Path(handle.name)
-    try:
-        bbox = _drawable_bbox_from_tree(root, fallback_path=temporary_path)
-    finally:
-        temporary_path.unlink(missing_ok=True)
-    return normalize_svg_root(root, bbox=bbox, marker_kind=marker_kind, scale=scale, include_rings=include_rings)
 
 
 def normalize_svg_root(

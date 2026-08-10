@@ -6,8 +6,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
-
 
 class PublicStatus(str, Enum):
     PUBLISHING = "publishing"
@@ -570,14 +568,3 @@ def _optional_datetime(value: Any) -> datetime | None:
     if not value:
         return None
     return datetime.fromisoformat(str(value))
-
-
-class HealthResponse(BaseModel):
-    ok: bool
-    status: str
-    detail: dict[str, Any]
-
-
-class OperatorResponse(BaseModel):
-    ok: bool
-    status: str
