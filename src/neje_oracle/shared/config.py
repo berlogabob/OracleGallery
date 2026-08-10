@@ -112,26 +112,11 @@ class PlotterSettings:
     # grows the spool without bound.
     spool_retention_days: int = int(os.getenv("NEJE_PLOTTER_SPOOL_RETENTION_DAYS", "30"))
     poll_seconds: float = _env_float("NEJE_PLOTTER_POLL_SECONDS", 4.0)
-    sheet_width_mm: float = _env_float("NEJE_PLOTTER_SHEET_WIDTH_MM", 250.0)
-    sheet_height_mm: float = _env_float("NEJE_PLOTTER_SHEET_HEIGHT_MM", 440.0)
-    sheet_margin_mm: float = _env_float("NEJE_PLOTTER_SHEET_MARGIN_MM", 0.0)
-    cell_diameter_mm: float = _env_float("NEJE_PLOTTER_CELL_DIAMETER_MM", 80.0)
-    cell_gap_mm: float = _env_float("NEJE_PLOTTER_CELL_GAP_MM", 0.0)
-    layout_mode: str = os.getenv("NEJE_PLOTTER_LAYOUT_MODE", "hex")
-    organic_enabled: bool = _env_bool("NEJE_PLOTTER_ORGANIC_ENABLED", False)
-    organic_cell_size_mm: float = _env_float("NEJE_PLOTTER_ORGANIC_CELL_SIZE_MM", 18.0)
-    organic_rotation_ramp: float = _env_float("NEJE_PLOTTER_ORGANIC_ROTATION_RAMP", 0.0)
-    organic_scale_ramp: float = _env_float("NEJE_PLOTTER_ORGANIC_SCALE_RAMP", 0.0)
-    organic_seed: int = _env_int("NEJE_PLOTTER_ORGANIC_SEED", 1007)
-    sample_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_STEP_MM", 1.0)
-    sample_reference_cell_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_REFERENCE_CELL_MM", 80.0)
-    sample_density_exponent: float = _env_float("NEJE_PLOTTER_SAMPLE_DENSITY_EXPONENT", 1.0)
-    sample_min_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_MIN_STEP_MM", 0.25)
-    sample_max_step_mm: float = _env_float("NEJE_PLOTTER_SAMPLE_MAX_STEP_MM", 3.0)
-    streaming_mode: str = os.getenv("NEJE_PLOTTER_STREAMING_MODE", "row")
-    travel_rate: float = _env_float("NEJE_PLOTTER_TRAVEL_RATE", 5000.0)
-    draw_rate: float = _env_float("NEJE_PLOTTER_DRAW_RATE", 1800.0)
-    xy_acceleration_mm_s2: float = _env_float("NEJE_PLOTTER_XY_ACCELERATION_MM_S2", 1000.0)
+    # Sheet geometry, layout, sampling and feed rates are NOT here. They live in
+    # GuiSettings (runtime/gui_settings.json) and PlotterRuntimeConfig (sqlite), which the
+    # operator edits and the daemon reads. Duplicating them here produced a third opinion
+    # that was silently overwritten before use, and let this file claim a 250x440 sheet
+    # while the machine ran 200x200.
     pen_up_command: str = os.getenv("NEJE_PLOTTER_PEN_UP", "M5")
     pen_down_command: str = os.getenv("NEJE_PLOTTER_PEN_DOWN", "M3 S15")
     # TinyBee touch connector exposes the PWM servo as FluidNC Z axis.
@@ -144,8 +129,6 @@ class PlotterSettings:
         os.getenv("NEJE_PLOTTER_TINYBEE_CONFIG_PATH", str(_repo_root() / "assets" / "tinybee.json"))
     )
     dry_run: bool = _env_bool("NEJE_PLOTTER_DRY_RUN", True)
-    include_markers: bool = _env_bool("NEJE_PLOTTER_INCLUDE_MARKERS", True)
-    marker_diameter_mm: float = _env_float("NEJE_PLOTTER_MARKER_DIAMETER_MM", 1.5)
     fluidnc_http_url: str = os.getenv("NEJE_PLOTTER_FLUIDNC_HTTP_URL", "")
     fluidnc_telnet_host: str = os.getenv(
         "NEJE_PLOTTER_FLUIDNC_TELNET_HOST",

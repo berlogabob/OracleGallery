@@ -290,11 +290,8 @@ def test_direct_print_job_enforces_sheet_bounds(tmp_path: Path, monkeypatch: pyt
         direct_svg_origin_y_mm=0.0,
     )
 
-    # Create PlotterSettings with matching small sheet
-    plotter_settings = PlotterSettings(
-        sheet_width_mm=100.0,
-        sheet_height_mm=100.0,
-    )
+    # Sheet bounds come from GuiSettings above; PlotterSettings no longer carries geometry.
+    plotter_settings = PlotterSettings()
 
     # The function writes to plotter_settings.spool_root by default; use tmp_path instead
     output_root = tmp_path / "spool_test"
