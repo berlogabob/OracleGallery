@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol, cast
 
-from ...shared.config import OracleSupervisorSettings, PlotterSettings, UploaderSettings, _repo_root
+from ...shared.config import OracleSupervisorSettings, PlotterSettings, _repo_root
 from ...shared.gui_settings import (
     GUI_DEFAULTS as GUI_DEFAULTS,
 )
@@ -45,7 +45,6 @@ from ..gcode.dry_run import generate_dry_run_sheet as generate_dry_run_sheet
 from ..gcode.layout import _build_layout_for_settings as _build_layout_for_settings
 from ..gcode.layout import layout_capacity as layout_capacity
 from ..gcode.sampling import compute_effective_sample_step as compute_effective_sample_step
-from ..symbols.session_generator import generate_filler_session_packages, generate_idle_symbols, generate_user_sessions
 
 
 class _NumericField(Protocol):
@@ -67,53 +66,6 @@ def default_gui_settings_path() -> Path:
 
 def default_filler_package_root() -> Path:
     return _repo_root() / "assets" / "generated_filler_sessions"
-
-
-def create_user_sessions_from_gui(
-    settings: GuiSettings,
-    *,
-    output_root: Path | None = None,
-    symbol_root: Path | None = None,
-    scale_path: Path | None = None,
-    start_index: int = 0,
-) -> list[Path]:
-    destination = output_root or UploaderSettings().session_root
-    generated = generate_user_sessions(
-        source_root=symbol_root or default_symbol_root(),
-        output_root=destination,
-        scale_config=scale_path or default_scale_config_path(),
-        count=settings.user_count,
-        jitter_px=effective_randomness(settings) / 100.0 * 8.0,
-        symbol_name=settings.selected_symbol,
-        global_scale=settings.global_scale,
-        include_rings=False,
-        start_index=start_index,
-    )
-    return [session.session_dir for session in generated]
-
-
-def create_next_filler_upload_from_gui(
-    settings: GuiSettings,
-    *,
-    output_root: Path | None = None,
-    symbol_root: Path | None = None,
-    scale_path: Path | None = None,
-    start_index: int = 0,
-) -> list[Path]:
-    destination = output_root or UploaderSettings().session_root
-    generated = generate_filler_session_packages(
-        source_root=symbol_root or default_symbol_root(),
-        output_root=destination,
-        scale_config=scale_path or default_scale_config_path(),
-        count=1,
-        jitter_px=effective_randomness(settings) / 100.0 * 6.0,
-        symbol_name=settings.selected_symbol,
-        global_scale=settings.global_scale,
-        include_rings=False,
-        start_index=start_index,
-        upload_to_firebase=True,
-    )
-    return [session.session_dir for session in generated]
 
 
 def read_upload_content_bytes(content: Any) -> bytes:
@@ -147,61 +99,6 @@ async def read_upload_event_payload(event: Any) -> tuple[str, bytes]:
         raise ValueError("no file content")
     name = str(getattr(event, "name", "") or "uploaded.svg")
     return name, read_upload_content_bytes(content)
-
-
-def create_idle_bank_from_gui(
-    settings: GuiSettings,
-    *,
-    output_root: Path | None = None,
-    symbol_root: Path | None = None,
-    scale_path: Path | None = None,
-) -> list[Path]:
-    symbol_count = len(list_base_symbols(symbol_root))
-    count = max(settings.idle_count, symbol_count * max(settings.idle_variations_per_symbol, 1))
-    destination = output_root or default_idle_root()
-    if destination.exists():
-        for old_svg in destination.glob("*.svg"):
-            old_svg.unlink()
-    return generate_idle_symbols(
-        source_root=symbol_root or default_symbol_root(),
-        output_root=destination,
-        scale_config=scale_path or default_scale_config_path(),
-        count=count,
-        jitter_px=effective_randomness(settings) / 100.0 * 6.0,
-        global_scale=settings.global_scale,
-        include_rings=False,
-    )
-
-
-def create_filler_packages_from_gui(
-    settings: GuiSettings,
-    *,
-    output_root: Path | None = None,
-    symbol_root: Path | None = None,
-    scale_path: Path | None = None,
-) -> list[Path]:
-    symbol_count = len(list_base_symbols(symbol_root))
-    count = max(settings.idle_count, symbol_count * max(settings.idle_variations_per_symbol, 1))
-    destination = output_root or default_filler_package_root()
-    if destination.exists():
-        for old_dir in destination.iterdir():
-            if old_dir.is_dir() and old_dir.name.startswith("filler_"):
-                for child in sorted(old_dir.rglob("*"), reverse=True):
-                    if child.is_file() or child.is_symlink():
-                        child.unlink()
-                    elif child.is_dir():
-                        child.rmdir()
-                old_dir.rmdir()
-    generated = generate_filler_session_packages(
-        source_root=symbol_root or default_symbol_root(),
-        output_root=destination,
-        scale_config=scale_path or default_scale_config_path(),
-        count=count,
-        jitter_px=effective_randomness(settings) / 100.0 * 6.0,
-        global_scale=settings.global_scale,
-        include_rings=False,
-    )
-    return [session.session_dir for session in generated]
 
 
 def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = None) -> dict[str, Any]:
