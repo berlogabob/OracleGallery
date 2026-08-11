@@ -7,8 +7,8 @@ Branch: `graph-debt`. Status legend: ⏳ pending · 🔄 in progress · ✅ done
 |---|--------|-----------------------|--------|--------|--------|
 | W1 | `blocks/gui/support.py` LOC | 1,298 | ≤ 800 | **798** (+ preview.py 504, settings_io.py 82) | ✅ |
 | W1 | tests passing | 202 | all green | **204 passed** (202 + 2 new geometry tests) | ✅ |
-| W2 | contradictory working-area claims | 3 docs disagree (255×420 vs 255×440 vs 250×440) | 0 — GEOMETRY.md single source | **0** — GEOMETRY.md authoritative; hardware README fixed to 255×420; root README links it | ✅ |
-| W2 | sheet-vs-travel guard test | none | 1 test tracking sheet 440mm > Y-travel 420mm | **2 tests** in `tests/test_geometry_consistency.py` (width fits; height overshoot made visible) | ✅ |
+| W2 | contradictory working-area claims | 3 docs disagree (255×420 vs 255×440 vs 250×440) | 0 — GEOMETRY.md single source | **0** — GEOMETRY.md authoritative; root README links it. *(Corrected 2026-08-07 to 255×440 — see the resolved item below; this row originally recorded 255×420.)* | ✅ |
+| W2 | sheet-vs-travel guard test | none | 1 test tracking sheet against Y travel | **3 tests** in `tests/test_geometry_consistency.py` (width fits; GUI and runtime defaults agree; 440mm sheet in 440mm travel leaves zero margin for the work-zero offset) | ✅ |
 | W3 | INFERRED graph edges audited | 0/22 flagged (16 unique after dedup) | all verdicts with file:line evidence | **16/16**: 1 CORRECT, 15 WRONG (LLM mistook injected test doubles for real deps); root cause fixed in Round 2 (F1) by excluding `tests/`/`docs/` from the graph | ✅ |
 | W4 | dead block stubs | 1 (`blocks/direct_print/`) | 0 | **0** — deleted, references cleaned, `grep -r direct_print src tests` empty | ✅ |
 | info | god-node degree GuiSettings / SupervisorService / GuiContext | 89 / 83 / 78 | re-measured post-refactor | **92 / 83 / 78** (graph 2026-08-04b: 1,780 nodes / 4,828 edges / 114 communities) | ✅ |
@@ -17,9 +17,12 @@ Branch: `graph-debt`. Status legend: ⏳ pending · 🔄 in progress · ✅ done
 
 The W1 split reduced *file-level* debt (support.py −500 LOC) but, as expected for a mechanical extraction, did not reduce *class-level* coupling: `GuiSettings`'s degree even rose slightly (re-export edges from the two new modules). Actually shrinking the god **classes** (`GuiSettings`, `GuiContext`) would require an interface-level refactor — deliberately out of scope here; candidate for a future workstream.
 
-## Open item carried forward
+## ~~Open item carried forward~~ — RESOLVED 2026-08-07
 
-- **Hardware verification**: is the physical Y travel really 420mm, or was the machine modified for 440mm sheets? Until answered on the machine, `echodraw/hardware/GEOMETRY.md` documents the 20mm overshoot and `tests/test_geometry_consistency.py` keeps it visible.
+- **Hardware verification**: ~~is the physical Y travel really 420mm, or was the machine modified for 440mm sheets?~~ **Answered on the machine, 2026-08-07.** Y travel is **440 mm**, homing negative to 0, measured against the running FluidNC controller (`$CD` dump and `$SS` boot log) and cross-checked with `echodraw/hardware/configs/config.yaml`. The 420 figure came from a pre-servo draft config that was never flashed; `assets/tinybee.json` was correct all along.
+  - **There is no 20 mm overshoot.** `echodraw/hardware/GEOMETRY.md` was rewritten with the measured values, and `tests/test_geometry_consistency.py` now carries `HARDWARE_TRAVEL_Y_MM = 440.0` with a comment recording that the old overshoot assertion was wrong.
+  - The real constraint is tighter than a margin check: the default 250×440 sheet fits Y **exactly**, so sheet height *plus the work-zero offset* must stay within travel. With G54 at machine (5, 5) only 435 mm of Y remains. `test_default_sheet_height_has_no_y_margin` pins this.
+  - This item stayed marked open for six days after it was answered, so the knowledge graph kept reporting it as a live question. Recording the resolution here is what removes it.
 
 ---
 
@@ -75,3 +78,45 @@ The W1 split reduced *file-level* debt (support.py −500 LOC) but, as expected 
 | Tests | — | 204 passed; GUI boot 200 | ✅ |
 
 Next audit run computes the formal trend against audit/2026-08-05-1008/findings.json (expect F-001 and the three sev-3s → fixed).
+
+---
+
+# Round 5 (2026-08-11): graph re-measured after the pattern-bank / pen-profile work
+
+Graph: 1,733 nodes / 3,979 edges / 125 communities. Import cycles: **none**. Graph health: OK
+(no dangling, missing, or collapsed edges).
+
+| # | Metric | Round 2 (2026-08-05) | Now | Status |
+|---|--------|----------------------|-----|--------|
+| G1 | god-node degree `GuiContext` | 77 | **86** (+9) | ⏳ regressed |
+| G1 | god-node degree `SupervisorService` | 54 | **60** (+6) | ⏳ regressed |
+| G1 | god-node degree `GuiSettings` | 36 | **47** (+11) | ⏳ regressed |
+| G1 | god-node degree `ComponentState` | 45 | **44** (−1) | ✅ flat |
+| G2 | stale open item propagated into the graph | 1 (Y-travel, resolved 2026-08-07) | **0** — recorded above | ✅ |
+| G3 | GUI controls bound to a `GuiSettings` field that never persist | 1 (`pen_width_mm`, silent for months) | **0**, and guarded by a test | ✅ |
+| — | import cycles | 0 | **0** | ✅ |
+
+## Why the god nodes grew
+
+Two `GuiSettings` fields (`pen_down_dwell_ms`, `pen_profile`), the new
+`shared/pen_profiles.py` which reads and writes them, `ctx.generate_pen_cal`, and the pen
+pulls added to `pull_settings_from_fields` — plus the four drawing modes and the
+frame-sheet work landed between the two measurements. Feature growth landing on the same
+three classes, which is precisely the coupling Round 1 predicted the file split would not
+fix (see "Reading the informational row" above).
+
+**Still deliberately not refactoring them.** Shrinking the god *classes* needs an
+interface-level change and belongs in its own workstream, with the graph measured before
+and after. Recording the trend is the point of this row.
+
+## What was done instead (G3)
+
+`pull_settings_from_fields` is a hand-written field-by-field copy; a control missing from
+it silently never persists, which is exactly how `pen_width_mm` ended up with a value on
+`GuiSettings` and no working control. Measured across every workspace: 32 controls bind to
+a `GuiSettings` field and all 32 now round-trip.
+
+`test_every_gui_control_survives_a_settings_round_trip` in `tests/test_gui_workspaces.py`
+now builds every workspace, writes a probe into each such control, and asserts it survives
+the pull. That makes the failure mode impossible to ship without touching the god class —
+the cheap half of the refactor, taken now.

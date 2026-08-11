@@ -289,6 +289,7 @@ class PlotterDaemon:
                     z_down_mm=config.z_down_mm,
                     z_up_mm=config.z_up_mm,
                     z_feed_mm_min=config.z_feed_mm_min,
+                    pen_down_dwell_ms=config.pen_down_dwell_ms,
                 )
                 total_gcode_lines = len(row_gcode.splitlines())
                 row_id = f"{sheet_id}_row_{row_index:02d}"
@@ -330,15 +331,16 @@ class PlotterDaemon:
                         progress_callback=self._record_gcode_progress,
                     )
                 except Exception as exc:  # noqa: BLE001
+                    # Stop the machine and lift the pen BEFORE recording anything: the
+                    # planner is still draining and the nib is on the paper.
+                    failure = self._abort_recovery(config, str(exc))
                     for job in user_jobs:
-                        self.remote.update_plot_job(
-                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
-                        )
+                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=failure)
                         self.store.record_job_status(
-                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
+                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=failure
                         )
                     row_payload["status"] = "failed"
-                    row_payload["error"] = str(exc)
+                    row_payload["error"] = failure
                     self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
                     if self.oracle_store is not None:
                         control = self.oracle_store.load_print_control()
@@ -346,10 +348,12 @@ class PlotterDaemon:
                         control.operator_paused = True
                         self.oracle_store.save_print_control(control)
                         self.oracle_store.set_component(
-                            "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}"
+                            "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {failure}"
                         )
                     self._set_state(
-                        RuntimeStatus.ERROR, f"Plotter transport failed on row {row_index}: {exc}", sheet_id=sheet_id
+                        RuntimeStatus.ERROR,
+                        f"Plotter transport failed on row {row_index}: {failure}",
+                        sheet_id=sheet_id,
                     )
                     return
 
@@ -421,6 +425,36 @@ class PlotterDaemon:
             self.oracle_store.set_component(
                 "plotter", ComponentStatus.WARNING, message="Sheet finished; print stopped", heartbeat=True
             )
+
+    def _abort_recovery(self, config: PlotterRuntimeConfig, reason: str) -> str:
+        """Get the pen off the paper after a failed print. Never raises.
+
+        The success path ends with _post_sheet_safety_gcode, but every abort path used to
+        `return` before reaching it -- so a failed sheet left the nib pressed into the
+        paper. Worse, transport.send() closes its socket on the way out while FluidNC's
+        planner still holds queued moves, so the machine kept drawing after the abort.
+
+        Order matters: the soft reset is what actually flushes the planner and stops the
+        motion. It also puts the controller in Alarm, so the Z move after it may be
+        refused with `[MSG:ERR: Reset to continue]` -- that is reported, not worked
+        around. No automatic $X or $H: unlocking would clear the alarm and silently
+        discard the position reference, and nothing else in this codebase sends either
+        without an operator confirming it.
+        """
+        note = reason
+        try:
+            self.transport.soft_reset()
+        except Exception as exc:  # noqa: BLE001
+            return f"{note} (could not stop the controller: {exc}; pen may still be down, check the paper)"
+
+        try:
+            result = self.transport.send_commands(["G21", "G90", f"G0 Z{config.z_up_mm:.3f}"])
+        except Exception as exc:  # noqa: BLE001
+            return f"{note} (pen lift failed: {exc}; pen may still be down, check the paper)"
+
+        if not result.ok:
+            return f"{note} (pen lift refused: {result.message}; pen may still be down, check the paper)"
+        return f"{note} (motion stopped, pen lifted)"
 
     def _post_sheet_safety_gcode(self, config: PlotterRuntimeConfig, sheet_id: str) -> str:
         pen_up = "$H=Z" if config.use_z_servo else self.settings.pen_up_command
@@ -506,6 +540,7 @@ class PlotterDaemon:
                     z_down_mm=config.z_down_mm,
                     z_up_mm=config.z_up_mm,
                     z_feed_mm_min=config.z_feed_mm_min,
+                    pen_down_dwell_ms=config.pen_down_dwell_ms,
                 )
                 total_gcode_lines = len(cell_gcode.splitlines())
                 self._current_row_sheet_indexes = [placement.index]
@@ -546,15 +581,16 @@ class PlotterDaemon:
                         progress_callback=self._record_gcode_progress,
                     )
                 except Exception as exc:  # noqa: BLE001
+                    # Stop the machine and lift the pen BEFORE recording anything: the
+                    # planner is still draining and the nib is on the paper.
+                    failure = self._abort_recovery(config, str(exc))
                     for job in user_jobs:
-                        self.remote.update_plot_job(
-                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
-                        )
+                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=failure)
                         self.store.record_job_status(
-                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc)
+                            job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=failure
                         )
                     cell_payload["status"] = "failed"
-                    cell_payload["error"] = str(exc)
+                    cell_payload["error"] = failure
                     self._replace_manifest_cell(manifest_path, manifest, cell_id, cell_payload)
                     if self.oracle_store is not None:
                         failed_control = self.oracle_store.load_print_control()
@@ -562,11 +598,11 @@ class PlotterDaemon:
                         failed_control.operator_paused = True
                         self.oracle_store.save_print_control(failed_control)
                         self.oracle_store.set_component(
-                            "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {exc}"
+                            "print", ComponentStatus.STOPPED, message=f"Print disabled after FluidNC error: {failure}"
                         )
                     self._set_state(
                         RuntimeStatus.ERROR,
-                        f"Plotter transport failed on cell {placement.index + 1}: {exc}",
+                        f"Plotter transport failed on cell {placement.index + 1}: {failure}",
                         sheet_id=sheet_id,
                     )
                     return None

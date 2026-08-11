@@ -371,7 +371,7 @@ class FluidNCTransport:
                 if progress_callback:
                     progress_callback(acked, total)
                 fill_window()
-            elif lower.startswith("error") or "alarm" in lower:
+            elif is_failure_response(response_line):
                 failing_index = acked + 1
                 failing_line = lines[failing_index - 1]
                 raise RuntimeError(f"FluidNC rejected line {failing_index}: {failing_line} :: {response_line}")
@@ -455,7 +455,7 @@ class FluidNCTransport:
                 lower = line.lower()
                 if lower == "ok":
                     return FluidNCCommandResult(ok=True, command=command, response_lines=lines)
-                if lower.startswith("error") or "alarm" in lower:
+                if is_failure_response(line):
                     return FluidNCCommandResult(ok=False, command=command, response_lines=lines, error=line)
         return FluidNCCommandResult(
             ok=False, command=command, response_lines=lines, error=f"Timed out waiting for ok after {command}"
@@ -505,6 +505,22 @@ class FluidNCTransport:
                 + (f" ({probe.last_error})" if probe.last_error else "")
             )
         return f"FluidNC Telnet online but status probe failed: {probe.last_error or probe.last_response or 'unknown response'}"
+
+
+def is_failure_response(line: str) -> bool:
+    """Whether a FluidNC reply line means the command was refused.
+
+    `[MSG:ERR: ...]` matters as much as `error:N`. FluidNC answers a command it will not
+    run while in Alarm with `[MSG:ERR: Reset to continue]` and *then* sends `ok`, so
+    matching only `error`/`alarm` let the trailing `ok` be read as success: the pen-up was
+    logged as done while the pen was still on the paper
+    (logs/oracle_supervisor.log:736, four occurrences).
+
+    Accepted false positive: `$SS` reports `[MSG:ERR: Showing startup log from previous
+    panic]` informationally. No code path sends `$SS`.
+    """
+    lower = line.strip().lower()
+    return lower.startswith("error") or "alarm" in lower or "[msg:err" in lower
 
 
 def parse_status_response(response: str) -> FluidNCControllerState:
