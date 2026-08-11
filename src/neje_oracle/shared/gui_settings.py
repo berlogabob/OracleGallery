@@ -39,6 +39,7 @@ class GuiDefaults(TypedDict):
     z_down_mm: float
     z_up_mm: float
     z_feed_mm_min: float
+    pen_width_mm: float
     direct_svg_origin_x_mm: float
     direct_svg_origin_y_mm: float
 
@@ -68,6 +69,7 @@ type NumericGuiDefaultKey = Literal[
     "z_down_mm",
     "z_up_mm",
     "z_feed_mm_min",
+    "pen_width_mm",
     "direct_svg_origin_x_mm",
     "direct_svg_origin_y_mm",
 ]
@@ -103,6 +105,7 @@ GUI_DEFAULTS: GuiDefaults = {
     "z_down_mm": -25.0,
     "z_up_mm": 0.0,
     "z_feed_mm_min": 1000.0,
+    "pen_width_mm": 0.3,
     "direct_svg_origin_x_mm": 25.0,
     "direct_svg_origin_y_mm": 25.0,
 }
@@ -145,6 +148,10 @@ class GuiSettings:
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
     z_feed_mm_min: float = 1000.0
+    # Nib calibration: the width of the emitted SVG stroke, and how many passes trace
+    # needs to fill a bold line. halftone's min_ink_mm is NOT wired to this yet — it keeps
+    # its own 0.15 default, so a very different nib still wants that adjusted by hand.
+    pen_width_mm: float = GUI_DEFAULTS["pen_width_mm"]
     direct_svg_origin_x_mm: float = GUI_DEFAULTS["direct_svg_origin_x_mm"]
     direct_svg_origin_y_mm: float = GUI_DEFAULTS["direct_svg_origin_y_mm"]
     user_count: int = 1

@@ -20,16 +20,18 @@ same sandbox: it is a read-only bundled asset root.
 
 from __future__ import annotations
 
+import inspect
 import io
 
 import pytest
 from nicegui import ui
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from neje_oracle.blocks.gui.context import GuiContext
 from neje_oracle.blocks.gui.workspaces import calibration, connection, exhibition, generative, work
 from neje_oracle.blocks.gui.workspaces import image as image_workspace
 from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
+from neje_oracle.blocks.imaging.modes import MODES, image_to_polylines, polylines_to_svg
 from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.origin_markers import ALL_ORIGINS
 
@@ -179,17 +181,128 @@ def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypat
     assert "<svg" in image_workspace.STATE["svg"]
 
 
-@pytest.mark.parametrize(
-    ("mode", "detail", "expected"),
-    [
-        ("halftone", 1.0, {}),
-        ("hatch", 2.0, {"line_spacing_mm": 2.0, "angle_deg": 45.0}),
-        ("dither", 1.0, {}),
-        ("contour", 3.7, {"bands": 4}),
-    ],
-)
-def test_mode_params_covers_every_image_mode(mode: str, detail: float, expected: dict) -> None:
-    assert image_workspace._mode_params(mode, detail) == expected
+def test_travel_toggle_changes_only_the_view() -> None:
+    """Hiding travel lines must change the picture on screen and nothing else.
+
+    The switch selects between two serializers, and one of them emits red <line> elements
+    that svg_gcode would gladly draw. If the toggle ever reached the print path, turning it
+    on would make the pen trace every pen-up move.
+    """
+    polylines = [[(0.0, 0.0), (10.0, 0.0)], [(30.0, 30.0), (40.0, 30.0)]]
+    try:
+        image_workspace.STATE["show_travel"] = True
+        with_travel = image_workspace.preview_svg(polylines, width_mm=50, height_mm=50)
+        image_workspace.STATE["show_travel"] = False
+        without = image_workspace.preview_svg(polylines, width_mm=50, height_mm=50)
+    finally:
+        image_workspace.STATE["show_travel"] = True
+
+    assert "<line" in with_travel
+    assert "<line" not in without
+    # Travel hidden, the preview IS the printed geometry — same serializer, same output.
+    assert without == polylines_to_svg(polylines, width_mm=50, height_mm=50)
+    assert with_travel.count("<polyline") == without.count("<polyline")
+
+
+def test_mode_params_are_accepted_by_every_mode() -> None:
+    """Every key the GUI emits must be a real keyword of the mode it is aimed at.
+
+    The old version of this test hardcoded four modes and so proved nothing about the two
+    added since; a bad key only surfaces as a TypeError once an operator picks that mode.
+    """
+    for name, function in MODES.items():
+        accepted = set(inspect.signature(function).parameters)
+        for quality in image_workspace.QUALITY_PRESETS:
+            produced = image_workspace._mode_params(name, 1.0, quality)
+            assert set(produced) <= accepted, f"{name}/{quality} passes {set(produced) - accepted}"
+
+
+def test_every_quality_preset_converts_without_dead_ending() -> None:
+    """A preset the operator can select must never hand them a blank preview.
+
+    This is the shipped-defaults bug in general form: halftone at cell 1.5 used to raise on
+    every real image, and the first cut of the fader put `fine` past the skeleton cap. Both
+    budgets rise with the preset precisely so the slow end stays reachable.
+
+    The fixture has to be busy and full-size — an earlier version used a 256 px swatch on an
+    80 mm frame, which is far too small to reach either cap and so proved nothing.
+    """
+    data = _dense_line_art_png()
+
+    for name in MODES:
+        for quality in image_workspace.QUALITY_PRESETS:
+            image_to_polylines(
+                data,
+                mode=name,
+                width_mm=150.0,
+                height_mm=150.0,
+                cell_mm=image_workspace.quality_cell_mm(name, quality),
+                max_segments=image_workspace.quality_max_segments(quality),
+                **image_workspace._mode_params(name, 1.0, quality),
+            )
+
+
+def test_quality_fader_buys_detail_monotonically() -> None:
+    """Pushing the fader up must actually add strokes, or the label is lying about the cost."""
+    strokes = []
+    for quality in image_workspace.QUALITY_PRESETS:
+        polylines = image_to_polylines(
+            _line_art_png(),
+            mode="trace",
+            width_mm=100.0,
+            height_mm=100.0,
+            # A hair-thin pen, so this measures the fader and only the fader. quality_cell_mm
+            # now floors trace's grid at half the pen width, and with a real nib that floor
+            # binds hard enough to flatten the top presets into each other — which is correct
+            # behaviour, and is asserted separately by test_pen_width_floors_the_fader.
+            cell_mm=image_workspace.quality_cell_mm("trace", quality, 0.05),
+            max_segments=image_workspace.quality_max_segments(quality),
+            **image_workspace._mode_params("trace", 1.0, quality),
+        )
+        strokes.append(sum(len(p) - 1 for p in polylines))
+    # Deliberately not asserting step-by-step monotonicity on segment count, because that
+    # is not monotonic and should not be: a coarser grid blurs neighbouring strokes into
+    # one thicker stroke, which then earns more weight passes. Measured, draft can emit
+    # more segments than fast while resolving strictly less.
+    #
+    # Fidelity is the property that really is ordered, and it is verified against the real
+    # folders by the sweep recorded next to _TYPICAL_MINUTES (draft 0.881 -> max 0.947).
+    # What this test can cheaply guarantee is that the fader's range is worth having.
+    assert strokes[-1] > strokes[0] * 2, f"max barely differs from draft: {strokes}"
+    assert strokes[-1] == max(strokes), f"max was not the most detailed preset: {strokes}"
+
+
+def test_pen_width_floors_the_fader() -> None:
+    """A preset may not ask for detail the pen cannot draw.
+
+    Measured on paper with a 0.5 mm fineliner: a 0.5 mm line pair merged into one line. So
+    tracing at the shipped 0.10 mm grid resolves strokes three deep inside one nib width, and
+    the biplane's engine printed as mud. The floor merges that detail in the raster instead,
+    before thinning runs, which is both truthful and faster.
+    """
+    for quality in image_workspace.QUALITY_PRESETS:
+        assert image_workspace.quality_cell_mm("trace", quality, 0.5) >= 0.25
+        # Dot pitch goes the other way: a lattice finer than two nib widths fills in solid.
+        # dither at balanced shipped 0.7 mm with a 0.42 mm dot, and printed as solid bands.
+        assert image_workspace.quality_cell_mm("dither", quality, 0.5) >= 1.0
+        assert image_workspace.quality_cell_mm("halftone", quality, 0.5) >= 1.0
+    # A fine nib must not be penalised by a floor meant for a fat one.
+    assert image_workspace.quality_cell_mm("trace", "max", 0.05) == 0.10
+    assert image_workspace.quality_cell_mm("dither", "max", 0.05) == 0.40
+
+
+def test_plot_estimate_counts_pen_lift_time() -> None:
+    """The estimate used to count XY only and under-reported dot modes by ~10x."""
+    settings = GuiSettings(draw_rate=1800.0, travel_rate=5000.0, z_down_mm=-25.0, z_up_mm=0.0, z_feed_mm_min=1000.0)
+    kwargs = {"strokes": 488, "draw_mm": 2000.0, "travel_mm": 2700.0}
+
+    xy, pen = image_workspace.plot_minutes(settings, use_z_servo=True, **kwargs)
+    assert xy == pytest.approx(1.65, abs=0.05)
+    # 488 strokes x (25 mm down at 1000 + 25 mm up at 5000). This term was missing entirely.
+    assert pen == pytest.approx(14.6, abs=0.1)
+
+    # A laser-style M3/M5 pen has no Z round trip, so the old number was right there.
+    assert image_workspace.plot_minutes(settings, use_z_servo=False, **kwargs) == (xy, 0.0)
 
 
 def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -219,3 +332,39 @@ def test_tab_switch_still_sets_system_mode_when_not_printing(monkeypatch: pytest
     ctx.workspace_changed("tests")
 
     assert changed, "tab-linked mode default should still apply when idle"
+
+
+def _line_art_png(size: int = 600) -> bytes:
+    """Strokes of mixed weight — what the fader has to resolve more of as it rises."""
+    image = Image.new("L", (size, size), 255)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([80, 100, 520, 380], outline=0, width=6)
+    draw.ellipse([160, 150, 440, 330], outline=0, width=2)
+    for x in range(100, 500, 14):
+        draw.line([x, 400, x + 30, 470], fill=0, width=1)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _dense_line_art_png(size: int = 1024) -> bytes:
+    """A busy full-size drawing: outlines, dense hatching, fine detail.
+
+    Sized and populated to reach the segment and skeleton caps at the top presets, which is
+    the only way this fixture can prove a preset is selectable.
+    """
+    image = Image.new("L", (size, size), 255)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([60, 80, 960, 700], outline=0, width=8)
+    draw.ellipse([180, 160, 840, 620], outline=0, width=3)
+    for x in range(80, 950, 9):
+        draw.line([x, 90, x + 40, 690], fill=0, width=1)
+    for y in range(720, 1000, 7):
+        draw.line([70, y, 950, y + 12], fill=0, width=1)
+    return _to_png(image)
+
+
+def _to_png(image: Image.Image) -> bytes:
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
