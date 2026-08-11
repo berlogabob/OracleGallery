@@ -17,7 +17,9 @@ from neje_oracle.blocks.imaging.modes import (
     image_to_svg,
     load_tone,
     order_serpentine,
+    polylines_to_svg,
     travel_length_mm,
+    travel_preview_svg,
 )
 
 
@@ -52,7 +54,19 @@ def _bucket_draw_lengths(polylines: list[list[tuple[float, float]]], width_mm: f
 
 
 def test_all_modes_registered() -> None:
-    assert set(MODES) == {"halftone", "hatch", "dither", "contour"}
+    assert set(MODES) == {
+        "halftone",
+        "hatch",
+        "dither",
+        "contour",
+        "trace",
+        "crosshatch",
+        "flow",
+        "spiral",
+        "wave",
+        "stipple",
+        "squiggle",
+    }
 
 
 def test_solid_white_produces_no_ink() -> None:
@@ -62,10 +76,18 @@ def test_solid_white_produces_no_ink() -> None:
 
 
 def test_monotonic_ink_vs_brightness() -> None:
+    """Ink density must fall as the image gets lighter — for the tone modes.
+
+    trace is excluded on purpose, not because it fails: it is not a tone renderer. It
+    follows strokes, and a smooth gradient has none, so "ink proportional to darkness" is
+    not a property it is supposed to have. tests/test_imaging_trace.py covers it instead.
+    """
     gradient = np.tile(np.arange(256, dtype=np.uint8), (64, 1))
     data = _png(Image.fromarray(gradient, mode="L"))
     tone = load_tone(data, width_mm=80, height_mm=20, cell_mm=1)
     for name, mode in MODES.items():
+        if name == "trace":
+            continue
         if name == "halftone":
             polylines = mode(tone, angle_deg=0.0)
         elif name == "contour":
@@ -74,7 +96,14 @@ def test_monotonic_ink_vs_brightness() -> None:
             polylines = mode(tone)
         buckets = _bucket_draw_lengths(polylines, tone.width_mm)
         assert buckets[0] > buckets[-1], (name, buckets)
-        assert all(right <= left * 1.15 + 0.01 for left, right in zip(buckets, buckets[1:], strict=False)), (
+        # flow gets a looser bar between adjacent buckets, not a free pass: the overall
+        # fall is still asserted above. The scanline modes lay down a fine threshold ladder
+        # and quantise smoothly, whereas flow places whole streamlines — at the light end
+        # its spacing is ~3 mm, so a 10 mm bucket holds about three lines and one line
+        # either way is a third of the bucket. That is placement granularity, not a break
+        # in the density-from-darkness mapping.
+        tolerance = 1.4 if name == "flow" else 1.15
+        assert all(right <= left * tolerance + 0.01 for left, right in zip(buckets, buckets[1:], strict=False)), (
             name,
             buckets,
         )
@@ -135,6 +164,34 @@ def test_segment_cap_raises() -> None:
             cell_mm=0.25,
             max_segments=100,
         )
+
+
+def test_halftone_at_gui_defaults_survives_a_dense_image() -> None:
+    """The shipped defaults must render, not dead-end on the segment cap.
+
+    cell_mm=1.5 used to be the default: 10 000 cells over a 150 mm frame, past the 40k
+    cap before a single vertex was placed, so every real photo produced a blank preview.
+    """
+    noise = np.random.default_rng(0).integers(40, 200, size=(512, 512), dtype=np.uint8)
+    data = _png(Image.fromarray(noise, mode="L"))
+    polylines = image_to_polylines(data, mode="halftone", width_mm=150.0, height_mm=150.0, cell_mm=3.0)
+    assert polylines
+
+
+def test_travel_preview_is_screen_only_and_never_reaches_the_plotter() -> None:
+    """The preview draws pen-up moves in red. If those leak into the print path the pen
+    draws every one of them, so the two serializers must stay separate."""
+    polylines = [[(0.0, 0.0), (10.0, 0.0)], [(30.0, 30.0), (40.0, 30.0)]]
+    printed = polylines_to_svg(polylines, width_mm=50, height_mm=50)
+    preview = travel_preview_svg(polylines, width_mm=50, height_mm=50)
+
+    assert "<line" not in printed and "#c4623f" not in printed
+    assert 'width="50mm" height="50mm"' in printed
+    # One hop from the origin to stroke one, one from stroke one's end to stroke two.
+    assert preview.count("<line") == 2
+    assert preview.count("<polyline") == printed.count("<polyline")
+    # A non-square frame must not be serialized as a square.
+    assert 'width="40mm" height="90mm"' in travel_preview_svg(polylines, width_mm=40, height_mm=90)
 
 
 def test_unknown_mode_raises() -> None:
