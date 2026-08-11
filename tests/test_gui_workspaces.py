@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import inspect
 import io
+from dataclasses import fields as dataclass_fields
 
 import pytest
 from nicegui import ui
@@ -34,6 +35,7 @@ from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
 from neje_oracle.blocks.imaging.modes import MODES, image_to_polylines, polylines_to_svg
 from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.origin_markers import ALL_ORIGINS
+from neje_oracle.shared.pen_profiles import PEN_PROFILE_FIELDS, apply_pen_profile
 
 
 def _new_ctx(monkeypatch: pytest.MonkeyPatch) -> GuiContext:
@@ -179,6 +181,83 @@ def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypat
         image_workspace.build(ctx)
 
     assert "<svg" in image_workspace.STATE["svg"]
+
+
+def test_motif_import_card_traces_a_real_preview(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same trick as the preview test above: build() calls the card's refresh() once at
+    the end, so pre-seeding MOTIF_STATE runs the real crop -> trace -> unit-box -> svg
+    pipeline rather than the empty-state branch.
+    """
+    image = Image.new("L", (200, 200), 255)
+    ImageDraw.Draw(image).ellipse((60, 60, 140, 140), fill=0)
+    previous = dict(image_workspace.MOTIF_STATE)
+    try:
+        image_workspace.MOTIF_STATE.update({"name": "glyph.png", "bytes": _to_png(image)})
+        ctx = _new_ctx(monkeypatch)
+        with ui.column():
+            image_workspace.build(ctx)
+        assert "<svg" in image_workspace.MOTIF_STATE["svg"]
+    finally:
+        image_workspace.MOTIF_STATE.clear()
+        image_workspace.MOTIF_STATE.update(previous)
+
+
+def test_motif_import_card_reports_a_bad_crop_instead_of_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A crop landing on blank paper is a normal operator outcome, not a crash."""
+    previous = dict(image_workspace.MOTIF_STATE)
+    try:
+        image_workspace.MOTIF_STATE.update({"name": "blank.png", "bytes": _to_png(Image.new("L", (200, 200), 255))})
+        ctx = _new_ctx(monkeypatch)
+        with ui.column():
+            image_workspace.build(ctx)
+        assert image_workspace.MOTIF_STATE["svg"] == ""
+    finally:
+        image_workspace.MOTIF_STATE.clear()
+        image_workspace.MOTIF_STATE.update(previous)
+
+
+def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every control bound to a GuiSettings field must actually persist.
+
+    `pull_settings_from_fields` is a hand-written field-by-field copy, so a control missing
+    from it is silently inert: the operator moves it, the value is read back from the
+    widget on the next refresh, and nothing is ever written. `pen_width_mm` sat on
+    GuiSettings for months with a value and no working control for exactly this reason.
+
+    Rather than trusting a fixed list, this discovers the controls by building every
+    workspace and intersecting ctx.fields with the GuiSettings field names -- so a control
+    added later is covered without anyone remembering to extend the test.
+    """
+    ctx = _new_ctx(monkeypatch)
+    with ui.column():
+        # The whole page: pull_settings_from_fields reads controls from several tabs at
+        # once (the direct-SVG origin lives on TESTS, the feeds on CALIBRATION).
+        for workspace in (connection, calibration, tests_workspace, work, exhibition):
+            workspace.build(ctx)
+
+    # Probe per declared type: an int field is pulled through int(), so a fractional
+    # probe would truncate and read as "did not survive" when it persisted correctly.
+    numeric = {field.name: field.type for field in dataclass_fields(GuiSettings()) if field.type in ("float", "int")}
+    bound = sorted(key for key in ctx.fields if key in numeric)
+    assert set(PEN_PROFILE_FIELDS) <= set(bound), "a pen profile field has no control"
+    assert len(bound) >= 25, f"only {len(bound)} controls discovered; did a workspace fail to build?"
+
+    # Values no default equals, so "survived" cannot be confused with "never written".
+    probes = {key: (7 if numeric[key] == "int" else 3.25) for key in bound}
+    for key, value in probes.items():
+        ctx.fields[key].value = value
+    ctx.pull_settings_from_fields()
+
+    inert = [key for key, value in probes.items() if getattr(ctx.settings, key) != value]
+    assert not inert, f"controls exist but never persist (add them to pull_settings_from_fields): {inert}"
+
+
+def test_applying_a_profile_leaves_machine_settings_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx = _new_ctx(monkeypatch)
+    ctx.settings.sheet_width_mm = 210.0
+    apply_pen_profile(ctx.settings, "gel")
+    assert ctx.settings.sheet_width_mm == 210.0
+    assert ctx.settings.pen_profile == "gel"
 
 
 def test_travel_toggle_changes_only_the_view() -> None:

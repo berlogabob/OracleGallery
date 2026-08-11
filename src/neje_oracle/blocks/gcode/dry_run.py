@@ -80,6 +80,7 @@ def generate_dry_run_sheet(
         z_down_mm=config.z_down_mm,
         z_up_mm=config.z_up_mm,
         z_feed_mm_min=config.z_feed_mm_min,
+        pen_down_dwell_ms=config.pen_down_dwell_ms,
     )
     gcode_path = output_root / f"{sheet_id}.gcode"
     manifest_path = output_root / f"{sheet_id}.json"

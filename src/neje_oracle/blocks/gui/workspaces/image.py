@@ -17,6 +17,9 @@ from ....blocks.imaging.modes import (
     travel_preview_svg,
 )
 from ....blocks.imaging.sheet import SHAPES, frame_grid_capacity, images_to_sheet_polylines
+from ....blocks.patterns import bank
+from ....blocks.patterns.ingest import DEFAULT_MODE as DEFAULT_MOTIF_MODE
+from ....blocks.patterns.ingest import CropBox, image_to_motif_polylines, motif_svg
 from ....shared.gui_settings import GuiSettings
 from ..context import GuiContext
 from ..support import read_upload_event_payload
@@ -52,6 +55,26 @@ SHEET_STATE: dict[str, Any] = {
     "shape": "rect",
     "sheet_index": 0,
     "svg": "",
+}
+
+# Separate from STATE: the print path wants a whole picture at sheet scale, the bank wants
+# one cropped glyph normalized to a unit box. Sharing knobs would fight over both.
+MOTIF_STATE: dict[str, Any] = {
+    "name": "",
+    "bytes": b"",
+    "svg": "",
+    "mode": DEFAULT_MOTIF_MODE,
+    "crop_left": 0.0,
+    "crop_top": 0.0,
+    "crop_width": 100.0,
+    "crop_height": 100.0,
+    "cell_mm": 0.8,
+    "gamma": 1.0,
+    "autocontrast": True,
+    "invert": False,
+    "despeckle_mm": 1.5,
+    "simplify_mm": 0.4,
+    "motif_name": "",
 }
 
 MODE_HELP = {
@@ -358,9 +381,7 @@ def build(ctx: GuiContext) -> None:
                             "cell_mm",
                             float(
                                 e.value
-                                or quality_cell_mm(
-                                    str(STATE["mode"]), str(STATE["quality"]), ctx.settings.pen_width_mm
-                                )
+                                or quality_cell_mm(str(STATE["mode"]), str(STATE["quality"]), ctx.settings.pen_width_mm)
                             ),
                         ),
                     )
@@ -476,6 +497,8 @@ def build(ctx: GuiContext) -> None:
             with ui.row().classes("items-center gap-2"):
                 safe_action_button("BUILD SHEET", lambda: build_sheet())
                 primary_action_button("PRINT SHEET", lambda: print_sheet())
+
+        _build_motif_import_card()
 
     def _sheet_files() -> list[Path]:
         folder = Path(SHEET_STATE["folder"]).expanduser()
@@ -663,3 +686,196 @@ def build(ctx: GuiContext) -> None:
     quality_label.set_text(_quality_text())
     refresh_preview()
     refresh_sheet_capacity()
+
+
+def motif_crop() -> CropBox:
+    return CropBox(
+        left=float(MOTIF_STATE["crop_left"]),
+        top=float(MOTIF_STATE["crop_top"]),
+        width=float(MOTIF_STATE["crop_width"]),
+        height=float(MOTIF_STATE["crop_height"]),
+    )
+
+
+def build_motif_svg() -> tuple[str, int, int]:
+    """Trace the current picture into a motif SVG. Returns (svg, strokes, points)."""
+    polylines = image_to_motif_polylines(
+        MOTIF_STATE["bytes"],
+        mode=str(MOTIF_STATE["mode"]),
+        crop=motif_crop(),
+        cell_mm=float(MOTIF_STATE["cell_mm"]),
+        gamma=float(MOTIF_STATE["gamma"]),
+        invert=bool(MOTIF_STATE["invert"]),
+        autocontrast=bool(MOTIF_STATE["autocontrast"]),
+        despeckle_mm=float(MOTIF_STATE["despeckle_mm"]),
+        simplify_mm=float(MOTIF_STATE["simplify_mm"]),
+    )
+    return motif_svg(polylines), len(polylines), sum(len(p) for p in polylines)
+
+
+def _build_motif_import_card() -> None:
+    """Picture -> cropped, traced, optimised motif -> assets/patterns/."""
+    with ui.card().classes("oracle-card compact-card w-full"):
+        ui.label("Import motif from picture").classes("text-sm font-bold")
+        helper_text(
+            "Crop to ONE motif, then save it into the pattern bank. "
+            "Contour at 1 band gives a single outline; more bands double every stroke. "
+            "Autocontrast off is usually better for fabric photos — it lifts weave texture into ink."
+        )
+        selected_label = ui.label("No picture selected").classes("path-label text-xs")
+        status_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
+        preview = ui.html().classes("preview-frame w-full")
+
+        def refresh() -> None:
+            # Cleared up front, never only inside the handler: whatever goes wrong
+            # below, SAVE TO BANK must not be left holding the previous motif and
+            # write it under the new name.
+            MOTIF_STATE["svg"] = ""
+            if not MOTIF_STATE["bytes"]:
+                preview.content = ""
+                preview.update()
+                status_label.set_text("Upload a picture to begin")
+                return
+            try:
+                svg, strokes, points = build_motif_svg()
+            except Exception as exc:  # noqa: BLE001
+                # Deliberately broad. Segment and skeleton caps raise ValueError and trip
+                # routinely when the crop is too wide -- a normal outcome to report. But
+                # PIL.DecompressionBombError subclasses neither ValueError nor OSError, so
+                # a narrow catch lets an oversized upload escape every handler in the
+                # chain and leaves a stale preview.
+                preview.content = ""
+                preview.update()
+                status_label.set_text(str(exc))
+                return
+            MOTIF_STATE["svg"] = svg
+            preview.content = svg
+            preview.update()
+            status_label.set_text(f"{strokes} strokes, {points} points")
+
+        def set_motif(key: str, value: Any) -> None:
+            MOTIF_STATE[key] = value
+            refresh()
+
+        async def handle_upload(event: Any) -> None:
+            try:
+                name, data = await read_upload_event_payload(event)
+            except Exception as exc:  # noqa: BLE001
+                ui.notify(f"Picture upload failed: {exc}", color="negative")
+                return
+            if not data:
+                ui.notify("Picture upload failed: file is empty", color="negative")
+                return
+            MOTIF_STATE["name"] = name
+            MOTIF_STATE["bytes"] = data
+            selected_label.set_text(f"Selected: {name}")
+            if not MOTIF_STATE["motif_name"]:
+                MOTIF_STATE["motif_name"] = Path(name).stem
+                name_input.value = MOTIF_STATE["motif_name"]
+            refresh()
+
+        # Unlabelled, a QUploader renders as a black progress strip rather than a picker.
+        # Capped like the generative SVG route: the bytes land in a module global that is
+        # never freed, and a phone photo past ~20MB buys no detail the 100mm motif keeps.
+        ui.upload(label="Drop a photo here, or click + to choose", on_upload=handle_upload).props(
+            "accept=.png,.jpg,.jpeg,.bmp,.webp,.gif max-files=1 auto-upload max-file-size=20971520"
+        ).classes("w-full")
+
+        with ui.row().classes("gap-2 w-full items-center"):
+            for key, label in (
+                ("crop_left", "Crop L %"),
+                ("crop_top", "Crop T %"),
+                ("crop_width", "Crop W %"),
+                ("crop_height", "Crop H %"),
+            ):
+                ui.number(
+                    label,
+                    value=MOTIF_STATE[key],
+                    min=0,
+                    max=100,
+                    step=1,
+                    on_change=lambda e, k=key: set_motif(k, float(e.value or 0.0)),
+                ).props("dense outlined").classes("w-28")
+
+        with ui.row().classes("gap-2 w-full items-center"):
+            ui.select(
+                sorted(MODES),
+                value=MOTIF_STATE["mode"],
+                label="Mode",
+                on_change=lambda e: set_motif("mode", str(e.value)),
+            ).props("dense outlined").classes("w-40")
+            ui.number(
+                "Cell mm",
+                value=MOTIF_STATE["cell_mm"],
+                min=0.1,
+                step=0.1,
+                on_change=lambda e: set_motif("cell_mm", float(e.value or 0.8)),
+            ).props("dense outlined").classes("w-28").tooltip("Sampling pitch. Smaller = more detail and more points.")
+            ui.number(
+                "Gamma",
+                value=MOTIF_STATE["gamma"],
+                min=0.1,
+                step=0.1,
+                on_change=lambda e: set_motif("gamma", float(e.value or 1.0)),
+            ).props("dense outlined").classes("w-28").tooltip("Above 1 pushes midtones to white and drops texture.")
+
+        with ui.row().classes("gap-2 w-full items-center"):
+            ui.number(
+                "Despeckle mm",
+                value=MOTIF_STATE["despeckle_mm"],
+                min=0,
+                step=0.5,
+                on_change=lambda e: set_motif("despeckle_mm", float(e.value or 0.0)),
+            ).props("dense outlined").classes("w-32").tooltip("Drops strokes whose bounding box is smaller than this.")
+            ui.number(
+                "Simplify mm",
+                value=MOTIF_STATE["simplify_mm"],
+                min=0,
+                step=0.1,
+                on_change=lambda e: set_motif("simplify_mm", float(e.value or 0.0)),
+            ).props("dense outlined").classes("w-32").tooltip("Douglas-Peucker tolerance on a 100 mm motif.")
+            ui.switch(
+                "Autocontrast",
+                value=MOTIF_STATE["autocontrast"],
+                on_change=lambda e: set_motif("autocontrast", bool(e.value)),
+            ).tooltip("Off for fabric photos: on, it stretches weave texture into ink.")
+            ui.switch(
+                "Invert",
+                value=MOTIF_STATE["invert"],
+                on_change=lambda e: set_motif("invert", bool(e.value)),
+            ).tooltip("For light motifs on a dark garment.")
+
+        with ui.row().classes("gap-2 w-full items-center"):
+            name_input = (
+                ui.input(
+                    "Motif name",
+                    value=MOTIF_STATE["motif_name"],
+                    on_change=lambda e: MOTIF_STATE.update(motif_name=str(e.value or "")),
+                )
+                .props("dense outlined")
+                .classes("w-56")
+            )
+
+            def save_motif() -> None:
+                if not MOTIF_STATE["svg"]:
+                    refresh()
+                if not MOTIF_STATE["svg"]:
+                    ui.notify("Nothing to save — check the preview first", color="warning")
+                    return
+                try:
+                    target = bank.save_motif(str(MOTIF_STATE["motif_name"] or "motif"), str(MOTIF_STATE["svg"]))
+                except (ValueError, OSError) as exc:
+                    ui.notify(f"Save failed: {exc}", color="negative")
+                    return
+                # The sketch fetches the bank once in setup(), so without this nudge the
+                # motif just saved stays invisible until the iframe is reloaded. Same
+                # channel the stream toggle uses (workspaces/generative.py).
+                ui.run_javascript(
+                    "document.getElementById('generative-frame')?.contentWindow?.postMessage({type: 'bank'}, '*');"
+                )
+                ui.notify(f"Saved {target.name} to the pattern bank", color="positive")
+
+            primary_action_button("SAVE TO BANK", lambda: save_motif())
+            safe_action_button("REFRESH", lambda: refresh())
+
+        refresh()

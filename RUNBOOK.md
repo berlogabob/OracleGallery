@@ -445,6 +445,114 @@ Updated CORS for gs://oraclegallery.firebasestorage.app
 
 Manual verification: upload one session folder with SVG/TXT/READY, then confirm Storage has `artwork.svg`, `artwork_raw.svg`, `receipt.txt`, `qr.png`, `manifest.json`; confirm no visitor PNG/audio/transcript was uploaded; confirm `sessions/{id}.sessionUrl` opens `/#/session/<id>` and `sessions/{id}.qrImageUrl` opens the PNG; confirm `plot_jobs/{id}` exists for a real user session.
 
+## 9. Pen Profiles and Calibration
+
+Different instruments want different numbers. A profile is a named bundle of exactly the
+instrument-dependent settings — `pen_width_mm`, `draw_rate`, `travel_rate`, `z_down_mm`,
+`z_up_mm`, `z_feed_mm_min`, `pen_down_dwell_ms` — stored in `assets/pen_profiles.json`.
+Sheet size, layout and sampling are deliberately not in a profile: those belong to the
+machine and the job, so swapping pens must not disturb them.
+
+Ships with `fineliner`, `gel` and `ballpoint`. **Those are starting points, not
+measurements.** The calibration sheet is what turns them into real numbers.
+
+Switch pens on `2 CALIBRATION` → Motion speed → **Fitted pen**. Selecting a profile
+overwrites only the fields above and pushes them live; there is no restart and no save
+button, every control autosaves.
+
+### Pen-down dwell
+
+`pen_down_dwell_ms` pauses after the pen lands, before it moves. Gel and ballpoint ink
+needs this or the first few millimetres of every stroke come out dry. `0` emits no `G4`
+at all, so a fineliner's G-code is byte-identical to before the feature existed.
+
+Emitted as `G4 P<seconds>` — GRBL and FluidNC read `P` in **seconds**, unlike Marlin. The
+profile stores milliseconds because that is what you type; the conversion happens in one
+place (`_dwell_command`) and is covered by a test, because getting it backwards would
+turn a 150 ms dwell into 150 seconds on every stroke.
+
+### The tune-adjust loop
+
+1. Fit the pen. On `2 CALIBRATION`, pick the nearest profile as a starting point.
+2. On `3 TESTS` → Pen calibration → **GENERATE PEN CAL G-CODE**. It writes
+   `pen_cal_<profile>.gcode` plus a manifest into the spool and reports the path.
+3. Print it. Four blocks, each varying exactly one parameter, every row labelled with its
+   own value:
+
+   | Block | Read off |
+   |---|---|
+   | feed mm/min | the fastest row with no thinning or skipped segments |
+   | pen-down Z mm | the shallowest row that inks fully, before the nib splays |
+   | dwell ms | the shortest row with no dry stroke starts and no blobs |
+   | geometry | line pairs: the finest pair still readable as two lines is your real `pen_width_mm`. Circles: the smallest that still closes. Corners: overshoot and rounding |
+
+4. Type those numbers into `2 CALIBRATION`, then **SAVE AS PROFILE** under a name that
+   says which pen it is.
+5. Regenerate and print once more to confirm.
+
+The Z ladder is bounded to ±1 mm around the profile's current pen-down depth and clamped
+to an absolute floor of −30 mm on every block, not just the ladder, so a mis-set depth
+cannot drive the pen into the bed. The sheet is bounds-checked against the bed and raises
+rather than clipping if the ladders are widened past what fits.
+
+## 9a. Pattern Bank Paper Test
+
+The pattern bank is covered by tests, but the defects that matter show up only on paper.
+Every fix in commit 3b528bf came from plotting, not from the suite: pen-down dwell, dot
+spacing and stroke ordering misbehave physically or not at all.
+
+Build the evidence sheet:
+
+```bash
+uv run python scripts/build_bank_test_sheet.py
+```
+
+It writes `runtime/physical_tests/09_bank.svg`, sized to the current bed (sheet size minus
+the direct-SVG origin), and prints the stroke count and estimated plot time. The geometry
+comes from the real `sketch.js` bank generator run under Node, so what you plot is what
+the sketch produces. `runtime/` is gitignored — the sheet is a local artefact, the script
+is tracked, so it can be rebuilt after any defaults change.
+
+Four bands, numbered by tick strokes down the left edge:
+
+| Ticks | Band |
+|---|---|
+| 1 | `bank` generator at mix 0 |
+| 2 | mix 50 |
+| 3 | mix 100 |
+| 4 | every motif in `assets/patterns/`, once, at generator-cell size |
+
+Import a motif from a photo first (`7 IMAGE` tab) if you have one — the sheet reads the
+live bank, so it joins band 4 automatically, and a traced motif is the most informative
+thing on the page.
+
+Print it: `neje-gui` → `TESTS` tab → upload the SVG → `START SVG PRINT`.
+
+### Inspection checklist
+
+In the order things actually go wrong:
+
+1. **Band 1 must look like a regular repeating tiling.** A visibly random field means the
+   mix-0 round-robin picked up an `rng()` call and the predictability guarantee is broken.
+   `test_bank_at_mix_zero_ignores_the_seed` should have caught that, so this also checks
+   the test is honest.
+2. **Doubled outlines** — each stroke drawn twice, slightly offset. An imported motif was
+   traced with `contour` at more than 1 band. Clearest in band 4. Re-import it; the ingest
+   default is already `bands=1`.
+3. **Pen-down dwell blobs** — ink pooling where strokes start. Imported motifs carry far
+   more and far shorter segments than hand-authored ones, so band 4 is where a pen-down
+   timing problem shows first. Compare an imported motif against `arrowhead` or `lozenge`
+   on the same band.
+4. **Gaps where closed loops should close.** Contour loops that fail to meet mean
+   `simplify_mm` was too high for that motif's scale at import.
+5. **Surviving specks** — isolated dots near imported motifs in band 4 mean `despeckle_mm`
+   was too low at import.
+6. **Bounds** — nothing clipped, and the drawing starts at the origin inset from the
+   top-left corner (`direct_svg_origin_x_mm` / `_y_mm`, currently 15/15). Anything else
+   means the canvas arithmetic is off.
+7. **Plot time against the script's estimate.** Much longer points at stroke ordering:
+   pen-up moves leave no ink, so wasted travel is only measurable as time.
+
 ## 10. Smoke Tests
 
 Uploader path:

@@ -64,6 +64,12 @@ class FluidNCState(str, Enum):
     SLEEP = "Sleep"
     DOOR = "Door"
     JOG = "Jog"
+    # Reported during a homing cycle and in check mode. Without them _parse_state falls
+    # through to UNKNOWN, and probe.ok requires state != UNKNOWN -- so a status query
+    # landing mid-$H read as "controller offline". Neither is a prefix of another value,
+    # so the existing startswith matching stays correct.
+    HOME = "Home"
+    CHECK = "Check"
     UNKNOWN = "Unknown"
 
 
@@ -399,6 +405,7 @@ class PlotterRuntimeConfig:
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
     z_feed_mm_min: float = 1000.0
+    pen_down_dwell_ms: float = 0.0
     work_zero_command: str = "G10 L20 P1 X0 Y0"
     # G-code optimisation
     sample_step_mm: float = 1.0
@@ -434,6 +441,7 @@ class PlotterRuntimeConfig:
             "z_down_mm": self.z_down_mm,
             "z_up_mm": self.z_up_mm,
             "z_feed_mm_min": self.z_feed_mm_min,
+            "pen_down_dwell_ms": self.pen_down_dwell_ms,
             "work_zero_command": self.work_zero_command,
             "sample_step_mm": self.sample_step_mm,
             "sample_reference_cell_mm": self.sample_reference_cell_mm,
@@ -470,6 +478,7 @@ class PlotterRuntimeConfig:
             z_down_mm=float(payload.get("z_down_mm", -25.0)),
             z_up_mm=float(payload.get("z_up_mm", 0.0)),
             z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),
+            pen_down_dwell_ms=float(payload.get("pen_down_dwell_ms", 0.0)),
             work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0")),
             sample_step_mm=float(payload.get("sample_step_mm", 1.0)),
             sample_reference_cell_mm=float(payload.get("sample_reference_cell_mm", 80.0)),
