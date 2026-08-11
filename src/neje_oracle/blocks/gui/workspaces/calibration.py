@@ -519,10 +519,17 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
             ui.notify(f"Saved pen profile '{name}'", color="positive")
 
         primary_action_button("SAVE AS PROFILE", lambda: save_current())
-        # Cheap poll rather than hooking every pen control's on_change: the settings are
-        # edited from six separate number boxes that already own their handlers.
-        ui.timer(2.0, refresh_modified)
-        refresh_modified()
+
+    # Subscribe to the pen controls rather than polling on a timer. The 2s ui.timer this
+    # replaces kept firing after its slot was torn down on client disconnect -- one browser
+    # session left 24 "The parent slot of Timer(...) has been deleted" errors in the log.
+    # These controls already run persist_and_refresh on change and it is registered first,
+    # so ctx.settings is current by the time this handler sees it.
+    for pen_field in PEN_PROFILE_FIELDS:
+        control = ctx.fields.get(pen_field)
+        if control is not None:
+            control.on_value_change(lambda: refresh_modified())
+    refresh_modified()
 
     helper_text(
         "Shipped values are starting points, not measurements. Print the pen calibration sheet "
