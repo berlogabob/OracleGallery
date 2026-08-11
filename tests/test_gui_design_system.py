@@ -1,7 +1,7 @@
 """Ratchets that let the GUI redesign be done in parallel without diverging.
 
 The operator GUI grew feature-first and its styling never had an owner: 226 loose
-`.classes()` literals, 28 hand-styled cards, 77 raw hex colors, and a palette that is
+`.classes()` literals, 28 hand-styled cards, 77 raw hex colours, and a palette that is
 *near* the Oracle design system but never equal. No test asserted any of it, so nothing
 stopped the drift.
 
@@ -27,8 +27,8 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # Measured on 2026-08-11 at commit 5995e3b, before any migration. These are this
 # module's own counts (regex matches, ui.py and tokens.py excluded) -- deliberately
 # exact, not the looser grep line-counts, so a single regression trips them.
-MAX_RAW_CLASSES = 226
-MAX_RAW_HEX = 77
+MAX_RAW_CLASSES = 225
+MAX_RAW_HEX = 47
 MAX_RAW_CARDS = 28
 MAX_RAW_BUTTONS = 19
 

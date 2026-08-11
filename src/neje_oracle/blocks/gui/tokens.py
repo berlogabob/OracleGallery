@@ -36,6 +36,9 @@ VOID = "#0A0A12"  # the installation register, not used in the operator tool
 OK = "#4A6741"  # moss; desaturated to sit on cream without shouting
 WARN = GOLD_DIM  # gold reads as caution here and only here
 DANGER = "#8C2F1D"  # deeper and redder than RUST, so it cannot be mistaken for the accent
+# A tinted ground for the warning banner and the "next action" highlight. The system
+# has no wash colour; these two places need one to lift off CREAM at a glance.
+WARN_WASH = "#FFF4DF"
 
 # --- type -----------------------------------------------------------------------
 FONT_BODY = "'EB Garamond', 'Times New Roman', Georgia, serif"
@@ -79,6 +82,7 @@ CSS_VARIABLES: dict[str, str] = {
     "--ok": OK,
     "--warn": WARN,
     "--danger": DANGER,
+    "--warn-wash": WARN_WASH,
     "--font-body": FONT_BODY,
     "--font-display": FONT_DISPLAY,
     "--font-logo": FONT_LOGO,
