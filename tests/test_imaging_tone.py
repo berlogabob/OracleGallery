@@ -366,9 +366,7 @@ def test_hatch_smoothing_buys_longer_strokes_for_the_same_ink() -> None:
     tone = ToneGrid(speckled, cell_mm=1.0, width_mm=64.0, height_mm=64.0)
 
     def measure(polylines: list[list[tuple[float, float]]]) -> tuple[int, float, float]:
-        lengths = [
-            sum(math.dist(a, b) for a, b in zip(line, line[1:], strict=False)) for line in polylines
-        ]
+        lengths = [sum(math.dist(a, b) for a, b in zip(line, line[1:], strict=False)) for line in polylines]
         return len(polylines), sum(lengths), sorted(lengths)[len(lengths) // 2]
 
     raw_count, raw_ink, raw_median = measure(hatch(tone, line_spacing_mm=1.6, blur_px=0.0))

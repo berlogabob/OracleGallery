@@ -12,23 +12,27 @@ from ...shared.origin_markers import (
     ORIGIN_MARKER_POSITIONS,
     ORIGIN_PREVIEW_COLORS,
 )
+from . import tokens
 from .context import GuiContext
-from .ui import mini_metric, warning_banner
+from .ui import helper_text, mini_metric, warning_banner
 from .workspaces import calibration, connection, exhibition, generative, image, tests, work
 
 PAGE_STYLE = """
 <style>
-  body { background: #f7f1e7; color: #1f1a17; overflow: auto; }
+__TOKENS_PLACEHOLDER__
+  body { background: var(--cream); color: var(--ink); overflow: auto; }
   .q-field__control { min-height: 40px !important; }
   .q-field__label { font-size: 12px; }
   .oracle-shell { min-height: 100vh; overflow: visible; }
   .oracle-card {
+    width: 100%;
+    padding: var(--space-md) 12px;
     background: rgba(255, 252, 245, 0.94);
-    border: 1px solid #dac9ad;
+    border: 1px solid var(--rule);
     border-radius: 14px;
     box-shadow: 0 8px 22px rgba(31, 26, 23, 0.07);
   }
-  .oracle-title { letter-spacing: 0.16em; color: #8f4f2b; }
+  .oracle-title { letter-spacing: 0.16em; color: var(--rust); }
   .compact-card { padding: 10px 12px !important; }
   .live-strip {
     display: grid;
@@ -37,26 +41,26 @@ PAGE_STYLE = """
     align-items: stretch;
   }
   .live-strip .mini-metric { background: rgba(255, 252, 245, 0.9); }
-  .live-strip .next-action { border-color: #9a5b24; background: #fff6df; }
+  .live-strip .next-action { border-color: var(--rust); background: var(--paper); }
   .mobile-operator-warning {
     display: none;
-    background: #fff4df;
-    border: 1px solid #c99743;
+    background: var(--warn-wash);
+    border: 1px solid var(--gold);
     border-radius: 10px;
-    color: #8f4f2b;
+    color: var(--rust);
     padding: 8px 10px;
     font-size: 12px;
     font-weight: 700;
   }
   .workspace-tabs {
     background: rgba(255, 252, 245, 0.84);
-    border: 1px solid #dac9ad;
+    border: 1px solid var(--rule);
     border-radius: 14px;
     min-height: 44px;
     flex: 1 1 auto;
   }
   .workspace-tabs .q-tab { min-height: 42px; padding: 0 12px; letter-spacing: 0.08em; font-weight: 700; }
-  .workspace-tabs .q-tab--active { color: #8f4f2b; }
+  .workspace-tabs .q-tab--active { color: var(--rust); }
   .workspace-panel { min-height: calc(100vh - 104px); }
   .workspace-scroll {
     max-height: calc(100vh - 120px);
@@ -69,18 +73,18 @@ PAGE_STYLE = """
   .preview-frame svg { display: block; width: auto; height: auto; max-width: none; max-height: none; }
   .path-label { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tight-slider .q-slider { min-height: 28px; }
-  .warning-banner { background: #fff4df; border: 1px solid #c99743; border-radius: 10px; color: #8f4f2b; padding: 6px 8px; font-size: 12px; }
+  .warning-banner { background: var(--warn-wash); border: 1px solid var(--gold); border-radius: 10px; color: var(--rust); padding: 6px 8px; font-size: 12px; }
   .log-viewer textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.35; }
   .q-btn { min-height: 30px; }
-  .mini-metric { border: 1px solid #e1d3ba; border-radius: 10px; padding: 5px 7px; background: rgba(255,255,255,0.45); }
-  .mini-metric .label { font-size: 9px; letter-spacing: 0.16em; color: #8f4f2b; text-transform: uppercase; }
-  .mini-metric .value { font-size: 12px; font-weight: 700; color: #1f1a17; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mini-metric { border: 1px solid var(--rule); border-radius: 10px; padding: 5px 7px; background: rgba(255,255,255,0.45); }
+  .mini-metric .label { font-size: 9px; letter-spacing: 0.16em; color: var(--rust); text-transform: uppercase; }
+  .mini-metric .value { font-size: 12px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .jog-pad .q-btn { width: 54px; }
-  .preview-legend { border-top: 1px solid #e1d3ba; padding-top: 6px; }
-  .legend-chip { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #1f1a17; white-space: nowrap; }
-  .legend-dot { width: 9px; height: 9px; border-radius: 999px; border: 1px solid #1f1a17; display: inline-block; flex: 0 0 auto; }
-  .legend-ring { width: 15px; height: 15px; border-radius: 999px; border: 1.5px solid #1f1a17; display: inline-block; flex: 0 0 auto; }
-  .legend-double-ring { box-shadow: inset 0 0 0 3px #fbf7ef, inset 0 0 0 4.4px #1f1a17; }
+  .preview-legend { border-top: 1px solid var(--rule); padding-top: 6px; }
+  .legend-chip { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--ink); white-space: nowrap; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 999px; border: 1px solid var(--ink); display: inline-block; flex: 0 0 auto; }
+  .legend-ring { width: 15px; height: 15px; border-radius: 999px; border: 1.5px solid var(--ink); display: inline-block; flex: 0 0 auto; }
+  .legend-double-ring { box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4.4px var(--ink); }
   @media (min-width: 1200px) {
     body { overflow: hidden; }
     .oracle-shell { height: 100vh; max-height: 100vh; overflow: hidden; }
@@ -98,6 +102,17 @@ PAGE_STYLE = """
     .mobile-operator-warning { display: block; }
     .workspace-tabs { overflow-x: auto; }
   }
+  /* --- components (blocks/gui/ui.py emits these; nothing else styles) --- */
+  .oracle-workspace { display: flex; flex-direction: column; gap: var(--space-sm); }
+  .oracle-card-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .oracle-helper { font-size: 12px; color: var(--rust); }
+  .oracle-toolbar { display: flex; align-items: center; gap: var(--space-sm); }
+  .oracle-toolbar-wide { width: 100%; }
+  .oracle-field { min-width: 7rem; }
+  .oracle-btn { border-radius: var(--radius-sm); letter-spacing: 0.04em; }
+  .oracle-btn-primary { background: var(--rust) !important; color: var(--paper) !important; }
+  .oracle-btn-safe { color: var(--ink-mid) !important; }
+  .oracle-btn-danger { background: var(--danger) !important; color: var(--paper) !important; }
 </style>
 """
 
@@ -117,13 +132,13 @@ def _preview_legend() -> None:
                 ui.label("double ring: filler/local cell").classes("text-[10px]")
             with ui.element("div").classes("legend-chip"):
                 ui.element("span").classes("legend-dot").style(
-                    "background:#8f8980; border-color:#8f8980; opacity:0.45;"
+                    "background:var(--ink-muted); border-color:var(--ink-muted); opacity:0.45;"
                 )
                 ui.label("gray: next in line").classes("text-[10px]")
         with ui.row().classes("items-center gap-3 flex-wrap"):
             for origin in ALL_ORIGINS:
                 position = ORIGIN_MARKER_POSITIONS.get(origin, "right").replace("-", " ")
-                color = ORIGIN_PREVIEW_COLORS.get(origin, "#77706a")
+                color = ORIGIN_PREVIEW_COLORS.get(origin, tokens.INK_MUTED)
                 with ui.element("div").classes("legend-chip"):
                     ui.element("span").classes("legend-dot").style(f"background:{color}; border-color:{color};")
                     ui.label(f"{ORIGIN_LABELS[origin]} dot: {position}").classes("text-[10px]")
@@ -132,8 +147,10 @@ def _preview_legend() -> None:
 def build_page() -> None:
     ctx = GuiContext()
 
-    ui.colors(primary="#1f1a17", secondary="#9a5b24", accent="#c7a45a")
-    ui.add_head_html(PAGE_STYLE)
+    # Quasar theme, from the same tokens as the CSS -- these used to be a fourth
+    # palette that nothing referenced by name.
+    ui.colors(primary=tokens.INK, secondary=tokens.RUST, accent=tokens.GOLD)
+    ui.add_head_html(PAGE_STYLE.replace("__TOKENS_PLACEHOLDER__", tokens.css_root_block()))
 
     with ui.column().classes("oracle-shell w-full gap-2 p-3"):
         # Header + tabs + emergency stop
@@ -190,7 +207,7 @@ def build_page() -> None:
             with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
                 with ui.row().classes("w-full items-center justify-between"):
                     ui.label("Sheet Preview").classes("text-sm font-bold")
-                ctx.preview_progress_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                ctx.preview_progress_label = helper_text("-")
                 _preview_legend()
                 ctx.preview = ui.html().classes("preview-frame w-full")
 

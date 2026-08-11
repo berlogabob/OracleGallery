@@ -90,9 +90,7 @@ def test_the_filter_removes_specks_rather_than_the_drawing() -> None:
         assert len(filtered) < len(raw), f"{mode}: nothing was filtered, so the fixture has no speckle"
 
         def drawn(polylines: list[list[tuple[float, float]]]) -> float:
-            return sum(
-                math.dist(a, b) for polyline in polylines for a, b in zip(polyline, polyline[1:], strict=False)
-            )
+            return sum(math.dist(a, b) for polyline in polylines for a, b in zip(polyline, polyline[1:], strict=False))
 
         # Strokes are pen lifts and pen lifts dominate plot time, so the trade this filter
         # makes is only worth it if the ink stays and the lifts go.
