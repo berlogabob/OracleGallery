@@ -42,6 +42,7 @@ from ...shared.symbols import (
 from ..gcode.direct_svg import DirectSvgPrintJob as DirectSvgPrintJob
 from ..gcode.direct_svg import create_direct_svg_print_job_from_gui as create_direct_svg_print_job_from_gui
 from ..gcode.dry_run import generate_dry_run_sheet as generate_dry_run_sheet
+from ..gcode.pen_cal import generate_pen_cal_sheet as generate_pen_cal_sheet
 from ..gcode.layout import _build_layout_for_settings as _build_layout_for_settings
 from ..gcode.layout import layout_capacity as layout_capacity
 from ..gcode.sampling import compute_effective_sample_step as compute_effective_sample_step

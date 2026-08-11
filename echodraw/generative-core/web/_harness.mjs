@@ -20,7 +20,8 @@ function noise(...values) {
 function loadSketch() {
   const sketchPath = join(dirname(fileURLToPath(import.meta.url)), 'sketch.js');
   const source = readFileSync(sketchPath, 'utf8') +
-    '\n;globalThis.__GEN = GENERATORS; globalThis.__BUILD = buildSvg; globalThis.__SEEDED = seededRandom;';
+    '\n;globalThis.__GEN = GENERATORS; globalThis.__BUILD = buildSvg; globalThis.__SEEDED = seededRandom;' +
+    ' globalThis.__SETBANK = setBank;';
   const noOp = () => {};
   const names = [
     'noise', 'noiseSeed', 'document', 'window', 'createCanvas', 'background',
@@ -49,12 +50,23 @@ function loadSketch() {
     noOp
   ];
   new Function(...names, source)(...values);
+  // The real bank is fetched in setup(), which p5 calls and this harness does
+  // not. Inject a fixed stub so `bank` is testable offline like every other
+  // generator, instead of being excused as server-backed.
+  globalThis.__SETBANK(STUB_BANK);
   return {
     generators: globalThis.__GEN,
     buildSvg: globalThis.__BUILD,
-    seededRandom: globalThis.__SEEDED
+    seededRandom: globalThis.__SEEDED,
+    setBank: globalThis.__SETBANK
   };
 }
+
+// Two unit-box motifs, matching what /api/patterns/bank serves.
+const STUB_BANK = {
+  stubA: [[[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5], [-0.5, -0.5]]],
+  stubB: [[[-0.5, 0], [0, -0.5], [0.5, 0], [0, 0.5], [-0.5, 0]]]
+};
 
 function generatePass(directory, sketch) {
   mkdirSync(directory, { recursive: true });
@@ -84,6 +96,32 @@ try {
   const sketch = loadSketch();
   const manifest = generatePass(outputDirectory, sketch);
   generatePass(join(outputDirectory, 'repeat'), sketch);
+
+  // The predictability claim: at mix 0 the bank generator must not let any rng
+  // value reach its output, so two different seeds give the same field.
+  mkdirSync(outputDirectory, { recursive: true });
+  for (const seed of [12345, 999]) {
+    noiseSeed(seed);
+    const shapes = sketch.generators.bank(sketch.seededRandom(seed), { density: 1.0, scale: 0.5, mix: 0 });
+    writeFileSync(join(outputDirectory, `mix0-seed${seed}.svg`), sketch.buildSvg(shapes));
+  }
+
+  // Budget coverage. A photo-traced motif is ~60 polylines against 1-9 for a
+  // hand-authored one, so a full grid overruns MAX_TOTAL_SHAPES several times over.
+  // The generator has to drop whole cells spread across the sheet; truncating the
+  // flat shape list instead blanks the bottom edge, which is what it used to do.
+  // Run last: it replaces the stub bank.
+  const heavy = Array.from({ length: 61 }, (_, i) => [[-0.5, -0.5 + i / 120], [0.5, -0.5 + i / 120]]);
+  sketch.setBank({ ...STUB_BANK, heavy: heavy });
+  const coverage = {};
+  for (const scale of [0.5, 0.25, 0]) {
+    noiseSeed(1);
+    const shapes = sketch.generators.bank(sketch.seededRandom(1), { density: 1.0, scale: scale, mix: 0 });
+    const ys = shapes.flatMap(function(s) { return s.points ? s.points.map(function(p) { return p.y; }) : [s.cy]; });
+    coverage[String(scale)] = { shapes: shapes.length, yMax: Math.max(...ys) };
+  }
+  writeFileSync(join(outputDirectory, 'coverage.json'), JSON.stringify(coverage, null, 2) + '\n');
+
   writeFileSync(join(outputDirectory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 } catch (error) {
   console.error(`pattern harness failed: ${error.stack || error}`);

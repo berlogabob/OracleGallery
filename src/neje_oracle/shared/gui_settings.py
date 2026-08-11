@@ -106,6 +106,7 @@ GUI_DEFAULTS: GuiDefaults = {
     "z_up_mm": 0.0,
     "z_feed_mm_min": 1000.0,
     "pen_width_mm": 0.3,
+    "pen_down_dwell_ms": 0.0,
     "direct_svg_origin_x_mm": 25.0,
     "direct_svg_origin_y_mm": 25.0,
 }
@@ -152,6 +153,13 @@ class GuiSettings:
     # needs to fill a bold line. halftone's min_ink_mm is NOT wired to this yet — it keeps
     # its own 0.15 default, so a very different nib still wants that adjusted by hand.
     pen_width_mm: float = GUI_DEFAULTS["pen_width_mm"]
+    # Time held at pen-down before the first move. Gel and ballpoint ink needs a moment
+    # to reach the tip or the first millimetres of every stroke come out dry. Zero emits
+    # no dwell at all, so a fineliner's G-code is unchanged.
+    pen_down_dwell_ms: float = GUI_DEFAULTS["pen_down_dwell_ms"]
+    # Name of the last applied pen profile (assets/pen_profiles.json). Recorded so the
+    # GUI can show which pen is fitted; the values above are the source of truth.
+    pen_profile: str = ""
     direct_svg_origin_x_mm: float = GUI_DEFAULTS["direct_svg_origin_x_mm"]
     direct_svg_origin_y_mm: float = GUI_DEFAULTS["direct_svg_origin_y_mm"]
     user_count: int = 1
@@ -205,6 +213,7 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
             z_down_mm=settings.z_down_mm,
             z_up_mm=settings.z_up_mm,
             z_feed_mm_min=settings.z_feed_mm_min,
+            pen_down_dwell_ms=settings.pen_down_dwell_ms,
             work_zero_command=plotter_settings.work_zero_command,
             sample_step_mm=settings.sample_step_mm,
             sample_reference_cell_mm=settings.sample_reference_cell_mm,

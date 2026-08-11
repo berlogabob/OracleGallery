@@ -56,11 +56,13 @@ def generate_sheet_gcode(
     z_down_mm: float = 0.0,
     z_up_mm: float = 25.0,
     z_feed_mm_min: float = 1000.0,
+    pen_down_dwell_ms: float = 0.0,
 ) -> str:
     pen_up = _pen_up_command(pen_up_command, use_z_servo=use_z_servo, z_up_mm=z_up_mm)
     pen_down = _pen_down_command(
         pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min
     )
+    dwell = _dwell_command(pen_down_dwell_ms)
     lines = [
         f"; Neje Oracle {title}",
         f"; effective draw feed F{draw_rate:.2f} mm/min",
@@ -78,15 +80,15 @@ def generate_sheet_gcode(
         lines.append(f"; cell-start {current_cell_index}/{total_cells}")
         if include_rings:
             for ring in _ring_polylines(placement, item.source_kind):
-                _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up)
+                _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
         if include_markers:
             for marker in _marker_polylines(item, placement, marker_diameter_mm=marker_diameter_mm):
-                _append_polyline_gcode(lines, marker, pen_down=pen_down, pen_up=pen_up)
+                _append_polyline_gcode(lines, marker, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
         metadata = read_normalized_svg_metadata(item.svg_path)
         if metadata.normalized and metadata.scale > 1.0:
             lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")
         for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm, cell_diameter_mm):
-            _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up)
+            _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
         lines.append(f"; cell-end {current_cell_index}/{total_cells}")
         current_cell_index += 1
 
@@ -111,6 +113,7 @@ def generate_absolute_svg_gcode(
     z_down_mm: float = 0.0,
     z_up_mm: float = 25.0,
     z_feed_mm_min: float = 1000.0,
+    pen_down_dwell_ms: float = 0.0,
     origin_x_mm: float = 0.0,
     origin_y_mm: float = 0.0,
     keep_non_negative: bool = False,
@@ -121,7 +124,8 @@ def generate_absolute_svg_gcode(
     pen_down = _pen_down_command(
         pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min
     )
-    polylines = _svg_to_absolute_polylines(svg_path, sample_step_mm)
+    dwell = _dwell_command(pen_down_dwell_ms)
+    polylines = svg_to_polylines_mm(svg_path, sample_step_mm)
     safety_shift_x = 0.0
     safety_shift_y = 0.0
     if origin_x_mm or origin_y_mm:
@@ -156,7 +160,7 @@ def generate_absolute_svg_gcode(
     ]
 
     for polyline in polylines:
-        _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up)
+        _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
 
     lines.append(pen_up)
     if return_home:
@@ -178,16 +182,32 @@ def _xy_acceleration_comment(xy_acceleration_mm_s2: float) -> str:
     return f"; XY acceleration setting {xy_acceleration_mm_s2:.3f} mm/s^2 is recorded only; controller settings are not changed during print"
 
 
+def _dwell_command(pen_down_dwell_ms: float) -> str | None:
+    """G4 after pen-down, or None when no dwell is wanted.
+
+    GRBL and FluidNC read `G4 P` in SECONDS -- Marlin is the one that uses milliseconds.
+    Profiles store ms because that is what an operator wants to type, so the conversion
+    happens here and nowhere else. Getting it backwards is a 1000x error: a 150 ms dwell
+    would become 150 seconds on every single stroke.
+    """
+    if pen_down_dwell_ms <= 0:
+        return None
+    return f"G4 P{pen_down_dwell_ms / 1000.0:.3f}"
+
+
 def _append_polyline_gcode(
     lines: list[str],
     polyline: list[tuple[float, float]],
     *,
     pen_down: str,
     pen_up: str,
+    dwell: str | None = None,
 ) -> None:
     start_x, start_y = polyline[0]
     lines.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
     lines.append(pen_down)
+    if dwell is not None:
+        lines.append(dwell)
     for x, y in polyline[1:]:
         lines.append(f"G1 X{x:.3f} Y{y:.3f}")
     lines.append(pen_up)
@@ -293,7 +313,8 @@ def _transform_local_point(
     )
 
 
-def _svg_to_absolute_polylines(svg_path: Path, sample_step_mm: float) -> list[list[tuple[float, float]]]:
+def svg_to_polylines_mm(svg_path: Path, sample_step_mm: float) -> list[list[tuple[float, float]]]:
+    """Sample an SVG's paths into millimetre polylines, in the SVG's own coordinate frame."""
     paths, _, _ = svg2paths2(str(svg_path))
     non_empty_paths = [path for path in paths if path.length(error=1e-4) > 0]
     if not non_empty_paths:

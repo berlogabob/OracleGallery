@@ -13,9 +13,17 @@ from nicegui import ui
 
 from ....shared.gui_settings import NumericGuiDefaultKey
 from ....shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS
+from ....shared.pen_profiles import (
+    PEN_PROFILE_FIELDS,
+    apply_pen_profile,
+    capture_pen_profile,
+    load_pen_profiles,
+    profile_matches,
+    save_pen_profiles,
+)
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import helper_text, mini_metric, number_control
+from ..ui import helper_text, mini_metric, number_control, primary_action_button
 from .motion import render_motion_panel
 
 
@@ -159,7 +167,7 @@ def build(ctx: GuiContext) -> None:
                     default=0,
                     min_value=-25,
                     width_class="w-full",
-                    tooltip="Legacy absolute Z-up value; current pen-up behavior uses Z homing.",
+                    tooltip="Height the pen lifts to between strokes. Emitted as G0 Z when the Z servo is in use.",
                     on_change=persist_and_refresh,
                 )
                 number_control(
@@ -170,7 +178,7 @@ def build(ctx: GuiContext) -> None:
                     default=-25,
                     min_value=-25,
                     width_class="w-full",
-                    tooltip="Legacy value; current pen-down behavior is fixed at absolute G0 Z-25.",
+                    tooltip="Pen pressure: how far the pen presses into the paper. Too shallow leaves gaps, too deep splays the nib.",
                     on_change=persist_and_refresh,
                 )
                 number_control(
@@ -184,6 +192,32 @@ def build(ctx: GuiContext) -> None:
                     tooltip="Z servo axis feed rate. FluidNC maps this Z axis to PWM.",
                     on_change=persist_and_refresh,
                 )
+                number_control(
+                    fields,
+                    "pen_width_mm",
+                    label="Pen width mm",
+                    value=settings.pen_width_mm,
+                    default=float(GUI_DEFAULTS["pen_width_mm"]),
+                    min_value=0.05,
+                    step=0.05,
+                    width_class="w-full",
+                    tooltip="Measured nib width. Sets stroke weight and the finest detail the image modes will attempt.",
+                    on_change=persist_and_refresh,
+                )
+                number_control(
+                    fields,
+                    "pen_down_dwell_ms",
+                    label="Pen-down dwell ms",
+                    value=settings.pen_down_dwell_ms,
+                    default=float(GUI_DEFAULTS["pen_down_dwell_ms"]),
+                    min_value=0,
+                    step=10,
+                    width_class="w-full",
+                    tooltip="Pause after the pen lands, before it moves. Gel and ballpoint ink needs this or stroke starts come out dry. 0 emits no dwell.",
+                    on_change=persist_and_refresh,
+                )
+
+            _build_pen_profile_row(ctx)
 
         # Layout
         with ui.card().classes("oracle-card compact-card w-full"):
@@ -405,3 +439,92 @@ def build(ctx: GuiContext) -> None:
                         step=0.01,
                         on_change=ctx.update_scales_from_fields,
                     )
+
+
+def _build_pen_profile_row(ctx: GuiContext) -> None:
+    """Pen profile picker and save-as, beside the settings a profile actually carries.
+
+    Selecting a profile overwrites only PEN_PROFILE_FIELDS and pushes them live -- every
+    control here autosaves through persist_and_refresh, which writes the settings JSON
+    and the runtime store, so the plotter daemon sees a pen change without a restart.
+    """
+    profiles = load_pen_profiles()
+
+    with ui.row().classes("w-full items-center gap-2 mt-2"):
+        helper_text("Pen profile")
+        modified_label = ui.label("").classes("text-xs text-[#8f4f2b]")
+
+        def refresh_modified() -> None:
+            current = ctx.settings.pen_profile
+            dirty = bool(current) and not profile_matches(ctx.settings, current, profiles)
+            modified_label.set_text(f"· {current} modified, not saved" if dirty else "")
+
+        def apply_selected(name: str) -> None:
+            if not name or name == ctx.settings.pen_profile:
+                return
+            # Applying overwrites every PEN_PROFILE_FIELDS value, so tuned-but-unsaved
+            # numbers would vanish silently -- and typing numbers off the calibration
+            # sheet before saving is exactly the loop RUNBOOK section 9 prescribes.
+            previous = ctx.settings.pen_profile
+            if previous and not profile_matches(ctx.settings, previous, profiles):
+                profile_select.value = previous
+                profile_select.update()
+                ui.notify(
+                    f"'{previous}' has unsaved changes. SAVE AS PROFILE first, or rename to keep both.",
+                    color="warning",
+                )
+                return
+            try:
+                apply_pen_profile(ctx.settings, name, profiles)
+            except ValueError as exc:
+                ui.notify(str(exc), color="negative")
+                return
+            # Push the profile's values into the widgets first: persist_and_refresh reads
+            # back from ctx.fields, so writing only ctx.settings would be overwritten.
+            for pen_field in PEN_PROFILE_FIELDS:
+                control = ctx.fields.get(pen_field)
+                if control is not None:
+                    control.value = getattr(ctx.settings, pen_field)
+            ctx.persist_and_refresh()
+            refresh_modified()
+            ui.notify(f"Pen profile '{name}' applied", color="positive")
+
+        profile_select = (
+            ui.select(
+                sorted(profiles),
+                value=ctx.settings.pen_profile or None,
+                label="Fitted pen",
+                on_change=lambda e: apply_selected(str(e.value or "")),
+            )
+            .props("dense outlined")
+            .classes("w-44")
+        )
+        name_input = ui.input("Save as", value=ctx.settings.pen_profile).props("dense outlined").classes("w-40")
+
+        def save_current() -> None:
+            name = str(name_input.value or "").strip()
+            if not name:
+                ui.notify("Name the profile before saving", color="warning")
+                return
+            # Pull the widgets into settings first, so an untyped-but-unsaved edit in a
+            # number box is captured rather than silently dropped.
+            ctx.pull_settings_from_fields()
+            profiles[name] = capture_pen_profile(ctx.settings)
+            save_pen_profiles(profiles)
+            ctx.settings.pen_profile = name
+            profile_select.options = sorted(profiles)
+            profile_select.value = name
+            profile_select.update()
+            refresh_modified()
+            ui.notify(f"Saved pen profile '{name}'", color="positive")
+
+        primary_action_button("SAVE AS PROFILE", lambda: save_current())
+        # Cheap poll rather than hooking every pen control's on_change: the settings are
+        # edited from six separate number boxes that already own their handlers.
+        ui.timer(2.0, refresh_modified)
+        refresh_modified()
+
+    helper_text(
+        "Shipped values are starting points, not measurements. Print the pen calibration sheet "
+        "on the TESTS tab, read the best rung off each ladder, then save the result here."
+    )

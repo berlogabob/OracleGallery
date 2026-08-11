@@ -29,6 +29,7 @@ from .support import (
     build_realtime_preview_svg,
     compute_effective_sample_step,
     generate_dry_run_sheet,
+    generate_pen_cal_sheet,
     gui_settings_to_plotter_config,
     layout_capacity,
     list_base_symbols,
@@ -150,6 +151,11 @@ class GuiContext:
         settings.z_down_mm = _field_or_default(fields, "z_down_mm")
         settings.z_up_mm = _field_or_default(fields, "z_up_mm")
         settings.z_feed_mm_min = _field_or_default(fields, "z_feed_mm_min")
+        # Pen profile fields. pen_width_mm existed on GuiSettings long before it was
+        # pulled here, which is why it had no working GUI control: a widget missing from
+        # this method silently never persists.
+        settings.pen_width_mm = _field_or_default(fields, "pen_width_mm")
+        settings.pen_down_dwell_ms = _field_or_default(fields, "pen_down_dwell_ms")
         settings.direct_svg_origin_x_mm = _field_or_default(fields, "direct_svg_origin_x_mm")
         settings.direct_svg_origin_y_mm = _field_or_default(fields, "direct_svg_origin_y_mm")
 
@@ -307,6 +313,19 @@ class GuiContext:
             ui.notify(f"G-code generation failed: {exc}", color="negative")
             return
         ui.notify(f"G-code file: {output['gcode']}", color="positive")
+        self.refresh_status()
+
+    async def generate_pen_cal(self) -> None:
+        """Write the pen calibration sheet for the fitted pen."""
+        self.pull_settings_from_fields()
+        try:
+            output = await self._blocking(generate_pen_cal_sheet, self.settings)
+        except Exception as exc:  # noqa: BLE001
+            # A sheet that will not fit the bed raises rather than being clipped, and
+            # that is a normal outcome when the ladders are widened.
+            ui.notify(f"Pen calibration sheet failed: {exc}", color="negative")
+            return
+        ui.notify(f"Pen calibration G-code: {output['gcode']}", color="positive")
         self.refresh_status()
 
     # ---- preview & status -----------------------------------------------------

@@ -756,8 +756,15 @@ def _weight_passes(
     return passes
 
 
-def _simplify(points: Sequence[tuple[float, float]], tolerance: float) -> list[tuple[float, float]]:
-    """Douglas-Peucker. Drops the collinear runs a pixel skeleton is mostly made of."""
+def simplify_polyline(points: Sequence[tuple[float, float]], tolerance: float) -> list[tuple[float, float]]:
+    """Douglas-Peucker. Drops the collinear runs a pixel skeleton is mostly made of.
+
+    Iterative, so it is safe on the thousands-of-points loops a contour off a large
+    crop produces; svg_gcode._simplify_polyline is the recursive equivalent.
+
+    The early return names its elements `y, x` because callers here pass (row, col).
+    Both return paths preserve the input order -- this does not transpose.
+    """
     if tolerance <= 0 or len(points) < 3:
         return [(float(y), float(x)) for y, x in points]
     array = np.array(points, dtype=np.float64)
@@ -868,7 +875,7 @@ def trace(
     depth = _half_width_map(mask) if weight_passes else None
     cell_polylines: list[list[tuple[float, float]]] = []
     for chain in chains:
-        simplified = _simplify(chain, simplify_px)
+        simplified = simplify_polyline(chain, simplify_px)
         if len(simplified) < 2:
             continue
         cell_polylines.append(simplified)
@@ -880,7 +887,7 @@ def trace(
         widths = [float(depth[y, x]) for y, x in chain]
         chain_points = [(float(y), float(x)) for y, x in chain]
         for extra in _weight_passes(chain_points, widths, pen_px):
-            thinned_pass = _simplify(extra, simplify_px)
+            thinned_pass = simplify_polyline(extra, simplify_px)
             if len(thinned_pass) >= 2:
                 cell_polylines.append(thinned_pass)
 
@@ -964,9 +971,7 @@ def spiral(
     # Bound generation, not just the segment count: the cap in image_to_polylines only runs
     # once this returns, so a fine pitch on a big sheet would spin here first.
     if math.pi * reach * reach / pitch_mm / step_mm > max_points:
-        raise ValueError(
-            f"spiral would need more than max_points={max_points} samples; increase pitch_mm or cell_mm"
-        )
+        raise ValueError(f"spiral would need more than max_points={max_points} samples; increase pitch_mm or cell_mm")
 
     polylines: Polylines = []
     run: list[tuple[float, float]] = []
@@ -1302,6 +1307,7 @@ def image_to_polylines(
     invert: bool = False,
     gamma: float = 1.0,
     levels: int | None = None,
+    autocontrast: bool = True,
     max_segments: int = MAX_SEGMENTS_DEFAULT,
     min_stroke_mm: float = 0.0,
     **params: Any,
@@ -1318,6 +1324,9 @@ def image_to_polylines(
         invert=invert,
         gamma=gamma,
         levels=levels,
+        # Worth turning off for photographs: it stretches the histogram to full range,
+        # which lifts fabric texture and JPEG noise into ink (tests/test_imaging_speckle.py).
+        autocontrast=autocontrast,
     )
     strokes = MODES[mode](tone, **params)
     # Centre-out modes carry their own order. Serpentine buckets by floor(first point's y),

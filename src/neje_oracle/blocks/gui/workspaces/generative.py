@@ -8,8 +8,10 @@ from nicegui import app, ui
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from ....blocks.patterns import bank
 from ....blocks.text import shx
 from ..context import GuiContext
+from ..support import load_gui_settings
 from ..ui import helper_text, primary_action_button
 
 LATEST: dict = {"name": "", "bytes": b""}
@@ -74,6 +76,40 @@ async def _handle_text_paths(request: Request) -> JSONResponse:
     )
 
 
+def sketch_canvas_mm(settings) -> tuple[float, float]:
+    """Drawable extent for the sketch, in mm.
+
+    The direct-SVG path offsets the whole drawing by the origin
+    (blocks/gcode/direct_svg.py), so a canvas the full width of the sheet would
+    run off the bed by exactly that origin. Subtract it here rather than let
+    generate_absolute_svg_gcode clamp the overhang away.
+    """
+    width = float(settings.sheet_width_mm) - float(settings.direct_svg_origin_x_mm)
+    height = float(settings.sheet_height_mm) - float(settings.direct_svg_origin_y_mm)
+    return max(10.0, width), max(10.0, height)
+
+
+def _handle_pattern_bank(request: Request) -> JSONResponse:
+    """Serve the SVG motif bank plus the canvas extent the sketch should use.
+
+    Sync on purpose: load_bank() parses every SVG in the folder, and Starlette runs a
+    plain `def` handler in a threadpool. As `async def` that parsing would block the
+    event loop for every connected client.
+    """
+    width_mm, height_mm = sketch_canvas_mm(load_gui_settings())
+    motifs = bank.load_bank()
+    return JSONResponse(
+        {
+            "ok": True,
+            "canvas": {"width_mm": round(width_mm, 3), "height_mm": round(height_mm, 3)},
+            "motifs": {
+                name: [[[round(x, 4), round(y, 4)] for x, y in line] for line in polylines]
+                for name, polylines in motifs.items()
+            },
+        }
+    )
+
+
 def register_routes() -> None:
     """Register the generative SVG API endpoint."""
     global _ROUTES_REGISTERED
@@ -84,6 +120,7 @@ def register_routes() -> None:
     app.add_api_route("/api/generative/svg", _handle_generative_svg, methods=["POST"])
     app.add_api_route("/api/text/fonts", _handle_text_fonts, methods=["GET"])
     app.add_api_route("/api/text/paths", _handle_text_paths, methods=["GET"])
+    app.add_api_route("/api/patterns/bank", _handle_pattern_bank, methods=["GET"])
     _ROUTES_REGISTERED = True
 
 

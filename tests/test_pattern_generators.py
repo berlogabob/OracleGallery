@@ -21,6 +21,7 @@ EXPECTED_GENERATORS = {
     "motiftile",
     "isolines",
     "weave",
+    "bank",
 }
 # Server-backed: renders nothing without /api/text/paths, covered by test_shx_text.py.
 SERVER_BACKED_GENERATORS = {"text"}
@@ -102,3 +103,35 @@ def test_deterministic(
     output, _ = generated_patterns
     for name in EXPECTED_GENERATORS:
         assert (output / f"{name}.svg").read_bytes() == (output / "repeat" / f"{name}.svg").read_bytes()
+
+
+def test_bank_field_covers_the_sheet_with_a_heavy_motif(
+    generated_patterns: tuple[Path, dict[str, int]],
+) -> None:
+    """A photo-traced motif must not blank the bottom of the sheet.
+
+    A traced motif is ~60 polylines where a hand-authored one is 1-9, so a full grid
+    overruns MAX_TOTAL_SHAPES. Truncating the flat shape list cuts in raster order and
+    leaves the bottom edge empty -- measured at 225/282mm before the fix, and 49/282 at
+    the finest grid. Dropping whole cells by stride keeps coverage instead.
+    """
+    output, _ = generated_patterns
+    coverage = json.loads((output / "coverage.json").read_text())
+    assert coverage, "harness did not emit coverage data"
+    for scale, result in coverage.items():
+        assert result["shapes"] <= 600, f"scale {scale}: over the shape budget"
+        # Canvas is the harness default 200mm; the last row of cells must be drawn.
+        assert result["yMax"] > 170, f"scale {scale}: field stops at {result['yMax']}mm of 200"
+
+
+def test_bank_at_mix_zero_ignores_the_seed(
+    generated_patterns: tuple[Path, dict[str, int]],
+) -> None:
+    """The whole point of the bank: mix 0 is predictable, not merely repeatable.
+
+    Every other generator is only asserted to repeat for a fixed seed. This one
+    must produce the same field for *different* seeds, which is what fails if a
+    stray rng() call ever reaches the mix-0 branch.
+    """
+    output, _ = generated_patterns
+    assert (output / "mix0-seed12345.svg").read_bytes() == (output / "mix0-seed999.svg").read_bytes()

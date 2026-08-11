@@ -3,12 +3,26 @@
 // Adapted from 01_Circles.js - grid-based circles with seeded randomness
 // ============================================================================
 
-// Canvas & plotter settings
-const PLOTTER_WIDTH_MM = 200;
-const PLOTTER_HEIGHT_MM = 200;
-const SCALE_FACTOR = 3; // px/mm
-const CANVAS_WIDTH_PX = PLOTTER_WIDTH_MM * SCALE_FACTOR; // 600
-const CANVAS_HEIGHT_PX = PLOTTER_HEIGHT_MM * SCALE_FACTOR; // 600
+// Canvas & plotter settings. The mm extent is not a constant: it comes from the
+// operator's sheet size minus the direct-SVG origin, fetched at startup from
+// /api/patterns/bank. These defaults only hold until that lands.
+let PLOTTER_WIDTH_MM = 200;
+let PLOTTER_HEIGHT_MM = 200;
+const MAX_CANVAS_PX = 760; // longest side on screen; the iframe is 900px tall
+let SCALE_FACTOR = MAX_CANVAS_PX / Math.max(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM);
+let CANVAS_WIDTH_PX = PLOTTER_WIDTH_MM * SCALE_FACTOR;
+let CANVAS_HEIGHT_PX = PLOTTER_HEIGHT_MM * SCALE_FACTOR;
+
+function setCanvasMm(widthMm, heightMm) {
+  PLOTTER_WIDTH_MM = widthMm;
+  PLOTTER_HEIGHT_MM = heightMm;
+  SCALE_FACTOR = MAX_CANVAS_PX / Math.max(widthMm, heightMm);
+  CANVAS_WIDTH_PX = widthMm * SCALE_FACTOR;
+  CANVAS_HEIGHT_PX = heightMm * SCALE_FACTOR;
+  if (typeof resizeCanvas === 'function') {
+    resizeCanvas(CANVAS_WIDTH_PX, CANVAS_HEIGHT_PX);
+  }
+}
 
 // Pattern parameters
 const GRID_COLS = 10;
@@ -28,7 +42,7 @@ let currentSvgString = '';
 let shapes = []; // For building SVG (concatenation of all layers)
 let streamTimer = null; // Interval handle while streaming
 let layers = [
-  { generator: 'circles', density: 0.5, scale: 0.5, mask: false }
+  { generator: 'circles', density: 0.5, scale: 0.5, mix: 0, mask: false }
 ];
 
 // ============================================================================
@@ -48,7 +62,9 @@ function seededRandom(seed) {
 // SVG building: Pure function for consistent rendering
 // ============================================================================
 function buildSvg(shapes) {
-  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200mm" height="200mm">';
+  const w = PLOTTER_WIDTH_MM.toFixed(2);
+  const h = PLOTTER_HEIGHT_MM.toFixed(2);
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}mm" height="${h}mm">`;
 
   for (let shape of shapes) {
     if (shape.type === 'circle') {
@@ -91,6 +107,36 @@ function densityOf(params) {
 function scaleOf(params) {
   const s = params && typeof params.scale === 'number' ? params.scale : 0.5;
   return clamp(s, 0, 1);
+}
+
+// The predictability dial. 0 = bank motifs only (same field every seed),
+// 1 = procedural motifs only. Defaults to 0 because that is the point of a bank.
+function mixOf(params) {
+  const m = params && typeof params.mix === 'number' ? params.mix : 0;
+  return clamp(m, 0, 1);
+}
+
+// Spend the shape budget evenly across a grid of cells rather than left to right.
+// Cell cost varies ~60x between a hand-authored motif and a traced one, so an
+// over-budget field must lose whole cells spread across the sheet -- dropping the
+// tail would leave the bottom edge blank while the top is untouched.
+function fitCellsToBudget(cells, budget) {
+  const cap = typeof budget === 'number' ? budget : MAX_TOTAL_SHAPES;
+  let total = 0;
+  for (const cell of cells) total += cell.length;
+  if (total <= cap) return [].concat.apply([], cells);
+
+  // Keep every Nth cell, N chosen so the survivors fit. Costs differ per cell, so
+  // verify against the real total rather than assuming an average.
+  for (let stride = 2; stride <= cells.length; stride++) {
+    const kept = cells.filter(function(_, i) { return i % stride === 0; });
+    let cost = 0;
+    for (const cell of kept) cost += cell.length;
+    if (cost <= cap) return [].concat.apply([], kept);
+  }
+  // A single cell already exceeds the budget: draw as much of it as fits rather
+  // than nothing, so the operator sees the motif is too complex.
+  return cells.length ? cells[0].slice(0, cap) : [];
 }
 
 function triangle(rng, cx, cy, size) {
@@ -259,6 +305,56 @@ const MOTIFS = {
   cat
 };
 
+// ============================================================================
+// Pattern bank: SVG motifs from assets/patterns/, fetched at startup.
+// Each arrives as unit-box polylines centred on the origin, which is the same
+// contract as the motif functions above, so they merge straight into MOTIFS --
+// tribal and motiftile pick them up with no changes of their own.
+// ============================================================================
+let BANK_NAMES = []; // sorted; the bank generator walks these in order
+
+function bankMotifFn(polylines) {
+  return function(rng, cx, cy, size) {
+    return polylines.map(function(points) {
+      return {
+        type: 'polyline',
+        points: points.map(function(p) {
+          return { x: cx + p[0] * size, y: cy + p[1] * size };
+        })
+      };
+    });
+  };
+}
+
+const BUILTIN_MOTIFS = Object.assign({}, MOTIFS);
+
+function setBank(motifs) {
+  // Rebuild from the built-ins rather than deleting the previous bank's keys:
+  // a file named spiral.svg or cat.svg shadows a built-in, and deleting that
+  // key on the next fetch would take the built-in with it.
+  for (const name of Object.keys(MOTIFS)) delete MOTIFS[name];
+  Object.assign(MOTIFS, BUILTIN_MOTIFS);
+  BANK_NAMES = Object.keys(motifs).sort();
+  for (const name of BANK_NAMES) {
+    MOTIFS[name] = bankMotifFn(motifs[name]);
+  }
+}
+
+function loadBank() {
+  return fetch('/api/patterns/bank')
+    .then(function(r) { return r.json(); })
+    .then(function(payload) {
+      if (!payload || !payload.ok) return;
+      setBank(payload.motifs || {});
+      if (payload.canvas) {
+        setCanvasMm(payload.canvas.width_mm, payload.canvas.height_mm);
+      }
+      regenerateAll();
+      redraw();
+    })
+    .catch(function() { /* bank unavailable; built-in motifs still work */ });
+}
+
 function rotateShapes(shapes, cx, cy, radians) {
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
@@ -386,7 +482,7 @@ const GENERATORS = {
         const x = (p / (pointsPerLine - 1)) * PLOTTER_WIDTH_MM;
         const n = noise(x * 0.03, i * 0.5, phase) - 0.5; // centered ~[-0.5, 0.5]
         const y = baseY + Math.sin((x / PLOTTER_WIDTH_MM) * Math.PI * 2 * freq + phase) * amp + n * 4;
-        points.push({ x: clamp(x, 0, 200), y: clamp(y, 0, 200) });
+        points.push({ x: clamp(x, 0, PLOTTER_WIDTH_MM), y: clamp(y, 0, PLOTTER_HEIGHT_MM) });
       }
 
       shapes.push({ type: 'polyline', points: points });
@@ -437,14 +533,14 @@ const GENERATORS = {
     const shapes = [];
 
     for (let i = 0; i < count; i++) {
-      let x = clamp(rng() * PLOTTER_WIDTH_MM, 0, 200);
-      let y = clamp(rng() * PLOTTER_HEIGHT_MM, 0, 200);
+      let x = clamp(rng() * PLOTTER_WIDTH_MM, 0, PLOTTER_WIDTH_MM);
+      let y = clamp(rng() * PLOTTER_HEIGHT_MM, 0, PLOTTER_HEIGHT_MM);
       const points = [{ x: x, y: y }];
 
       for (let s = 0; s < steps; s++) {
         const angle = noise(x * 0.01, y * 0.01) * (Math.PI * 2) * 2; // TWO_PI * 2
-        x = clamp(x + Math.cos(angle) * stepLen, 0, 200);
-        y = clamp(y + Math.sin(angle) * stepLen, 0, 200);
+        x = clamp(x + Math.cos(angle) * stepLen, 0, PLOTTER_WIDTH_MM);
+        y = clamp(y + Math.sin(angle) * stepLen, 0, PLOTTER_HEIGHT_MM);
         points.push({ x: x, y: y });
       }
 
@@ -608,6 +704,56 @@ const GENERATORS = {
     return shapes.slice(0, MAX_TOTAL_SHAPES);
   },
 
+  // Grid of pattern-bank motifs, with mix as the predictability dial. At mix 0
+  // every cell is a bank motif picked round-robin and turned by cell parity --
+  // no rng reaches the output, so the field is identical for every seed. At
+  // mix 1 every cell is a procedural motif at a random angle. Both sides share
+  // the grid, so the field stays coherent anywhere in between.
+  bank: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    // An empty bank folder would otherwise leave a blank canvas at mix 0.
+    const mix = BANK_NAMES.length ? mixOf(params) : 1;
+    const cellSize = 12 + scale * 28;
+    const cols = Math.max(1, Math.floor(PLOTTER_WIDTH_MM / cellSize));
+    const rows = Math.max(1, Math.floor(PLOTTER_HEIGHT_MM / cellSize));
+    const width = PLOTTER_WIDTH_MM / cols;
+    const height = PLOTTER_HEIGHT_MM / rows;
+    const size = Math.min(width, height) * (0.5 + density * 0.45);
+    const procedural = Object.keys(MOTIFS).filter(function(name) {
+      return BANK_NAMES.indexOf(name) === -1;
+    });
+    // Collected per cell, not into one flat list: a hand-authored motif is 1-9
+    // polylines but a photo-traced one is ~60, so a full grid can overrun the shape
+    // budget many times over. Slicing a flat list would cut in raster order and
+    // always blank the bottom of the sheet -- the worst possible failure. Whole
+    // cells are dropped by stride below instead, which keeps coverage.
+    const cells = [];
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cx = (col + 0.5) * width;
+        const cy = (row + 0.5) * height;
+        // Draw the coin every cell whatever the outcome, so the seeded stream
+        // stays aligned and moving the slider does not reshuffle the whole field.
+        const roll = rng();
+
+        if (procedural.length && roll < mix) {
+          const name = procedural[Math.floor(rng() * procedural.length)];
+          const drawn = MOTIFS[name](rng, cx, cy, size);
+          cells.push(rotateShapes(drawn, cx, cy, rng() * Math.PI * 2));
+        } else if (BANK_NAMES.length) {
+          const cell = row * cols + col;
+          const drawn = MOTIFS[BANK_NAMES[cell % BANK_NAMES.length]](rng, cx, cy, size);
+          // Quarter turns keyed to the cell rather than the rng: regular, but
+          // not stripey the way a fixed orientation reads.
+          cells.push(rotateShapes(drawn, cx, cy, ((row + col) % 4) * Math.PI / 2));
+        }
+      }
+    }
+    return fitCellsToBudget(cells);
+  },
+
   motiftile: function(rng, params) {
     const density = densityOf(params);
     const scale = scaleOf(params);
@@ -753,6 +899,8 @@ const GENERATORS = {
         start = cut + half;
       }
       const limit = horizontal ? PLOTTER_WIDTH_MM : PLOTTER_HEIGHT_MM;
+      // `fixed` is the cross-axis coordinate, so it clamps against the other extent.
+      const crossLimit = horizontal ? PLOTTER_HEIGHT_MM : PLOTTER_WIDTH_MM;
       if (start < limit) segments.push([start, limit]);
 
       for (let s = 0; s < segments.length; s++) {
@@ -760,15 +908,15 @@ const GENERATORS = {
         const b = segments[s][1];
         for (const offset of [-half, half]) {
           const rail = horizontal
-            ? [{ x: a, y: clamp(fixed + offset, 0, 200) }, { x: b, y: clamp(fixed + offset, 0, 200) }]
-            : [{ x: clamp(fixed + offset, 0, 200), y: a }, { x: clamp(fixed + offset, 0, 200), y: b }];
+            ? [{ x: a, y: clamp(fixed + offset, 0, crossLimit) }, { x: b, y: clamp(fixed + offset, 0, crossLimit) }]
+            : [{ x: clamp(fixed + offset, 0, crossLimit), y: a }, { x: clamp(fixed + offset, 0, crossLimit), y: b }];
           shapes.push({ type: 'polyline', points: rail });
         }
         // Cap the cut ends so the strip reads as woven tape rather than two loose rails.
         for (const end of [a, b]) {
           const cap = horizontal
-            ? [{ x: end, y: clamp(fixed - half, 0, 200) }, { x: end, y: clamp(fixed + half, 0, 200) }]
-            : [{ x: clamp(fixed - half, 0, 200), y: end }, { x: clamp(fixed + half, 0, 200), y: end }];
+            ? [{ x: end, y: clamp(fixed - half, 0, crossLimit) }, { x: end, y: clamp(fixed + half, 0, crossLimit) }]
+            : [{ x: clamp(fixed - half, 0, crossLimit), y: end }, { x: clamp(fixed + half, 0, crossLimit), y: end }];
           shapes.push({ type: 'polyline', points: cap });
         }
       }
@@ -801,7 +949,7 @@ function regenerateAll() {
     }
 
     const genFn = GENERATORS[layer.generator] || GENERATORS.circles;
-    let layerShapes = genFn(rng, { density: layer.density, scale: layer.scale });
+    let layerShapes = genFn(rng, { density: layer.density, scale: layer.scale, mix: layer.mix });
 
     if (layer.mask) {
       layerShapes = layerShapes.filter(function(shape) {
@@ -948,6 +1096,22 @@ function renderLayersUI() {
     });
     scaleLabel.appendChild(scaleSlider);
 
+    const mixLabel = document.createElement('label');
+    mixLabel.appendChild(document.createTextNode('mix '));
+    const mixSlider = document.createElement('input');
+    mixSlider.type = 'range';
+    mixSlider.min = '0';
+    mixSlider.max = '100';
+    mixSlider.value = String(Math.round(mixOf(layer) * 100));
+    mixSlider.className = 'density-slider';
+    mixSlider.title = 'mix: 0 = pattern bank (repeatable), 100 = generated (random)';
+    mixSlider.addEventListener('input', function(e) {
+      layers[i].mix = parseInt(e.target.value, 10) / 100;
+      regenerateAll();
+      redraw();
+    });
+    mixLabel.appendChild(mixSlider);
+
     const maskLabel = document.createElement('label');
     maskLabel.className = 'mask-label';
     const maskCheckbox = document.createElement('input');
@@ -978,6 +1142,7 @@ function renderLayersUI() {
     row.appendChild(select);
     row.appendChild(slider);
     row.appendChild(scaleLabel);
+    row.appendChild(mixLabel);
     row.appendChild(maskLabel);
     row.appendChild(removeBtn);
     container.appendChild(row);
@@ -1004,6 +1169,9 @@ function setup() {
 
   noLoop(); // Only redraw when we call redraw()
 
+  // Async: resizes the canvas to the operator's sheet and fills the motif bank.
+  loadBank();
+
   // Wire up buttons
   document.getElementById('regenerate-btn').addEventListener('click', () => {
     currentSeed = Math.floor(Math.random() * 1000000);
@@ -1015,7 +1183,7 @@ function setup() {
 
   document.getElementById('add-layer-btn').addEventListener('click', () => {
     if (layers.length < MAX_LAYERS) {
-      layers.push({ generator: 'circles', density: 0.5, scale: 0.5, mask: false });
+      layers.push({ generator: 'circles', density: 0.5, scale: 0.5, mix: 0, mask: false });
       renderLayersUI();
       regenerateAll();
       redraw();
@@ -1097,7 +1265,16 @@ function stopStreaming() {
 
 window.addEventListener('message', (event) => {
   const message = event.data;
-  if (!message || message.type !== 'stream' || typeof message.enabled !== 'boolean') return;
+  if (!message) return;
+  // Re-fetch the motif bank and the canvas extent. Sent by the IMAGE tab after SAVE TO
+  // BANK, and by anything that changes sheet size or the direct-SVG origin: both are
+  // read once in setup(), so without this the sketch keeps drawing the stale set at the
+  // stale size until the operator reloads the iframe.
+  if (message.type === 'bank') {
+    loadBank();
+    return;
+  }
+  if (message.type !== 'stream' || typeof message.enabled !== 'boolean') return;
   if (message.enabled) {
     startStreaming(message.seconds);
   } else {

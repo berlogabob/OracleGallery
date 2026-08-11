@@ -63,6 +63,7 @@ def create_direct_svg_print_job_from_gui(
         z_down_mm=config.z_down_mm,
         z_up_mm=config.z_up_mm,
         z_feed_mm_min=config.z_feed_mm_min,
+        pen_down_dwell_ms=config.pen_down_dwell_ms,
         origin_x_mm=settings.direct_svg_origin_x_mm,
         origin_y_mm=settings.direct_svg_origin_y_mm,
         keep_non_negative=True,
