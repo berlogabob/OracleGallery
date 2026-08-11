@@ -202,6 +202,7 @@ class SupervisorService:
             fluidnc_checker=self._system_check_fluidnc,
             work_offset_provider=self._current_work_offset,
             board_identity_provider=self._live_board_identity,
+            on_fallback_config=self._record_fallback_config,
         ).run(
             mode=mode,
             gui_settings=gui_settings,
@@ -404,6 +405,10 @@ class SupervisorService:
                     gcode_lines_total=total_lines,
                 )
             )
+            # Direct SVG is how every test sheet and calibration print goes out, and it
+            # used to write no plot_jobs row at all -- so a failed print left nothing
+            # durable to read afterwards. runtime_state holds only the most recent run.
+            plotter_store.record_job_status(job.sheet_id, PlotStatus.FAILED, sheet_id=job.sheet_id, error=str(exc))
             append_log("plotter", message, level="error", settings=self.settings)
             return self.runtime_store.set_component(
                 "print", ComponentStatus.ERROR, message=message, last_error=str(exc)
@@ -428,6 +433,7 @@ class SupervisorService:
                 sheet_progress_percent=100.0,
             )
         )
+        plotter_store.record_job_status(job.sheet_id, PlotStatus.PRINTED, sheet_id=job.sheet_id)
         append_log("plotter", f"Uploaded SVG printed directly: {job.label} -> {gcode_path}", settings=self.settings)
         return self.runtime_store.set_component(
             "print", ComponentStatus.STOPPED, message=f"Uploaded SVG printed: {job.label}"
@@ -689,8 +695,6 @@ class SupervisorService:
         if not self._manual_control_allowed("unlock alarm"):
             return self.runtime_store.load_component_state("fluidnc")
         result = self.transport_factory(self.plotter_settings).unlock_alarm()
-        if not result.ok:
-            result = _enrich_fluidnc_error(result)
         return self._record_fluidnc_command(result, "Unlock alarm")
 
     def emergency_stop_fluidnc(self) -> ComponentState:
@@ -942,6 +946,34 @@ class SupervisorService:
         except Exception:  # noqa: BLE001
             return None
 
+    def _record_fallback_config(self, live_board: str) -> str:
+        """Count how often the controller has been found in its built-in fallback config.
+
+        Returns a suffix for the check message, so a repeat is visible at the moment it
+        matters. `error:152` -- the same signature -- appears on 19 separate days in
+        logs/oracle_supervisor.log, which is the difference between "a one-off panic" and
+        "this board keeps falling over"; without a counter that only shows up by grepping
+        30k log lines. Never raises: a diagnostic must not break the check reporting it.
+        """
+        try:
+            record = self.runtime_store.load_json("fluidnc_fallback_config", {})
+            count = int(record.get("count", 0)) + 1
+            now = datetime.now(tz=UTC).isoformat()
+            self.runtime_store.save_json(
+                "fluidnc_fallback_config",
+                {
+                    "count": count,
+                    "live_board": live_board,
+                    "first_seen": record.get("first_seen", now),
+                    "last_seen": now,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            return ""
+        if count <= 1:
+            return ""
+        return f" (seen {count} times, first on {str(record.get('first_seen', ''))[:10]})"
+
     def _current_work_offset(self) -> tuple[float, float, float] | None:
         """G54 offset from the controller, or None if it cannot be read.
 
@@ -977,6 +1009,11 @@ class SupervisorService:
         return True
 
     def _record_fluidnc_command(self, result: FluidNCCommandResult, label: str) -> ComponentState:
+        # Explain the code here rather than at each caller: every manual FluidNC action
+        # funnels through this method, so one call covers jog, work zero, pen up/down,
+        # home, unlock and resume instead of the two sites that used to be wired up.
+        if not result.ok:
+            result = _enrich_fluidnc_error(result)
         level = "info" if result.ok else "error"
         append_log("plotter", f"FluidNC {label}: {result.message}", level=level, settings=self.settings)
         if not result.ok:
@@ -1210,29 +1247,84 @@ def _homing_disconnect_is_recoverable(result: FluidNCCommandResult) -> bool:
     )
 
 
+# Only the codes this machine has actually produced, counted from logs/oracle_supervisor.log
+# (2026-05-13 -> 2026-08-11). Not a transcription of the whole GRBL table: an explanation
+# for a code that has never fired here is a guess, and a wrong guess sends the operator
+# somewhere useless. Longest key first so "error:152" is not matched by "error:15".
+FLUIDNC_ERROR_HELP: tuple[tuple[str, str], ...] = (
+    (
+        "error:152",
+        "FluidNC reports an invalid configuration. This is also what a panicked board looks like: "
+        "it boots a built-in default with no motor pins. Power-cycle the controller, then confirm "
+        "$CD reports the real board before printing.",
+    ),
+    (
+        "error:162",
+        "FluidNC rejected a setting command ($nnn=). The G-code is trying to change controller "
+        "settings mid-print, which this setup does not do -- regenerate it.",
+    ),
+    (
+        "error:19",
+        "FluidNC rejected the homing request for that axis. Home all axes together, or check that "
+        "the axis has a limit switch configured.",
+    ),
+    (
+        "error:5",
+        "FluidNC homing is not enabled/configured. Skip homing for this setup, jog to the physical "
+        "origin, lift the pen, then set work zero.",
+    ),
+    (
+        "error:9",
+        "FluidNC is locked and ignoring motion. Press UNLOCK ALARM, then home before printing -- "
+        "the position reference is gone until you do.",
+    ),
+    (
+        "alarm: homing fail approach",
+        "The axis never reached its limit switch. Check the switch wiring and that nothing is "
+        "blocking travel, then home again.",
+    ),
+    (
+        "alarm: abort cycle",
+        "Motion was aborted mid-cycle (soft reset or E-STOP). Home before the next print: the "
+        "position reference is no longer trustworthy.",
+    ),
+    (
+        "alarm: soft limit",
+        "The G-code asked the machine to move outside its travel. Check the sheet size and the "
+        "work-zero offset against echodraw/hardware/GEOMETRY.md -- the drawing does not fit.",
+    ),
+    (
+        "alarm:2",
+        "Soft limit hit: the commanded move is outside machine travel. Check sheet size and "
+        "work-zero offset against echodraw/hardware/GEOMETRY.md.",
+    ),
+    (
+        "[msg:err: reset to continue]",
+        "The controller is in Alarm and refused the command. Press UNLOCK ALARM, then home.",
+    ),
+)
+
+
 def _enrich_fluidnc_error(result: FluidNCCommandResult) -> FluidNCCommandResult:
+    """Append a plain-English explanation to a FluidNC failure. Idempotent.
+
+    home_fluidnc enriches before branching, and _record_fluidnc_command enriches again on
+    the branch that reaches it -- without the already-explained guard the same sentence
+    would be appended twice.
+    """
     message = result.message.lower()
-    if "error:5" in message:
+    for code, explanation in FLUIDNC_ERROR_HELP:
+        if code not in message:
+            continue
+        if explanation in result.message:
+            return result
         return FluidNCCommandResult(
             ok=False,
             command=result.command,
             response_lines=result.response_lines,
-            error=(
-                f"{result.message} - FluidNC homing is not enabled/configured. "
-                "Skip homing for this setup, jog to the physical origin, lift the pen, then set work zero."
-            ),
+            error=f"{result.message} - {explanation}",
         )
-    if "error:152" not in message:
-        return result
-    return FluidNCCommandResult(
-        ok=False,
-        command=result.command,
-        response_lines=result.response_lines,
-        error=(
-            f"{result.message} - FluidNC reports an invalid configuration. "
-            "Open the FluidNC WebUI/serial boot messages and fix config.yaml before unlock, homing, or jogging will work."
-        ),
-    )
+    return result
 
 
 OracleSupervisor = SupervisorService

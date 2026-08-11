@@ -214,7 +214,11 @@ class PlotterStore(_SQLiteStore):
             ON CONFLICT(session_id) DO UPDATE SET
               status=excluded.status,
               sheet_id=excluded.sheet_id,
-              error=excluded.error,
+              -- Keep the old message when the new write carries none. Callers that report
+              -- progress pass error="" by default, which used to wipe the reason a job had
+              -- failed -- every row in plotter.sqlite3 has an empty error column as a
+              -- result, including the sheet the 2026-08-10 controller panic killed.
+              error=CASE WHEN excluded.error != '' THEN excluded.error ELSE plot_jobs.error END,
               updated_at=excluded.updated_at
             """,
             (session_id, status.value, sheet_id, error, datetime.now(tz=UTC).isoformat()),

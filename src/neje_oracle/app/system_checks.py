@@ -25,6 +25,10 @@ class SystemCheckService:
         fluidnc_checker: Callable[[float], tuple[bool, str]] | None = None,
         work_offset_provider: Callable[[], tuple[float, float, float] | None] | None = None,
         board_identity_provider: Callable[[], str | None] | None = None,
+        # Called with the live board string each time the controller is found running its
+        # built-in fallback config. Optional so the existing constructors keep working;
+        # the supervisor wires it to the runtime store to count recurrences.
+        on_fallback_config: Callable[[str], str] | None = None,
     ) -> None:
         self.supervisor_settings = supervisor_settings or OracleSupervisorSettings()
         self.plotter_settings = plotter_settings or PlotterSettings()
@@ -33,6 +37,7 @@ class SystemCheckService:
         self.fluidnc_checker = fluidnc_checker
         self.work_offset_provider = work_offset_provider
         self.board_identity_provider = board_identity_provider
+        self.on_fallback_config = on_fallback_config
 
     def run(self, *, mode: SystemMode, gui_settings: GuiSettings) -> SystemCheckResult:
         checks = [
@@ -125,10 +130,14 @@ class SystemCheckService:
         live_board = self.board_identity_provider() if self.board_identity_provider is not None else None
         if live_board is not None:
             if "TinyBee" not in live_board or "XXYYZ" not in live_board:
+                # Count recurrences. error:152 -- the same fallback signature -- appears on
+                # 19 separate days in logs/oracle_supervisor.log, so this is not the
+                # one-off the single diagnosed panic suggests. A trend is worth seeing.
+                history = self.on_fallback_config(live_board) if self.on_fallback_config is not None else ""
                 problems.append(
                     f"controller is running config '{live_board or '<none>'}', not {board or 'the expected board'}; "
                     "FluidNC has most likely panicked into its built-in default -- power-cycle the board and "
-                    "confirm $CD reports the real board before printing"
+                    f"confirm $CD reports the real board before printing{history}"
                 )
             elif board and live_board != board:
                 warnings.append(f"controller board '{live_board}' differs from {config_path.name} '{board}'")
