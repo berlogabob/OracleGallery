@@ -845,14 +845,38 @@ def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
     assert payload["effective_sample_step_mm"] > 2.0  # smaller cell → lighter = more spacing
 
 
-def test_batch_generation_controls_are_not_operator_facing() -> None:
-    source = Path("src/neje_oracle/blocks/gui/service.py").read_text(encoding="utf-8")
-    work_panel = source.split("with ui.tab_panel(work_tab)", 1)[1].split("with ui.tab_panel(exhibition_tab)", 1)[0]
-    exhibition_panel = source.split("with ui.tab_panel(exhibition_tab)", 1)[1]
-    assert "Generate next filler" not in work_panel
-    assert "Generate next filler" not in exhibition_panel
-    assert "START GENERATOR" not in work_panel
-    assert "START GENERATOR" not in exhibition_panel
+def test_batch_generation_controls_are_not_operator_facing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Batch generation is a developer tool; it must not surface in the operator tabs.
+
+    This used to slice service.py's *source* on the literals "with ui.tab_panel(work_tab)"
+    and "(exhibition_tab)", so any restructuring of the page shell raised IndexError
+    instead of failing cleanly -- and it only ever saw text that happened to sit between
+    two markers. Building the workspaces and reading the rendered elements checks the
+    thing that actually matters and survives the shell being rewritten.
+    """
+    from nicegui import ui
+
+    from neje_oracle.blocks.gui.context import GuiContext
+    from neje_oracle.blocks.gui.workspaces import exhibition, work
+    from neje_oracle.shared.gui_settings import GuiSettings
+
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.load_gui_settings", lambda *a, **k: GuiSettings())
+    ctx = GuiContext()
+
+    column = ui.column()
+    with column:
+        work.build(ctx)
+        exhibition.build(ctx)
+
+    rendered = {
+        str(text)
+        for element in column.descendants()
+        for text in (getattr(element, "text", None), element._props.get("label"))
+        if text
+    }
+    for forbidden in ("Generate next filler", "START GENERATOR"):
+        offenders = [text for text in rendered if forbidden in text]
+        assert not offenders, f"{forbidden!r} is operator-facing in WORK/EXHIBITION: {offenders}"
 
 
 def test_blocking_helper_returns_result_and_does_not_recurse() -> None:
