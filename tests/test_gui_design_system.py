@@ -108,6 +108,46 @@ def test_ratchets_are_not_slack() -> None:
         )
 
 
+def test_tokens_match_the_flutter_reference() -> None:
+    """The operator GUI and the gallery must describe one design system.
+
+    public_gallery/lib/theme/oracle_theme.dart is the faithful implementation of
+    assets/Design system/. The operator app used to carry a fourth palette that was near
+    but never equal -- rust #8f4f2b vs #8B4513 across 27 uses. Parsing the Dart rather
+    than copying the values means a change on either side fails here instead of silently
+    splitting the brand again.
+    """
+    from neje_oracle.blocks.gui import tokens
+
+    dart = (Path(__file__).resolve().parents[1] / "public_gallery/lib/theme/oracle_theme.dart").read_text(
+        encoding="utf-8"
+    )
+    reference = {
+        name: "#" + value.upper()
+        for name, value in re.findall(r"static const (\w+) = Color\(0xFF([0-9a-fA-F]{6})\)", dart)
+    }
+    assert reference, "could not parse oracle_theme.dart; has the reference moved?"
+
+    for dart_name, token_name in (
+        ("cream", "CREAM"),
+        ("paper", "PAPER"),
+        ("ink", "INK"),
+        ("inkMid", "INK_MID"),
+        ("inkMuted", "INK_MUTED"),
+        ("rust", "RUST"),
+        ("gold", "GOLD"),
+        ("goldDim", "GOLD_DIM"),
+        ("rule", "RULE"),
+        ("voidColor", "VOID"),
+    ):
+        expected = reference.get(dart_name)
+        if expected is None:
+            continue
+        assert getattr(tokens, token_name) == expected, (
+            f"tokens.{token_name} is {getattr(tokens, token_name)} but oracle_theme.dart says {expected}"
+        )
+
+
 def test_style_owners_exist() -> None:
     """The ratchets are meaningless if the files that are allowed to style do not exist."""
     assert (GUI_ROOT / "ui.py").exists()
