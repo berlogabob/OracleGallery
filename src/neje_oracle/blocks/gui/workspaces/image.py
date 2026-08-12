@@ -646,6 +646,12 @@ def build(ctx: GuiContext) -> None:
             cost_label.set_text("Upload an image to see the preview.")
             STATE["svg"] = ""
             return
+        # Typed dict[str, Any], not inferred: a bare {"pen_width_mm": float} splat narrows to
+        # dict[str, float], which mypy then reads as able to collide with image_to_polylines'
+        # levels: int | None and autocontrast: bool.
+        pen_param: dict[str, Any] = (
+            {"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}
+        )
         try:
             polylines = image_to_polylines(
                 STATE["bytes"],
@@ -657,7 +663,7 @@ def build(ctx: GuiContext) -> None:
                 invert=bool(STATE["invert"]),
                 max_segments=quality_max_segments(str(STATE["quality"])),
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
-                **({"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}),
+                **pen_param,
                 **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
             )
         except ValueError as exc:

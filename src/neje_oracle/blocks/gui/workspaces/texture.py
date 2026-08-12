@@ -348,7 +348,9 @@ def build(ctx: GuiContext) -> None:
                     default=float(STATE[key]),
                     min_value=0.05 if key == "cell_mm" else 0.0,
                     step=step,
-                    on_change=lambda key=key: None,
+                    # number_control's on_change takes no arguments, so it cannot carry the value.
+                    # The real handler is the chained on_value_change below.
+                    on_change=lambda: None,
                 ).on_value_change(lambda event, key=key: set_field(key, event.value))
 
         async def print_texture() -> None:

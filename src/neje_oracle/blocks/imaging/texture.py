@@ -354,6 +354,20 @@ class _Context:
 Resolve = Callable[..., "Field | None"]
 
 
+def _required(field: Field | None, socket: str) -> Field:
+    """Narrow a required socket to non-None.
+
+    resolve() returns None for an unwired socket, which is legitimate for the optional ones
+    (mix.fac, math.b, warp.vector_y) and impossible for the required ones: from_dict refuses to
+    build a graph with a socket in NodeKind.required left unwired. Reaching this with None is an
+    internal invariant violation rather than operator error, so the message names the socket
+    instead of offering advice.
+    """
+    if field is None:
+        raise ValueError(f"required socket {socket!r} was not resolved")
+    return field
+
+
 def _node_perlin(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
     scale = np.float32(params["scale_mm"])
     value = _fbm(
@@ -447,8 +461,8 @@ def _node_constant(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, c
 
 
 def _node_mix(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
-    a = resolve("a")
-    b = resolve("b")
+    a = _required(resolve("a"), "a")
+    b = _required(resolve("b"), "b")
     blended = BLEND_MODES[params["blend"]](a, b)
     factor = np.float32(params["factor"])
     fac = resolve("fac")
@@ -460,7 +474,7 @@ def _node_mix(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _
 
 
 def _node_ramp(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
-    fac = resolve("fac")
+    fac = _required(resolve("fac"), "fac")
     stops = params["stops"]
     positions = np.array([position for position, _ in stops], dtype=np.float32)
     levels = np.array([level for _, level in stops], dtype=np.float32)
@@ -482,7 +496,7 @@ def _node_ramp(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: 
 
 
 def _node_math(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
-    a = resolve("a")
+    a = _required(resolve("a"), "a")
     b = resolve("b")
     if b is None:
         b = np.full(a.shape, np.float32(params["value"]), dtype=np.float32)
@@ -508,7 +522,7 @@ def _node_math(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: 
 
 
 def _node_invert(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
-    return np.float32(1.0) - resolve("fac")
+    return np.float32(1.0) - _required(resolve("fac"), "fac")
 
 
 def _node_mapping(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
@@ -524,12 +538,12 @@ def _node_mapping(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ct
     py = frame.y - centre_y - np.float32(params["translate_mm"][1])
     rx = (px * cos_a + py * sin_a) / scale_x
     ry = (-px * sin_a + py * cos_a) / scale_y
-    return resolve("fac", ctx.new_frame(rx + centre_x, ry + centre_y))
+    return _required(resolve("fac", ctx.new_frame(rx + centre_x, ry + centre_y)), "fac")
 
 
 def _node_warp(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: _Context) -> Field:
     # The displacement sources are read in the INCOMING frame; only `fac` moves.
-    vector_x = resolve("vector_x")
+    vector_x = _required(resolve("vector_x"), "vector_x")
     vector_y = resolve("vector_y")
     if vector_y is None:
         vector_y = vector_x
@@ -538,7 +552,7 @@ def _node_warp(frame: _Frame, params: Mapping[str, Any], resolve: Resolve, ctx: 
     one = np.float32(1.0)
     offset_x = strength * (two * vector_x - one)
     offset_y = strength * (two * vector_y - one)
-    return resolve("fac", ctx.new_frame(frame.x + offset_x, frame.y + offset_y))
+    return _required(resolve("fac", ctx.new_frame(frame.x + offset_x, frame.y + offset_y)), "fac")
 
 
 _SEED_PARAM = ParamSpec("int", 0, minimum=0, maximum=0xFFFFFFFF, help="Per-node seed, folded with the graph seed.")

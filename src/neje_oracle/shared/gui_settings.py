@@ -40,6 +40,7 @@ class GuiDefaults(TypedDict):
     z_up_mm: float
     z_feed_mm_min: float
     pen_width_mm: float
+    pen_down_dwell_ms: float
     direct_svg_origin_x_mm: float
     direct_svg_origin_y_mm: float
 
@@ -70,6 +71,7 @@ type NumericGuiDefaultKey = Literal[
     "z_up_mm",
     "z_feed_mm_min",
     "pen_width_mm",
+    "pen_down_dwell_ms",
     "direct_svg_origin_x_mm",
     "direct_svg_origin_y_mm",
 ]
