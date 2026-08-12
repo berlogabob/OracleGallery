@@ -41,9 +41,19 @@ let currentSeed = 12345;
 let currentSvgString = '';
 let shapes = []; // For building SVG (concatenation of all layers)
 let streamTimer = null; // Interval handle while streaming
-let layers = [
-  { generator: 'circles', density: 0.5, scale: 0.5, mix: 0, mask: false }
-];
+// `field` names a saved texture graph and what it drives. An empty name is off, which is the
+// default -- a fresh sketch should not depend on the texture API being reachable.
+function newLayer() {
+  return {
+    generator: 'circles',
+    density: 0.5,
+    scale: 0.5,
+    mix: 0,
+    field: { name: '', target: 'mask', threshold: 0.5, strength: 1.0, invert: false }
+  };
+}
+
+let layers = [newLayer()];
 
 // ============================================================================
 // Simple seeded random number generator (Mulberry32)
@@ -951,11 +961,11 @@ function regenerateAll() {
     const genFn = GENERATORS[layer.generator] || GENERATORS.circles;
     let layerShapes = genFn(rng, { density: layer.density, scale: layer.scale, mix: layer.mix });
 
-    if (layer.mask) {
-      layerShapes = layerShapes.filter(function(shape) {
-        const c = shapeCenter(shape);
-        return noise(c.x / 50, c.y / 50, i * 7.7) >= 0.5;
-      });
+    // Synchronous by contract: applyField reads FIELD_CACHE and never awaits. startStreaming calls
+    // regenerateAll() then immediately prints currentSvgString, so one promise here would put a
+    // half-built frame on paper.
+    if (layer.field && layer.field.name) {
+      layerShapes = applyField(layerShapes, layer.field, rng);
     }
 
     allShapes = allShapes.concat(layerShapes);
@@ -992,6 +1002,109 @@ function regenerateAll() {
 // Text layer: /api/text/paths is the only async source in the sketch, so its
 // result is cached and the layer generator reads the cache synchronously.
 // ============================================================================
+// ============================================================================
+// Texture fields: a saved node graph (blocks/imaging/texture.py) sampled per shape.
+//
+// Same shape as the text cache below and for the same reason: regenerateAll() must stay
+// synchronous, because startStreaming calls it and immediately reads currentSvgString to print.
+// One noise implementation lives in Python; this is the second consumer of it.
+// ============================================================================
+const FIELD_CACHE = {};
+
+// Pure and DOM-free so the node harness can inject a synthetic field.
+function setFieldData(name, grey, cols, rows, widthMm, heightMm) {
+  FIELD_CACHE[name] = { grey: grey, cols: cols, rows: rows, widthMm: widthMm, heightMm: heightMm };
+}
+
+// Returns 1.0 -- "no effect" -- when the field is not cached yet. That is what keeps
+// regenerateAll() synchronous: a cold field leaves shapes unmasked and full size, and fetchField's
+// onload calls regenerateAll() again once the PNG lands.
+function sampleField(name, xMm, yMm) {
+  const field = FIELD_CACHE[name];
+  if (!field) return 1.0;
+  // Nearest neighbour: shapes are millimetres across, not sub-cell, so interpolating would cost a
+  // multiply per sample to move a value nothing can resolve.
+  const col = clamp(Math.floor((xMm / field.widthMm) * field.cols), 0, field.cols - 1);
+  const row = clamp(Math.floor((yMm / field.heightMm) * field.rows), 0, field.rows - 1);
+  return field.grey[row * field.cols + col] / 255;
+}
+
+// Scale a shape about a point. Circles scale their radius, polylines every vertex.
+function scaleShape(shape, origin, factor) {
+  if (shape.type === 'circle') {
+    return { type: 'circle', cx: shape.cx, cy: shape.cy, r: Math.max(0.05, shape.r * factor) };
+  }
+  if (shape.type === 'polyline' && shape.points) {
+    return {
+      type: 'polyline',
+      points: shape.points.map(function(point) {
+        return { x: origin.x + (point.x - origin.x) * factor, y: origin.y + (point.y - origin.y) * factor };
+      })
+    };
+  }
+  return shape;
+}
+
+// The three things a field can drive. Replaces the old boolean mask, which was one hard-coded
+// noise call at a fixed scale and a fixed threshold.
+function applyField(shapes, field, rng) {
+  const kept = [];
+  const strength = typeof field.strength === 'number' ? field.strength : 1.0;
+  const threshold = typeof field.threshold === 'number' ? field.threshold : 0.5;
+  for (const shape of shapes) {
+    const centre = shapeCenter(shape);
+    let value = sampleField(field.name, centre.x, centre.y);
+    if (field.invert) value = 1 - value;
+    if (field.target === 'density') {
+      if (rng() < value * strength) kept.push(shape);
+    } else if (field.target === 'size') {
+      kept.push(scaleShape(shape, centre, 1 - strength + strength * value));
+    } else if (value >= threshold) {
+      kept.push(shape);
+    }
+  }
+  return kept;
+}
+
+// The DOM half. Never called at module scope -- only from setup() and UI events, because
+// _harness.mjs re-evals this file with document stubbed to {getElementById: () => null}.
+function fetchField(name) {
+  if (!name) return;
+  const url = '/api/texture/field?name=' + encodeURIComponent(name) +
+    '&width_mm=' + PLOTTER_WIDTH_MM + '&height_mm=' + PLOTTER_HEIGHT_MM +
+    '&cell_mm=1.0&seed=' + currentSeed;
+  const image = new Image();
+  image.onload = function() {
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext('2d');
+    context.drawImage(image, 0, 0);
+    // Same-origin, so the canvas is untainted and getImageData is allowed. The PNG is grayscale,
+    // so the red channel is the whole value -- 8 bits, i.e. 1/255 resolution on a mask threshold.
+    const rgba = context.getImageData(0, 0, image.width, image.height).data;
+    const grey = new Uint8Array(image.width * image.height);
+    for (let i = 0; i < grey.length; i++) grey[i] = rgba[i * 4];
+    setFieldData(name, grey, image.width, image.height, PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM);
+    regenerateAll();
+    redraw();
+  };
+  image.onerror = function() { /* field unavailable; the layer just renders unfielded */ };
+  image.src = url;
+}
+
+let TEXTURE_NAMES = [];
+
+function loadTextureNames() {
+  fetch('/api/texture/graphs')
+    .then(function(response) { return response.json(); })
+    .then(function(payload) {
+      TEXTURE_NAMES = payload.graphs || [];
+      renderLayersUI();
+    })
+    .catch(function() { /* texture API unavailable; the field picker stays empty */ });
+}
+
 const TEXT_CACHE = { polylines: [], width_mm: 0, height_mm: 0 };
 const TEXT_INPUT = { text: 'NEJE\nORACLE', font: '' };
 
@@ -1112,18 +1225,64 @@ function renderLayersUI() {
     });
     mixLabel.appendChild(mixSlider);
 
-    const maskLabel = document.createElement('label');
-    maskLabel.className = 'mask-label';
-    const maskCheckbox = document.createElement('input');
-    maskCheckbox.type = 'checkbox';
-    maskCheckbox.checked = !!layer.mask;
-    maskCheckbox.addEventListener('change', function(e) {
-      layers[i].mask = e.target.checked;
+    // Field controls, replacing the old boolean mask: which saved texture, what it drives, and how
+    // hard. Names come from /api/texture/graphs; an empty list just leaves "(no field)".
+    const field = layer.field || (layers[i].field = { name: '', target: 'mask', threshold: 0.5, strength: 1.0 });
+
+    const fieldLabel = document.createElement('label');
+    fieldLabel.className = 'mask-label';
+    const fieldSelect = document.createElement('select');
+    fieldSelect.title = 'texture field: authored in the node editor';
+    [''].concat(TEXTURE_NAMES).forEach(function(name) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name || '(no field)';
+      if (name === field.name) opt.selected = true;
+      fieldSelect.appendChild(opt);
+    });
+    fieldSelect.addEventListener('change', function(e) {
+      layers[i].field.name = e.target.value;
+      if (e.target.value) fetchField(e.target.value);
       regenerateAll();
       redraw();
     });
-    maskLabel.appendChild(maskCheckbox);
-    maskLabel.appendChild(document.createTextNode('mask'));
+    fieldLabel.appendChild(fieldSelect);
+
+    const targetSelect = document.createElement('select');
+    targetSelect.title = 'mask: cull below threshold. density: more shapes where bright. size: scale by value.';
+    ['mask', 'density', 'size'].forEach(function(name) {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      if (name === field.target) opt.selected = true;
+      targetSelect.appendChild(opt);
+    });
+    targetSelect.addEventListener('change', function(e) {
+      layers[i].field.target = e.target.value;
+      regenerateAll();
+      redraw();
+    });
+    fieldLabel.appendChild(targetSelect);
+
+    // One slider for both knobs: mask reads it as a threshold, density and size as a strength.
+    const amountSlider = document.createElement('input');
+    amountSlider.type = 'range';
+    amountSlider.min = '0';
+    amountSlider.max = '100';
+    amountSlider.className = 'density-slider';
+    amountSlider.title = 'mask: threshold. density/size: strength.';
+    amountSlider.value = String(Math.round((field.target === 'mask' ? field.threshold : field.strength) * 100));
+    amountSlider.addEventListener('input', function(e) {
+      const value = parseInt(e.target.value, 10) / 100;
+      if (layers[i].field.target === 'mask') {
+        layers[i].field.threshold = value;
+      } else {
+        layers[i].field.strength = value;
+      }
+      regenerateAll();
+      redraw();
+    });
+    fieldLabel.appendChild(amountSlider);
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -1143,7 +1302,7 @@ function renderLayersUI() {
     row.appendChild(slider);
     row.appendChild(scaleLabel);
     row.appendChild(mixLabel);
-    row.appendChild(maskLabel);
+    row.appendChild(fieldLabel);
     row.appendChild(removeBtn);
     container.appendChild(row);
   });
@@ -1171,6 +1330,7 @@ function setup() {
 
   // Async: resizes the canvas to the operator's sheet and fills the motif bank.
   loadBank();
+  loadTextureNames();
 
   // Wire up buttons
   document.getElementById('regenerate-btn').addEventListener('click', () => {
@@ -1183,7 +1343,7 @@ function setup() {
 
   document.getElementById('add-layer-btn').addEventListener('click', () => {
     if (layers.length < MAX_LAYERS) {
-      layers.push({ generator: 'circles', density: 0.5, scale: 0.5, mix: 0, mask: false });
+      layers.push(newLayer());
       renderLayersUI();
       regenerateAll();
       redraw();
@@ -1272,6 +1432,11 @@ window.addEventListener('message', (event) => {
   // stale size until the operator reloads the iframe.
   if (message.type === 'bank') {
     loadBank();
+    return;
+  }
+  // Sent by the node editor after a save: the field picker's option list is now stale.
+  if (message.type === 'textures') {
+    loadTextureNames();
     return;
   }
   if (message.type !== 'stream' || typeof message.enabled !== 'boolean') return;

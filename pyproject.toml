@@ -57,7 +57,9 @@ omit = [
 [tool.coverage.report]
 # Ratchet: set to just under the current figure so coverage cannot silently erode.
 # Raise it as coverage improves; never lower it to make a build pass.
-fail_under = 74
+# 74 -> 79: the texture node graph (blocks/imaging/texture*.py, gui/workspaces/texture.py) landed
+# at 85-94% and pulled the total to 80%.
+fail_under = 79
 show_missing = true
 skip_covered = true
 

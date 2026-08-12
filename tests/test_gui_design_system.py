@@ -27,9 +27,11 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # Measured on 2026-08-11 at commit 5995e3b, before any migration. These are this
 # module's own counts (regex matches, ui.py and tokens.py excluded) -- deliberately
 # exact, not the looser grep line-counts, so a single regression trips them.
-MAX_RAW_CLASSES = 225
-MAX_RAW_HEX = 47
-MAX_RAW_CARDS = 28
+# -2 classes, -1 hex, -1 card: the generative workspace's hand-styled iframe became
+# ui.embedded_page, which the new texture workspace composes too rather than restyling.
+MAX_RAW_CLASSES = 224
+MAX_RAW_HEX = 46
+MAX_RAW_CARDS = 27
 MAX_RAW_BUTTONS = 19
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b")

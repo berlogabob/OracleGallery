@@ -32,6 +32,7 @@ from neje_oracle.blocks.gui.context import GuiContext
 from neje_oracle.blocks.gui.workspaces import calibration, connection, exhibition, generative, work
 from neje_oracle.blocks.gui.workspaces import image as image_workspace
 from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
+from neje_oracle.blocks.gui.workspaces import texture as texture_workspace
 from neje_oracle.blocks.imaging.modes import MODES, image_to_polylines, polylines_to_svg
 from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.origin_markers import ALL_ORIGINS
@@ -153,6 +154,26 @@ def test_generative_workspace_builds_sketch_and_line_text_cards_without_raising(
     # point without raising is the regression signal (catches a renamed ctx
     # attribute, e.g. print_generative_svg or a shx.list_fonts() break).
     assert ctx.fields == {}
+
+
+def test_texture_workspace_builds_and_renders_a_shipped_preset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """build() calls refresh() once, so this exercises the whole evaluate -> render -> cost path,
+    not just the widget tree. Reaching the end without raising is the regression signal."""
+    ctx = _new_ctx(monkeypatch)
+
+    with ui.column():
+        texture_workspace.build(ctx)
+
+    assert ctx.fields == {}
+    # Pick a shipped preset the way the operator would, and confirm real geometry comes back.
+    texture_workspace.STATE["graph"] = "clouds"
+    texture_workspace.STATE["width_mm"] = 60.0
+    texture_workspace.STATE["height_mm"] = 60.0
+    texture_workspace.STATE["cell_mm"] = 1.0
+    with ui.column():
+        texture_workspace.build(ctx)
+    assert texture_workspace.STATE["svg"].startswith("<svg")
+    texture_workspace.STATE["graph"] = ""
 
 
 def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypatch: pytest.MonkeyPatch) -> None:

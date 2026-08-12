@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "seed": 4,
+  "output": "out",
+  "nodes": {
+    "ridges": {
+      "kind": "perlin",
+      "params": {
+        "scale_mm": 46.0,
+        "octaves": 6,
+        "lacunarity": 2.0,
+        "gain": 0.5,
+        "ridged": true,
+        "seed": 9
+      },
+      "inputs": {}
+    },
+    "tilt": {
+      "kind": "mapping",
+      "params": {
+        "translate_mm": [
+          0.0,
+          0.0
+        ],
+        "rotate_deg": 24.0,
+        "scale": [
+          1.0,
+          0.35
+        ]
+      },
+      "inputs": {
+        "fac": "ridges"
+      }
+    },
+    "out": {
+      "kind": "ramp",
+      "params": {
+        "stops": [
+          [
+            0.45,
+            0.0
+          ],
+          [
+            0.88,
+            1.0
+          ]
+        ],
+        "interpolation": "ease"
+      },
+      "inputs": {
+        "fac": "tilt"
+      }
+    }
+  },
+  "ui": {
+    "ridges": {
+      "x": 60,
+      "y": 120
+    },
+    "tilt": {
+      "x": 300,
+      "y": 120
+    },
+    "out": {
+      "x": 540,
+      "y": 120
+    }
+  }
+}

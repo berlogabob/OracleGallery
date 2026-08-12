@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 
 from ....blocks.patterns import bank
 from ....blocks.text import shx
+from .. import ui as oracle
 from ..context import GuiContext
 from ..support import load_gui_settings
 from ..ui import helper_text, primary_action_button
@@ -127,11 +128,8 @@ def register_routes() -> None:
 def build(ctx: GuiContext) -> None:
     """Build the generative workspace UI."""
     with ui.column().classes("workspace-scroll gap-2"):
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Generative sketch").classes("text-sm font-bold")
-            ui.element("iframe").props('id="generative-frame" src="/generative/index.html"').style(
-                "width:100%; height:900px; border:0; background:#f7f1e7; border-radius:10px;"
-            )
+        with oracle.card("Generative sketch"):
+            oracle.embedded_page("/generative/index.html", height_px=900, element_id="generative-frame")
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Send to plotter").classes("text-sm font-bold")
@@ -201,6 +199,12 @@ def build(ctx: GuiContext) -> None:
             ui.timer(3.0, _stream_tick)
 
         _build_line_text_card(ctx)
+        # A texture is a generative source, so it lives in this workspace rather than a tab of its
+        # own. Imported here rather than at module scope: workspaces.texture imports from .image,
+        # and a top-level import would drag the image workspace into every generative-only test.
+        from . import texture as texture_workspace
+
+        texture_workspace.build(ctx)
 
 
 def _build_line_text_card(ctx: GuiContext) -> None:

@@ -9,6 +9,7 @@ from typing import Any
 from nicegui import ui
 
 from ....blocks.imaging.modes import (
+    AI_LINE_ART_TRACE,
     MODES,
     PEN_WIDTH_MM_DEFAULT,
     image_to_polylines,
@@ -33,6 +34,7 @@ STATE: dict[str, Any] = {
     "svg": "",
     "mode": "trace",
     "quality": "fine",
+    "source": "scan",
     "width_mm": 150.0,
     "height_mm": 150.0,
     "cell_mm": 0.10,
@@ -123,6 +125,11 @@ _MAX_SEGMENTS = (40_000, 60_000, 90_000, 240_000, 640_000)
 # top preset, so a flat 150 000 made `fine` unselectable. Roughly 2x headroom over measured
 # worst, which still refuses noise (a 1500-grid noise field skeletonises to ~950 000).
 _MAX_SKELETON_PX = (60_000, 90_000, 130_000, 260_000, 420_000)
+
+# What the drawing came from. Only trace reads it, and the overrides themselves live with
+# trace() in the imaging layer — see AI_LINE_ART_TRACE for what they cost and buy.
+SOURCE_PROFILES = ("scan", "ai line art")
+
 # Measured medians over one sample from each of the nine boats/collections folders at
 # 150 mm and the shipped feeds — not guesses. Advisory only: the cost line under the preview
 # is computed from the actual geometry and corrects this for the image in hand.
@@ -208,8 +215,12 @@ def preview_svg(polylines: list[list[tuple[float, float]]], *, width_mm: float, 
     return render(polylines, width_mm=width_mm, height_mm=height_mm)
 
 
-def _mode_params(mode: str, detail: float, quality: str = "balanced") -> dict[str, Any]:
-    """Mode keywords for a quality preset. `detail` is the operator's fine adjustment on top."""
+def _mode_params(mode: str, detail: float, quality: str = "balanced", source: str = "scan") -> dict[str, Any]:
+    """Mode keywords for a quality preset. `detail` is the operator's fine adjustment on top.
+
+    `source` is what the picture came from; only trace reads it, and only to swap in the
+    _AI_LINE_ART_TRACE overrides.
+    """
     step = quality_index(quality)
     scale = max(0.2, detail)
     if mode == "hatch":
@@ -271,12 +282,14 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced") -> dict[st
         # still scales up from here for a photograph, which is the subject that earns bands.
         return {"bands": max(2, int(round(2 * scale)))}
     if mode == "trace":
-        # Only simplification is a per-image choice. Stitching and despeckling are left at
-        # their swept values: more stitching is free, and any despeckling costs fidelity.
-        # Weight passes come from the pen width, so there is no knob for them either.
+        # Only simplification is a per-image choice of the fader. Stitching stays at its
+        # swept value — more of it is free. Despeckling and weight passes are not knobs
+        # either, but they DO depend on where the picture came from, so the source profile
+        # overrides them; see _AI_LINE_ART_TRACE for what that costs and buys.
         return {
             "simplify_px": _SIMPLIFY_PX[step] / scale,
             "max_skeleton_px": _MAX_SKELETON_PX[step],
+            **(AI_LINE_ART_TRACE if source == "ai line art" else {}),
             # shade_spacing_mm is deliberately NOT set here. Hatching the uninked mid-tones
             # looked worthwhile until weight passes existed; measured against all nine
             # folders afterwards it is negative or neutral on every one (worst: boats02,
@@ -344,6 +357,15 @@ def build(ctx: GuiContext) -> None:
                     label="Mode",
                     on_change=lambda e: set_field("mode", e.value),
                 ).props("dense outlined").classes("w-36")
+                ui.select(
+                    list(SOURCE_PROFILES),
+                    value=STATE["source"],
+                    label="Source",
+                    on_change=lambda e: set_field("source", e.value),
+                ).props("dense outlined").classes("w-32").tooltip(
+                    "Trace only. 'ai line art' drops the weight passes and despeckles, which "
+                    "plots a diffusion render ~6x faster at one nib width throughout."
+                )
                 ui.number(
                     "Width mm",
                     value=STATE["width_mm"],
@@ -569,7 +591,7 @@ def build(ctx: GuiContext) -> None:
                 invert=bool(STATE["invert"]),
                 max_segments=quality_max_segments(str(STATE["quality"])),
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
-                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"])),
+                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
             )
         except (ValueError, OSError) as exc:
             SHEET_STATE["svg"] = ""
@@ -636,7 +658,7 @@ def build(ctx: GuiContext) -> None:
                 max_segments=quality_max_segments(str(STATE["quality"])),
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
                 **({"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}),
-                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"])),
+                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
             )
         except ValueError as exc:
             preview.content = ""

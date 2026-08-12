@@ -21,7 +21,8 @@ function loadSketch() {
   const sketchPath = join(dirname(fileURLToPath(import.meta.url)), 'sketch.js');
   const source = readFileSync(sketchPath, 'utf8') +
     '\n;globalThis.__GEN = GENERATORS; globalThis.__BUILD = buildSvg; globalThis.__SEEDED = seededRandom;' +
-    ' globalThis.__SETBANK = setBank;';
+    ' globalThis.__SETBANK = setBank;' +
+    ' globalThis.__FIELD = { setFieldData, sampleField, applyField, scaleShape };';
   const noOp = () => {};
   const names = [
     'noise', 'noiseSeed', 'document', 'window', 'createCanvas', 'background',
@@ -121,6 +122,45 @@ try {
     coverage[String(scale)] = { shapes: shapes.length, yMax: Math.max(...ys) };
   }
   writeFileSync(join(outputDirectory, 'coverage.json'), JSON.stringify(coverage, null, 2) + '\n');
+
+  // Texture fields. A synthetic 8x8 field over the 200 mm canvas: left half 0, right half 255.
+  // The real field arrives as a PNG the browser decodes, which node cannot do, so it is injected
+  // through setFieldData -- the DOM-free half of the cache, which exists for exactly this.
+  const field = globalThis.__FIELD;
+  const grey = new Uint8Array(64);
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 8; col++) grey[row * 8 + col] = col < 4 ? 0 : 255;
+  }
+  field.setFieldData('half', grey, 8, 8, 200, 200);
+
+  noiseSeed(7);
+  const source = sketch.generators.circles(sketch.seededRandom(7), { density: 1.0, scale: 0.5 });
+  const centres = (list) => list.map((s) => (s.type === 'circle' ? s.cx : s.points[Math.floor(s.points.length / 2)].x));
+
+  const masked = field.applyField(source, { name: 'half', target: 'mask', threshold: 0.5 }, sketch.seededRandom(7));
+  const maskedX = centres(masked);
+  // An unknown field must be a no-op, not a wipe: that cold-cache rule is what lets regenerateAll
+  // stay synchronous while the PNG is still in flight.
+  const cold = field.applyField(source, { name: 'absent', target: 'mask', threshold: 0.5 }, sketch.seededRandom(7));
+  const dense = field.applyField(source, { name: 'half', target: 'density', strength: 1.0 }, sketch.seededRandom(7));
+  const sized = field.applyField(source, { name: 'half', target: 'size', strength: 1.0 }, sketch.seededRandom(7));
+  const invMasked = field.applyField(
+    source, { name: 'half', target: 'mask', threshold: 0.5, invert: true }, sketch.seededRandom(7)
+  );
+
+  writeFileSync(join(outputDirectory, 'field.json'), JSON.stringify({
+    total: source.length,
+    kept: masked.length,
+    keptMinX: maskedX.length ? Math.min(...maskedX) : null,
+    keptMaxX: maskedX.length ? Math.max(...maskedX) : null,
+    coldKept: cold.length,
+    densityKept: dense.length,
+    sizedCount: sized.length,
+    invertedKept: invMasked.length,
+    sampleLeft: field.sampleField('half', 20, 100),
+    sampleRight: field.sampleField('half', 180, 100),
+    sampleAbsent: field.sampleField('absent', 20, 100)
+  }, null, 2) + '\n');
 
   writeFileSync(join(outputDirectory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
 } catch (error) {

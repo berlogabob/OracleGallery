@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "seed": 7,
+  "output": "out",
+  "nodes": {
+    "base": {
+      "kind": "perlin",
+      "params": {
+        "scale_mm": 38.0,
+        "octaves": 5,
+        "lacunarity": 2.0,
+        "gain": 0.55,
+        "ridged": false,
+        "seed": 3
+      },
+      "inputs": {}
+    },
+    "out": {
+      "kind": "ramp",
+      "params": {
+        "stops": [
+          [
+            0.34,
+            0.0
+          ],
+          [
+            0.66,
+            1.0
+          ]
+        ],
+        "interpolation": "ease"
+      },
+      "inputs": {
+        "fac": "base"
+      }
+    }
+  },
+  "ui": {
+    "base": {
+      "x": 60,
+      "y": 120
+    },
+    "out": {
+      "x": 320,
+      "y": 120
+    }
+  }
+}

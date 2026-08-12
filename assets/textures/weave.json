@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "seed": 2,
+  "output": "out",
+  "nodes": {
+    "warp_threads": {
+      "kind": "wave",
+      "params": {
+        "kind": "bands",
+        "scale_mm": 6.0,
+        "angle_deg": 0.0,
+        "distortion": 0.0,
+        "detail": 2,
+        "seed": 0
+      },
+      "inputs": {}
+    },
+    "weft_threads": {
+      "kind": "wave",
+      "params": {
+        "kind": "bands",
+        "scale_mm": 6.0,
+        "angle_deg": 90.0,
+        "distortion": 0.0,
+        "detail": 2,
+        "seed": 0
+      },
+      "inputs": {}
+    },
+    "cloth": {
+      "kind": "mix",
+      "params": {
+        "blend": "maximum",
+        "factor": 1.0,
+        "clamp": true
+      },
+      "inputs": {
+        "a": "warp_threads",
+        "b": "weft_threads"
+      }
+    },
+    "wear": {
+      "kind": "perlin",
+      "params": {
+        "scale_mm": 55.0,
+        "octaves": 3,
+        "lacunarity": 2.0,
+        "gain": 0.5,
+        "ridged": false,
+        "seed": 13
+      },
+      "inputs": {}
+    },
+    "out": {
+      "kind": "mix",
+      "params": {
+        "blend": "multiply",
+        "factor": 1.0,
+        "clamp": true
+      },
+      "inputs": {
+        "a": "cloth",
+        "b": "wear",
+        "fac": "wear"
+      }
+    }
+  },
+  "ui": {
+    "warp_threads": {
+      "x": 60,
+      "y": 60
+    },
+    "weft_threads": {
+      "x": 60,
+      "y": 190
+    },
+    "cloth": {
+      "x": 300,
+      "y": 120
+    },
+    "wear": {
+      "x": 60,
+      "y": 320
+    },
+    "out": {
+      "x": 540,
+      "y": 200
+    }
+  }
+}

@@ -15,7 +15,7 @@ from ...shared.origin_markers import (
 from . import tokens
 from .context import GuiContext
 from .ui import helper_text, mini_metric, warning_banner
-from .workspaces import calibration, connection, exhibition, generative, image, tests, work
+from .workspaces import calibration, connection, exhibition, generative, image, tests, texture, work
 
 PAGE_STYLE = """
 <style>
@@ -113,6 +113,8 @@ __TOKENS_PLACEHOLDER__
   .oracle-btn-primary { background: var(--rust) !important; color: var(--paper) !important; }
   .oracle-btn-safe { color: var(--ink-mid) !important; }
   .oracle-btn-danger { background: var(--danger) !important; color: var(--paper) !important; }
+  .oracle-embed { width: 100%; border: 0; background: var(--paper); border-radius: var(--radius-md); }
+  .oracle-metric-line { font-size: 12px; color: var(--rust); }
 </style>
 """
 
@@ -241,6 +243,7 @@ def main() -> None:
     web_root = Path(__file__).resolve().parents[4] / "echodraw" / "generative-core" / "web"
     app.add_static_files("/generative", str(web_root))
     generative.register_routes()
+    texture.register_routes()
 
     ui.page("/")(build_page)
     host = os.getenv("NEJE_GUI_HOST", "127.0.0.1")

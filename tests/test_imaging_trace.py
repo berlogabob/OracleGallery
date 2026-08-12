@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFilter
 
-from neje_oracle.blocks.imaging.modes import image_to_polylines
+from neje_oracle.blocks.imaging.modes import AI_LINE_ART_TRACE, image_to_polylines
 
 WIDTH_MM = 100.0
 TRACE_CELL_MM = 0.1  # 1000 cells across 100 mm, matching the 1000 px fixtures below
@@ -114,6 +114,50 @@ def test_stitching_buys_pen_lifts_almost_free() -> None:
     stitched_f, _, _ = _score(_rasterise(stitched, reference.shape), reference)
     assert stitched_f >= loose_f - 0.05, f"stitching cost too much fidelity: {loose_f:.3f} -> {stitched_f:.3f}"
     assert len(stitched) < len(loose) / 4, f"stitching barely merged: {len(loose)} -> {len(stitched)}"
+
+
+def _bold_line_art(size: int = 1000) -> tuple[bytes, np.ndarray]:
+    """Line art with strokes wide enough that weight passes actually fire.
+
+    `_line_art` draws everything at 2-3 px. Against a 0.3 mm pen on a 0.1 mm grid that is a
+    half-width of 1.5 px against a 3 px nib, so trace() emits no fill passes at all and the
+    ai-line-art profile has nothing to switch off. A diffusion render is not like that — its
+    hull and mast come out several nib-widths thick — so the fixture has to be either.
+
+    Widths sit at 7-9 px — just over the 6 px (two nib radii) where the passes switch on,
+    which is where a real render lands. Much bolder than that and the comparison stops
+    being about pen lifts: at 15 px a single centreline cannot cover the ink at all and
+    recall collapses, which is a fact about very bold art, not about this profile.
+    """
+    image = Image.new("L", (size, size), 255)
+    draw = ImageDraw.Draw(image)
+    draw.rectangle([150, 200, 850, 640], outline=0, width=8)
+    draw.ellipse([300, 300, 700, 560], outline=0, width=7)
+    draw.line([150, 780, 850, 780], fill=0, width=9)
+    return _to_png(image), np.asarray(image) < 128
+
+
+def test_ai_line_art_profile_trades_line_weight_for_pen_lifts() -> None:
+    """The 'ai line art' source profile is a plot-time bet, and this is the bet.
+
+    A diffusion render's line weight is the sampler's, not an artist's, so filling bold
+    strokes with a thin nib buys nothing worth 1.8 s of Z per pass. Measured over five
+    ComfyUI renders at 150 mm: 673 strokes / 24.5 min -> 64 strokes / 4.1 min for F
+    0.999 -> 0.990.
+
+    The margins here are looser than that measurement because the fixture is synthetic and
+    has no hatching to despeckle, so only the weight-pass half of the profile is under test.
+    This exists to catch the profile silently becoming a no-op or starting to erase the
+    drawing, not to re-measure the sweep.
+    """
+    data, reference = _bold_line_art()
+    shipped = _trace(data)
+    profiled = _trace(data, **AI_LINE_ART_TRACE)
+
+    shipped_f, _, _ = _score(_rasterise(shipped, reference.shape), reference)
+    profiled_f, _, _ = _score(_rasterise(profiled, reference.shape), reference)
+    assert profiled_f >= shipped_f - 0.05, f"profile cost too much fidelity: {shipped_f:.3f} -> {profiled_f:.3f}"
+    assert len(profiled) < len(shipped) / 2, f"profile barely helped: {len(shipped)} -> {len(profiled)}"
 
 
 def test_blank_page_traces_to_nothing() -> None:
