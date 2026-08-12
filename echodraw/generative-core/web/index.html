@@ -105,6 +105,14 @@
       gap: 4px;
       white-space: nowrap;
     }
+    /* The field controls sit in .mask-label and need to stay narrow: five layer rows share
+       one 560px column, and a wide texture name would push the remove button off the row. */
+    .mask-label select {
+      max-width: 84px;
+    }
+    .mask-label .density-slider {
+      width: 64px;
+    }
     .layer-remove-btn {
       margin-left: auto;
       padding: 2px 9px;

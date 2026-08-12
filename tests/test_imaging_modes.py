@@ -18,6 +18,7 @@ from neje_oracle.blocks.imaging.modes import (
     load_tone,
     order_serpentine,
     polylines_to_svg,
+    tone_to_polylines,
     travel_length_mm,
     travel_preview_svg,
 )
@@ -27,6 +28,25 @@ def _png(image: Image.Image) -> bytes:
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()
+
+
+@pytest.mark.parametrize("mode", ["hatch", "contour"])
+def test_tone_to_polylines_matches_image_to_polylines(mode):
+    """image_to_polylines is now load_tone + tone_to_polylines. Same tone in, same strokes out --
+    proves the split is behaviour-preserving rather than merely compiling."""
+    gradient = np.tile(np.linspace(0, 255, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    tone = load_tone(data, width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+    assert tone_to_polylines(tone, mode=mode) == image_to_polylines(
+        data, mode=mode, width_mm=60.0, height_mm=60.0, cell_mm=1.0
+    )
+
+
+def test_unknown_mode_is_reported_before_the_image_is_read():
+    """The guard must stay in front of load_tone: a typo'd mode with an unreadable payload should
+    say which is wrong, not blame the bytes."""
+    with pytest.raises(ValueError, match="unknown mode"):
+        image_to_polylines(b"not an image", mode="nope", width_mm=10.0, height_mm=10.0)
 
 
 def _bucket_draw_lengths(polylines: list[list[tuple[float, float]]], width_mm: float) -> list[float]:

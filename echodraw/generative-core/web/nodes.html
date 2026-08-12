@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EchoDraw - Texture Nodes</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: #f7f1e7;
+      color: #1f1a17;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      padding: 10px;
+    }
+    .toolbar {
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 8px;
+    }
+    button {
+      padding: 5px 12px;
+      background-color: #fffaf0;
+      color: #8f4f2b;
+      border: 1px solid #dac9ad;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    button:hover { background-color: #f0e2ce; border-color: #8f4f2b; }
+    button:disabled { color: #9b8e83; background-color: #eee4d4; cursor: not-allowed; }
+    select, input {
+      background-color: #fffaf0;
+      color: #1f1a17;
+      border: 1px solid #dac9ad;
+      border-radius: 6px;
+      padding: 4px 6px;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    input[type=checkbox] { accent-color: #8f4f2b; }
+    .stage { display: flex; gap: 8px; align-items: flex-start; }
+    #graph-canvas {
+      border: 1px solid #dac9ad;
+      border-radius: 10px;
+      background-color: #fffdf8;
+      touch-action: none;
+      flex: 1 1 auto;
+    }
+    .side { width: 260px; flex: 0 0 260px; display: flex; flex-direction: column; gap: 8px; }
+    .panel {
+      border: 1px solid #dac9ad;
+      border-radius: 10px;
+      background-color: #fffaf0;
+      padding: 8px;
+    }
+    .panel h2 { font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #8f4f2b; }
+    .param-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+    .param-row label { flex: 1 1 auto; }
+    .param-row input[type=number], .param-row select { width: 92px; }
+    .param-row .vec { width: 44px; }
+    .stop-row { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
+    .stop-row input { width: 62px; }
+    .stop-row button { padding: 1px 7px; font-size: 12px; }
+    #preview-image {
+      width: 100%; display: block; border: 1px solid #dac9ad; border-radius: 8px;
+      background: #fff; image-rendering: pixelated; aspect-ratio: 1 / 1; object-fit: cover;
+    }
+    #node-help, #status, #cost { color: #6f6259; line-height: 1.4; }
+    #status { min-height: 16px; }
+    #render-preview svg { width: 100%; height: auto; background: #fff; border-radius: 8px; }
+    .hint { color: #9b8e83; font-size: 11px; margin-top: 4px; line-height: 1.35; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <select id="add-kind"></select>
+    <button id="add-node-btn" type="button">+ Add</button>
+    <button id="delete-node-btn" type="button">Delete</button>
+    <button id="set-output-btn" type="button">Set as output</button>
+    <span style="width:10px"></span>
+    <label>seed <input id="seed-input" type="number" value="7" min="0" step="1" style="width:70px"></label>
+    <button id="reseed-btn" type="button">Reseed</button>
+    <span style="width:10px"></span>
+    <select id="load-select"><option value="">load…</option></select>
+    <input id="save-name" type="text" placeholder="texture name" style="width:120px">
+    <button id="save-btn" type="button">Save</button>
+    <span id="status"></span>
+  </div>
+
+  <div class="stage">
+    <canvas id="graph-canvas" width="760" height="620"></canvas>
+    <div class="side">
+      <div class="panel">
+        <h2>Preview</h2>
+        <img id="preview-image" alt="texture preview">
+      </div>
+      <div class="panel">
+        <h2 id="params-title">Parameters</h2>
+        <div id="params"></div>
+        <div id="node-help" class="hint"></div>
+      </div>
+      <div class="panel">
+        <h2>Plot</h2>
+        <div class="param-row">
+          <label>mode</label>
+          <select id="mode-select"></select>
+        </div>
+        <div class="param-row">
+          <label>size mm</label>
+          <input id="plot-width" type="number" value="150" step="5" class="vec">
+          <input id="plot-height" type="number" value="150" step="5" class="vec">
+        </div>
+        <div class="param-row">
+          <label>cell mm</label>
+          <input id="plot-cell" type="number" value="0.8" step="0.1" min="0.05">
+        </div>
+        <div class="param-row">
+          <button id="render-btn" type="button">Render</button>
+          <button id="send-btn" type="button" disabled>Send to plotter</button>
+        </div>
+        <div id="cost" class="hint">Render to see stroke count and plot time.</div>
+        <div id="render-preview"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">
+    Drag from an output socket (right) to an input socket (left) to connect. Drag a wired input away
+    to disconnect. Right-drag empty canvas to pan. Wire a texture into a mix node's <b>fac</b> to use
+    it as a mask.
+  </div>
+
+  <script src="nodes.js"></script>
+</body>
+</html>

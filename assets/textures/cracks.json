@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "seed": 11,
+  "output": "out",
+  "nodes": {
+    "cells": {
+      "kind": "worley",
+      "params": {
+        "scale_mm": 14.0,
+        "metric": "f2-f1",
+        "jitter": 1.0,
+        "seed": 5
+      },
+      "inputs": {}
+    },
+    "veins": {
+      "kind": "ramp",
+      "params": {
+        "stops": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.18,
+            0.0
+          ]
+        ],
+        "interpolation": "ease"
+      },
+      "inputs": {
+        "fac": "cells"
+      }
+    },
+    "grit": {
+      "kind": "perlin",
+      "params": {
+        "scale_mm": 9.0,
+        "octaves": 3,
+        "lacunarity": 2.0,
+        "gain": 0.5,
+        "ridged": false,
+        "seed": 21
+      },
+      "inputs": {}
+    },
+    "out": {
+      "kind": "mix",
+      "params": {
+        "blend": "maximum",
+        "factor": 0.35,
+        "clamp": true
+      },
+      "inputs": {
+        "a": "veins",
+        "b": "grit"
+      }
+    }
+  },
+  "ui": {
+    "cells": {
+      "x": 60,
+      "y": 60
+    },
+    "veins": {
+      "x": 300,
+      "y": 60
+    },
+    "grit": {
+      "x": 60,
+      "y": 240
+    },
+    "out": {
+      "x": 540,
+      "y": 140
+    }
+  }
+}

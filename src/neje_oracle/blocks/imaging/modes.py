@@ -539,6 +539,21 @@ _NEIGHBOUR_OFFSETS = ((-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)
 MAX_SKELETON_PX_DEFAULT = 150_000
 PEN_WIDTH_MM_DEFAULT = 0.3
 MAX_WEIGHT_PASSES = 6
+# trace() overrides for AI-generated line art. Its shipped defaults were swept on scans and
+# renders whose line weight means something; a diffusion model's output is a different animal
+# and pays for that difference in pen lifts. Measured over five ComfyUI renders at 150 mm,
+# 0.3 mm pen, cell 0.15: 673 strokes / 24.5 min collapse to 64 strokes / 4.1 min, for F
+# 0.999 -> 0.990. Six times the plot speed, worth a look change on this one source and
+# nothing else, which is why it is a profile the caller opts into and not a new default.
+#   - weight_passes off is almost all of it. Filling a bold stroke with a thin nib is right
+#     when the boldness is the artist's; here it is the sampler's, and reproducing it costs
+#     ~1.8 s of Z per extra pass. Everything plots at one nib width, which is what one pen is.
+#   - despeckling flips sign here. It ships off because on hatched scans the specks ARE the
+#     hatching (F 0.905 -> 0.877); with the weight passes gone, what is left under 8 points
+#     is sampler noise, and dropping it halves strokes again for F 0.991 -> 0.990.
+# threshold deliberately stays at the default. 0.8 plots ~30% faster still, but it breaks
+# thin light strokes into dashes — every boat in the sweep came out with a dotted mast.
+AI_LINE_ART_TRACE: dict[str, Any] = {"weight_passes": False, "despeckle_px": 8}
 # A 250x440 bed at 0.3 mm spacing is 1.2M seeds of pure-Python loop; this stops flow
 # freezing the preview before the segment cap ever gets a chance to reject the result.
 MAX_FLOW_SEEDS = 400_000
@@ -1297,37 +1312,28 @@ def travel_length_mm(polylines: Polylines) -> tuple[float, float]:
     return draw, travel
 
 
-def image_to_polylines(
-    data: bytes,
-    *,
-    mode: str,
-    width_mm: float,
-    height_mm: float,
-    cell_mm: float = 1.0,
-    invert: bool = False,
-    gamma: float = 1.0,
-    levels: int | None = None,
-    autocontrast: bool = True,
-    max_segments: int = MAX_SEGMENTS_DEFAULT,
-    min_stroke_mm: float = 0.0,
-    **params: Any,
-) -> Polylines:
+def _validate_render_request(mode: str, min_stroke_mm: float) -> None:
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; valid modes: {', '.join(sorted(MODES))}")
     if min_stroke_mm < 0:
         raise ValueError("min_stroke_mm must be non-negative")
-    tone = load_tone(
-        data,
-        width_mm=width_mm,
-        height_mm=height_mm,
-        cell_mm=cell_mm,
-        invert=invert,
-        gamma=gamma,
-        levels=levels,
-        # Worth turning off for photographs: it stretches the histogram to full range,
-        # which lifts fabric texture and JPEG noise into ink (tests/test_imaging_speckle.py).
-        autocontrast=autocontrast,
-    )
+
+
+def tone_to_polylines(
+    tone: ToneGrid,
+    *,
+    mode: str,
+    max_segments: int = MAX_SEGMENTS_DEFAULT,
+    min_stroke_mm: float = 0.0,
+    **params: Any,
+) -> Polylines:
+    """Render an already-built ToneGrid.
+
+    The half of image_to_polylines that does not care where the tone came from -- a scan, or a
+    procedural texture graph (imaging/texture.py). Everything a renderer needs is in the ToneGrid,
+    so a second tone producer costs nothing here.
+    """
+    _validate_render_request(mode, min_stroke_mm)
     strokes = MODES[mode](tone, **params)
     # Centre-out modes carry their own order. Serpentine buckets by floor(first point's y),
     # which would reshuffle a spiral's arcs into a raster scan and add back every pen lift
@@ -1344,6 +1350,40 @@ def image_to_polylines(
             "increase cell_mm or line_spacing_mm, or raise max_segments"
         )
     return polylines
+
+
+def image_to_polylines(
+    data: bytes,
+    *,
+    mode: str,
+    width_mm: float,
+    height_mm: float,
+    cell_mm: float = 1.0,
+    invert: bool = False,
+    gamma: float = 1.0,
+    levels: int | None = None,
+    autocontrast: bool = True,
+    max_segments: int = MAX_SEGMENTS_DEFAULT,
+    min_stroke_mm: float = 0.0,
+    **params: Any,
+) -> Polylines:
+    # Validated here as well as in tone_to_polylines on purpose: these guards must fire BEFORE
+    # load_tone, so image_to_polylines(b"garbage", mode="nope") still says "unknown mode" rather
+    # than "unable to read raster image data". It is one dict lookup.
+    _validate_render_request(mode, min_stroke_mm)
+    tone = load_tone(
+        data,
+        width_mm=width_mm,
+        height_mm=height_mm,
+        cell_mm=cell_mm,
+        invert=invert,
+        gamma=gamma,
+        levels=levels,
+        # Worth turning off for photographs: it stretches the histogram to full range,
+        # which lifts fabric texture and JPEG noise into ink (tests/test_imaging_speckle.py).
+        autocontrast=autocontrast,
+    )
+    return tone_to_polylines(tone, mode=mode, max_segments=max_segments, min_stroke_mm=min_stroke_mm, **params)
 
 
 def polylines_to_svg(

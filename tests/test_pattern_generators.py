@@ -135,3 +135,40 @@ def test_bank_at_mix_zero_ignores_the_seed(
     """
     output, _ = generated_patterns
     assert (output / "mix0-seed12345.svg").read_bytes() == (output / "mix0-seed999.svg").read_bytes()
+
+
+@pytest.fixture(scope="module")
+def field_results(generated_patterns: tuple[Path, dict[str, int]]) -> dict:
+    output, _ = generated_patterns
+    return json.loads((output / "field.json").read_text())
+
+
+def test_field_mask_culls_where_the_texture_is_dark(field_results: dict) -> None:
+    """The harness field is left half 0, right half 255 over a 200 mm canvas. At threshold 0.5 the
+    survivors must all sit in the right half -- which is what fails if the sampler transposes rows
+    and columns, or reads the field in pixels instead of mm.
+    """
+    assert 0 < field_results["kept"] < field_results["total"]
+    assert field_results["keptMinX"] >= 100
+    assert field_results["keptMaxX"] <= 200
+
+
+def test_field_sampler_reads_mm_coordinates(field_results: dict) -> None:
+    assert field_results["sampleLeft"] == 0
+    assert field_results["sampleRight"] == 1
+
+
+def test_unknown_field_is_a_no_op(field_results: dict) -> None:
+    """The cold-cache contract, and the reason regenerateAll() can stay synchronous: while the PNG
+    is still in flight the field must mean "no effect", not "cull everything". Getting this wrong
+    blanks the canvas on every seed change and looks like the generators broke.
+    """
+    assert field_results["sampleAbsent"] == 1
+    assert field_results["coldKept"] == field_results["total"]
+
+
+def test_field_targets_do_different_things(field_results: dict) -> None:
+    """density culls probabilistically, size scales without culling, invert takes the complement."""
+    assert field_results["densityKept"] < field_results["total"]
+    assert field_results["sizedCount"] == field_results["total"]
+    assert field_results["invertedKept"] + field_results["kept"] == field_results["total"]

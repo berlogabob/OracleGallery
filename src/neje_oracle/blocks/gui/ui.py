@@ -90,6 +90,26 @@ def mini_metric(label: str, *, extra_classes: str = "", style: str = "") -> Any:
         return ui.label("-").classes("value")
 
 
+def embedded_page(src: str, *, height_px: int, element_id: str = "") -> Any:
+    """An iframe onto one of the pages under the /generative static mount.
+
+    Both embeds (the p5 sketch and the texture node editor) hand-styled the same five properties;
+    only the height ever differed, so that is the only thing left as an argument.
+    """
+    props = f'src="{src}"' + (f' id="{element_id}"' if element_id else "")
+    return ui.element("iframe").props(props).classes("oracle-embed").style(f"height:{height_px}px;")
+
+
+def metric_line(text: str = "-") -> Any:
+    """A one-line cost/extent readout under a preview. Returns the handle to set_text on."""
+    return ui.label(text).classes("oracle-metric-line")
+
+
+def preview_pane() -> Any:
+    """The SVG preview box every render path drops its output into."""
+    return ui.html().classes("preview-frame")
+
+
 def warning_banner(text: str) -> Any:
     return ui.label(text).classes("warning-banner")
 
