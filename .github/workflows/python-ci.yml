@@ -36,10 +36,12 @@ jobs:
       - name: Run tests
         run: uv run pytest -q
 
+      # No --fail-under here on purpose: it silently overrode pyproject's ratchet, so the two
+      # drifted (74 in CI against 79 in pyproject). One source of truth, in pyproject.
       - name: Run coverage
         run: |
           uv run coverage run -m pytest -q
-          uv run coverage report --fail-under=74
+          uv run coverage report
 
       # The old error-count baseline (tolerated <=66) is gone: the package now
       # type-checks clean, so plain mypy is the gate.
