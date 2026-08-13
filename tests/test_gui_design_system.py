@@ -41,9 +41,9 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # the rail, and the status bar's state chip / position readout / e-stop gap -- not
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
-MAX_RAW_CLASSES = 218
+MAX_RAW_CLASSES = 211
 MAX_RAW_HEX = 45
-MAX_RAW_CARDS = 24
+MAX_RAW_CARDS = 20
 MAX_RAW_BUTTONS = 9
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b")

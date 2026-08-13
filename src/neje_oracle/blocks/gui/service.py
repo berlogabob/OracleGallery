@@ -7,15 +7,9 @@ from pathlib import Path
 from nicegui import ui
 
 from ...shared.models import SystemMode
-from ...shared.origin_markers import (
-    ALL_ORIGINS,
-    ORIGIN_LABELS,
-    ORIGIN_MARKER_POSITIONS,
-    ORIGIN_PREVIEW_COLORS,
-)
 from . import screens, tokens
 from .context import GuiContext
-from .ui import client_timer, helper_text, mini_metric, select
+from .ui import client_timer, select
 from .workspaces import generative, motion, texture
 
 PAGE_STYLE = """
@@ -41,11 +35,32 @@ __TOKENS_PLACEHOLDER__
   }
   .oracle-title { letter-spacing: 0.16em; color: var(--rust); }
   .compact-card { padding: 10px 12px !important; }
-  .status-bar {
+  /* One 40px bar carries identity, navigation, state, position, profile and the stops.
+     It replaces a 44px header row plus a ~40px status row; the reclaimed height goes to
+     the canvas, which is the thing an operator actually watches. */
+  .top-bar {
+    height: 40px;
+    flex-wrap: nowrap;
     background: rgba(255, 252, 245, 0.84);
-    border: 1px solid var(--rule);
-    border-radius: 14px;
-    padding: 6px 10px;
+    border-bottom: 1px solid var(--rule);
+    padding: 2px 10px;
+  }
+  .top-title { font-size: 14px; }
+  .top-bar .workspace-tabs { border: 0; background: transparent; min-height: 36px; flex: 0 1 auto; }
+  .top-bar .q-tab { min-height: 34px; }
+  .print-canvas { min-width: 0; overflow: hidden; }
+  /* Quasar's tab panel is not a flex child by default, so height:100% below it resolves
+     to auto and the canvas column grows past the viewport instead of letting the
+     preview scroll internally. Chain the height down explicitly. */
+  .workspace-panel .q-tab-panels { height: 100%; }
+  .workspace-panel .q-tab-panel { height: 100%; display: flex; flex-direction: column; padding: 0; }
+  .workspace-panel .q-tab-panel > * { flex: 1 1 auto; min-height: 0; }
+  /* The run band: slim rows on one flat surface, hairline-separated -- not stacked cards. */
+  .run-band {
+    border-left: 1px solid var(--rule);
+    padding: 4px 8px;
+    overflow-y: auto;
+    min-height: 0;
   }
   .status-spacer { flex: 1 1 auto; }
   /* A deliberate dead zone, not decoration: the one control that must never be pressed
@@ -90,13 +105,7 @@ __TOKENS_PLACEHOLDER__
     font-size: 12px;
     font-weight: 700;
   }
-  .workspace-tabs {
-    background: rgba(255, 252, 245, 0.84);
-    border: 1px solid var(--rule);
-    border-radius: 14px;
-    min-height: 44px;
-    flex: 1 1 auto;
-  }
+  .workspace-tabs { min-height: 36px; flex: 0 1 auto; }
   .workspace-tabs .q-tab { min-height: 42px; padding: 0 12px; letter-spacing: 0.08em; font-weight: 700; }
   .workspace-tabs .q-tab--active { color: var(--rust); }
   /* These were three hand-counted constants and all three were wrong: 104px was reserved
@@ -180,33 +189,6 @@ __TOKENS_PLACEHOLDER__
 """
 
 
-def _live_metric(ctx: GuiContext, key: str, label: str, *, important: bool = False) -> None:
-    ctx.live_labels[key] = mini_metric(label, extra_classes="next-action" if important else "")
-
-
-def _preview_legend() -> None:
-    with ui.column().classes("preview-legend w-full gap-1"):
-        with ui.row().classes("items-center gap-3 flex-wrap"):
-            with ui.element("div").classes("legend-chip"):
-                ui.element("span").classes("legend-ring")
-                ui.label("outer ring: real/user cell").classes("text-[10px]")
-            with ui.element("div").classes("legend-chip"):
-                ui.element("span").classes("legend-ring legend-double-ring")
-                ui.label("double ring: filler/local cell").classes("text-[10px]")
-            with ui.element("div").classes("legend-chip"):
-                ui.element("span").classes("legend-dot").style(
-                    "background:var(--ink-muted); border-color:var(--ink-muted); opacity:0.45;"
-                )
-                ui.label("gray: next in line").classes("text-[10px]")
-        with ui.row().classes("items-center gap-3 flex-wrap"):
-            for origin in ALL_ORIGINS:
-                position = ORIGIN_MARKER_POSITIONS.get(origin, "right").replace("-", " ")
-                color = ORIGIN_PREVIEW_COLORS.get(origin, tokens.INK_MUTED)
-                with ui.element("div").classes("legend-chip"):
-                    ui.element("span").classes("legend-dot").style(f"background:{color}; border-color:{color};")
-                    ui.label(f"{ORIGIN_LABELS[origin]} dot: {position}").classes("text-[10px]")
-
-
 def build_page() -> None:
     ctx = GuiContext()
 
@@ -215,64 +197,48 @@ def build_page() -> None:
     ui.colors(primary=tokens.INK, secondary=tokens.RUST, accent=tokens.GOLD)
     ui.add_head_html(PAGE_STYLE.replace("__TOKENS_PLACEHOLDER__", tokens.css_root_block()))
 
-    with ui.column().classes("oracle-shell w-full gap-2 p-3"):
-        # Header + tabs + emergency stop
-        # flex-wrap: the header needs ~1500px in one line (title + 7 tabs + run profile +
-        # two stop buttons). Without wrapping it did not overflow the page -- Quasar hid
-        # the last tabs behind arrow-scroll instead, so IMAGE was unreachable at 1440px.
-        with ui.row().classes("w-full items-center gap-3 flex-wrap"):
-            ui.label("THE ORACLE OPERATOR").classes("oracle-title text-lg")
+    with ui.column().classes("oracle-shell w-full gap-0 p-0"):
+        # One top bar. The header row and the status bar used to stack (~84px); merged they
+        # cost 40px, and everything the operator glances at -- where am I, what state, how do
+        # I stop -- sits on a single line. E-STOP keeps its isolation gap (Fluidd #250).
+        with ui.row().classes("top-bar w-full items-center gap-2"):
+            ui.label("ORACLE").classes("oracle-title top-title")
             with ui.tabs(on_change=lambda event: ctx.workspace_changed(event.value)).classes(
                 "workspace-tabs"
             ) as workspace_tabs:
                 # Three phases of the job, not seven module names. Connecting, homing and
-                # zeroing are on none of them -- they are in the machine rail, reachable from
-                # all three, because bringing the machine up is one continuous task.
+                # zeroing are on none of them -- they are in the machine rail.
                 print_tab = ui.tab("print", label="PRINT")
                 create_tab = ui.tab("create", label="CREATE")
                 setup_tab = ui.tab("setup", label="SETUP")
             workspace_tabs.value = ctx.active_workspace["value"]
             ctx.workspace_tabs = workspace_tabs
-            # The run profile is an operator decision. It used to be inferred from whichever
-            # tab was open, so opening IMAGE to look at it silently rewrote Firebase policy.
+            ctx.live_labels["fluidnc"] = ui.label("—").classes("state-chip")
+            ctx.position_label = ui.label("X — · Y —").classes("position-readout")
+            # The four fact tiles (zero/firebase/queue/sheet) are gone from the bar: the
+            # rail's blockers line already names anything unmet, the sheet id lives on
+            # PRINT where the sheet is, and context guards `if self.live_labels:` so the
+            # unregistered keys are skipped, not broken.
+            # The run profile is an operator decision, not a side effect of navigation.
             ctx.run_profile_select = select(
                 {SystemMode.TEST.value: "TEST", SystemMode.EXHIBITION.value: "EXHIBITION"},
                 value=ctx.settings.system_mode,
                 label="Run profile",
                 on_change=lambda event: ctx.run_profile_changed(event.value),
             )
-        ui.label(
-            "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
-        ).classes("mobile-operator-warning")
-
-        # Status bar: what the machine is doing, and the two ways to make it stop. The
-        # static "output starts only after checks pass" banner is gone -- it said the same
-        # thing on every screen forever, while the rail's blockers line says which of those
-        # conditions is actually unmet right now.
-        with ui.row().classes("status-bar w-full items-center gap-2 flex-wrap"):
-            ctx.live_labels["fluidnc"] = ui.label("—").classes("state-chip")
-            ctx.position_label = ui.label("X — · Y —").classes("position-readout")
-            with ui.element("div").classes("live-strip"):
-                _live_metric(ctx, "zero", "Work zero")
-                _live_metric(ctx, "firebase", "Firebase")
-                _live_metric(ctx, "queue", "Queue")
-                _live_metric(ctx, "sheet", "Sheet")
-            # Pushes the stop controls to the far end, and keeps EMERGENCY STOP away from
-            # everything else: Fluidd #250 is operators repeatedly hitting E-stop while
-            # reaching for the control next to it.
             ui.element("div").classes("status-spacer")
             ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
             ui.element("div").classes("estop-gap")
             ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
+        ui.label(
+            "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
+        ).classes("mobile-operator-warning")
 
-        # Machine rail + workspace + always-visible preview. The rail is the point: jog,
-        # homing and work zero are reachable from every tab, so bringing the machine up no
-        # longer means travelling 1 -> 1/2 -> 4 -> 3 -> 5 through the tab strip.
-        # The preview track was a fixed 480px, so every pixel lost to a narrower window
-        # came out of the workspace column: 656px of workspace at 1200px wide.
-        with ui.grid(columns="260px minmax(340px, 1fr) minmax(300px, 460px)").classes(
-            "w-full gap-2 min-h-0 workspace-panel workspace-grid"
-        ):
+        # Machine rail + the screen's own area. Each screen owns everything right of the
+        # rail -- canvas, context, action strip -- because "one big thing per screen" cannot
+        # be built around a preview column that is pinned to all of them. The old global
+        # Sheet Preview card now lives inside PRINT, where deciding-to-print happens.
+        with ui.grid(columns="230px minmax(0, 1fr)").classes("w-full gap-2 min-h-0 workspace-panel workspace-grid"):
             with ui.column().classes("workspace-scroll"):
                 motion.render_machine_rail(ctx)
             with ui.tab_panels(workspace_tabs, value=ctx.active_workspace["value"]).classes("w-full h-full"):
@@ -282,13 +248,6 @@ def build_page() -> None:
                     screens.build_create(ctx)
                 with ui.tab_panel(setup_tab).classes("p-0"):
                     screens.build_setup(ctx)
-
-            with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
-                with ui.row().classes("w-full items-center justify-between"):
-                    ui.label("Sheet Preview").classes("text-sm font-bold")
-                ctx.preview_progress_label = helper_text("-")
-                _preview_legend()
-                ctx.preview = ui.html().classes("preview-frame w-full")
 
     client_timer(2.0, ctx.refresh_status)
     ctx.persist_and_refresh()
