@@ -126,17 +126,30 @@ Default address:
 http://127.0.0.1:8787/
 ```
 
-GUI sections:
+GUI layout:
 
-- Top controls: `START SYSTEM`, `STOP SYSTEM`, current mode, and calculated capacity.
-- `Plotter Console` contains the plotter sequence: `Connect`, `Manual control`, then `Print`.
-- Top mode selector: choose one mode only: `TEST` or `EXHIBITION`.
+- **Machine rail**, left, on every screen: jog, `HOME ALL`/`HOME X`/`HOME Y`, `PEN UP`/`PEN DOWN`,
+  `SET WORK ZERO`, and the next action the machine is waiting for. Bringing the machine up
+  never requires changing screens.
+- **Status bar**, top: machine state (glyph and colour, so it reads without relying on colour),
+  work position, work zero, Firebase, queue, sheet, then `STOP PRINT` and `EMERGENCY STOP`
+  set apart at the far end.
+- **Three screens**, replacing the seven numbered tabs:
+  - `PRINT` — the run: `START PRINT`, live sheet state, system run, system check, queue.
+  - `CREATE` — what gets drawn: generative sketch, texture nodes, line text, image conversion,
+    frame sheet, motif import.
+  - `SETUP` — the machine: connection and recovery, calibration and pen profiles, test prints,
+    and a collapsed `Diagnostics` section holding the uploader, thermal printer and logs.
+- **Run profile** selector, top right: `TEST` or `EXHIBITION`. This used to be inferred from
+  whichever tab was open, so opening a tab to look at it silently rewrote Firebase policy.
 - `TEST`: lab drawing mode for fake sessions and direct uploaded SVG prints. `START TEST PRINT` and `PRINT SVG` require preflight, work zero, and FluidNC connected/Idle.
 - `EXHIBITION`: real sessions/uploader/queue and real FluidNC output. `START PRINT` stays blocked until preflight has no critical failures, work zero is set, and FluidNC is Idle.
 - Layout: choose `hex` or `grid`, working field size, margin, cell diameter, and gap between neighbouring cell circles. Capacity is calculated automatically.
 - Test mode: generate fake user session folders in `NEJE_UPLOADER_SESSION_ROOT`.
 - Test mode: generate local mark-only idle SVG files in `assets/generated_idle_symbols`; rings are added later by print-time G-code.
-- `Sheet Preview`: static schematic preview of current placement, not a plotter animation.
+- `Sheet Preview`: the layout as it will be plotted -- ring counts, cell geometry and the
+  user/filler mix are the real ones. Which symbol lands in which cell is still chosen when
+  the sheet is built, and the caption says so.
 - `Plotter Status`: read local plotter runtime state and latest spool manifest.
 - `FluidNC Control`: check WebUI/Telnet/status, home, jog, unlock alarm, feed hold, resume, and soft reset.
 - `Ready`: `Set Work Zero` saves current XY position as G54 X0 Y0 without changing Z.
@@ -155,7 +168,7 @@ Important behavior:
 - The GUI writes layout settings to `runtime/oracle_runtime.sqlite3`; the plotter daemon reads this before every new sheet.
 - If the Mac mini uploader agent is running and started, GUI-generated or TouchDesigner session folders are published to Firebase and become `plot_jobs`.
 - `Generate G-code only` writes local G-code and manifest to `spool/`; it does not send anything to the physical plotter.
-- `PRINT SVG` in the Testing tab validates an Inkscape-style SVG, generates one sheet of G-code, and sends it directly to FluidNC after preflight, work zero, and Idle checks. It does not create a Firebase queue session.
+- `PRINT SVG` on `SETUP` validates an Inkscape-style SVG, generates one sheet of G-code, and sends it directly to FluidNC after preflight, work zero, and Idle checks. It does not create a Firebase queue session.
 - Drawing stops automatically after each sheet; press `START PRINT` only when the next sheet is loaded and ready.
 - Motion speed controls write `G0 F...` and `G1 F...` feed rates in mm/min. `XY accel mm/s^2` is recorded in manifests only; generated print G-code uses the controller's saved acceleration settings.
 - `EMERGENCY STOP` sends FluidNC realtime feed hold `!` and disables print. It is software safety only, not a replacement for a physical emergency stop.
@@ -456,7 +469,7 @@ machine and the job, so swapping pens must not disturb them.
 Ships with `fineliner`, `gel` and `ballpoint`. **Those are starting points, not
 measurements.** The calibration sheet is what turns them into real numbers.
 
-Switch pens on `2 CALIBRATION` → Motion speed → **Fitted pen**. Selecting a profile
+Switch pens on `SETUP` → Motion speed → **Fitted pen**. Selecting a profile
 overwrites only the fields above and pushes them live; there is no restart and no save
 button, every control autosaves.
 
@@ -473,8 +486,8 @@ turn a 150 ms dwell into 150 seconds on every stroke.
 
 ### The tune-adjust loop
 
-1. Fit the pen. On `2 CALIBRATION`, pick the nearest profile as a starting point.
-2. On `3 TESTS` → Pen calibration → **GENERATE PEN CAL G-CODE**. It writes
+1. Fit the pen. On `SETUP`, pick the nearest profile as a starting point.
+2. On `SETUP` → Pen calibration → **GENERATE PEN CAL G-CODE**. It writes
    `pen_cal_<profile>.gcode` plus a manifest into the spool and reports the path.
 3. Print it. Four blocks, each varying exactly one parameter, every row labelled with its
    own value:
@@ -486,7 +499,7 @@ turn a 150 ms dwell into 150 seconds on every stroke.
    | dwell ms | the shortest row with no dry stroke starts and no blobs |
    | geometry | line pairs: the finest pair still readable as two lines is your real `pen_width_mm`. Circles: the smallest that still closes. Corners: overshoot and rounding |
 
-4. Type those numbers into `2 CALIBRATION`, then **SAVE AS PROFILE** under a name that
+4. Type those numbers into `SETUP`, then **SAVE AS PROFILE** under a name that
    says which pen it is.
 5. Regenerate and print once more to confirm.
 
@@ -522,7 +535,7 @@ Four bands, numbered by tick strokes down the left edge:
 | 3 | mix 100 |
 | 4 | every motif in `assets/patterns/`, once, at generator-cell size |
 
-Import a motif from a photo first (`7 IMAGE` tab) if you have one — the sheet reads the
+Import a motif from a photo first (`CREATE` screen) if you have one — the sheet reads the
 live bank, so it joins band 4 automatically, and a traced motif is the most informative
 thing on the page.
 

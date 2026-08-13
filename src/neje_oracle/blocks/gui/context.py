@@ -44,7 +44,9 @@ from .support import (
 )
 from .ui import helper_text, notify_if_connected
 
-VALID_WORKSPACES = {"connection", "calibration", "tests", "work", "exhibition", "generative", "image"}
+# The three screens. Anything else -- including the seven module-named tabs these replaced --
+# falls back to PRINT, which is where an operator should land anyway.
+VALID_WORKSPACES = {"print", "create", "setup"}
 
 
 _T = TypeVar("_T")
@@ -94,8 +96,8 @@ class GuiContext:
         self.position_label: Any = None
 
         store = self.supervisor.runtime_store
-        saved_workspace = str(store.load_json("gui_workspace", {"tab": "connection"}).get("tab", "connection"))
-        self.active_workspace = {"value": saved_workspace if saved_workspace in VALID_WORKSPACES else "connection"}
+        saved_workspace = str(store.load_json("gui_workspace", {"tab": "print"}).get("tab", "print"))
+        self.active_workspace = {"value": saved_workspace if saved_workspace in VALID_WORKSPACES else "print"}
         self.preview_mode = {"value": "preview"}
 
         # Dedup state for the FluidNC offline toast: only notify once per offline

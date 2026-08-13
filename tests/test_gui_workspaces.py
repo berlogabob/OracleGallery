@@ -453,10 +453,10 @@ def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pyte
     monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
     monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: True)
 
-    ctx.workspace_changed("tests")
+    ctx.workspace_changed("create")
 
     assert changed == []
-    assert ctx.active_workspace["value"] == "tests"
+    assert ctx.active_workspace["value"] == "create"
 
 
 def test_tab_switch_never_sets_system_mode_even_when_idle(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -471,11 +471,11 @@ def test_tab_switch_never_sets_system_mode_even_when_idle(monkeypatch: pytest.Mo
     monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
     monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: False)
 
-    for workspace in ("tests", "generative", "image", "work", "exhibition"):
+    for workspace in ("print", "create", "setup"):
         ctx.workspace_changed(workspace)
 
     assert changed == [], "navigation must not touch the run profile"
-    assert ctx.active_workspace["value"] == "exhibition"
+    assert ctx.active_workspace["value"] == "setup"
 
 
 def test_tuning_preview_draws_filler_cells_not_a_sheet_of_user_cells(monkeypatch: pytest.MonkeyPatch) -> None:

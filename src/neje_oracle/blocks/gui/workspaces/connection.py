@@ -12,7 +12,7 @@ from ..ui import client_timer, helper_text, mini_metric, primary_action_button, 
 
 
 def build(ctx: GuiContext) -> None:
-    with ui.column().classes("workspace-scroll gap-2"):
+    with ui.column().classes("w-full gap-2"):
         # FluidNC connection
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("FluidNC Connection").classes("text-sm font-bold")

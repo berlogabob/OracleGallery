@@ -129,7 +129,7 @@ async def current_sketch_svg() -> bytes:
 
 def build(ctx: GuiContext) -> None:
     """Build the generative workspace UI."""
-    with ui.column().classes("workspace-scroll gap-2"):
+    with ui.column().classes("w-full gap-2"):
         with oracle.card("Generative sketch"):
             oracle.embedded_page("/generative/index.html", height_px=900, element_id="generative-frame")
 

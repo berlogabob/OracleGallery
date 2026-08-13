@@ -1,17 +1,15 @@
 url: http://127.0.0.1:8787
 ---
+# Three screens now, not seven module-named tabs. Connecting, homing and zeroing are on none
+# of them -- they live in the machine rail, visible from all three.
 - openLink: http://127.0.0.1:8787
 - extendedWaitUntil:
     visible: "THE ORACLE OPERATOR"
     timeout: 15000
-- takeScreenshot: audit/2026-08-05-1008/screens-fixes/01_connection
-- tapOn: "2 CALIBRATION"
-- takeScreenshot: audit/2026-08-05-1008/screens-fixes/02_calibration
-- tapOn: "3 TESTS"
-- takeScreenshot: audit/2026-08-05-1008/screens-fixes/03_tests
-- tapOn: "4 WORK"
-- takeScreenshot: audit/2026-08-05-1008/screens-fixes/04_work
-- tapOn: "5 EXHIBITION"
-- takeScreenshot: audit/2026-08-05-1008/screens-fixes/05_exhibition
-- tapOn: "6 GENERATIVE"
-- takeScreenshot: audit/2026-08-05-1008/screens-fixes/06_generative
+- takeScreenshot: audit/current/screens-fixes/01_print
+- tapOn: "CREATE"
+- takeScreenshot: audit/current/screens-fixes/02_create
+- tapOn: "SETUP"
+- takeScreenshot: audit/current/screens-fixes/03_setup
+- tapOn: "PRINT"
+- takeScreenshot: audit/current/screens-fixes/04_print_again

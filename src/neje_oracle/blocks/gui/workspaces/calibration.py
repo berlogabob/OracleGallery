@@ -114,7 +114,7 @@ def build(ctx: GuiContext) -> None:
             on_change=persist_and_refresh,
         )
 
-    with ui.column().classes("workspace-scroll gap-2"):
+    with ui.column().classes("w-full gap-2"):
         # Manual motion (shared card)
 
         # Motion speed
