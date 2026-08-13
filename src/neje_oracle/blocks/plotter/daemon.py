@@ -28,7 +28,7 @@ from ...shared.origin_markers import (
     normalize_tags,
 )
 from ...shared.store import OracleRuntimeStore, PlotterStore
-from ...shared.symbols import default_scale_config_path, default_symbol_root
+from ...shared.symbols import default_scale_config_path, default_symbol_root, list_fillable_symbols
 from ..firebase.repository import FirebaseRemoteRepository
 from ..fluidnc.transport import FluidNCTransport
 from ..gcode.layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
@@ -256,7 +256,9 @@ class PlotterDaemon:
                             heartbeat=True,
                         )
 
-                items = self._materialize_sheet_items(user_jobs, row_limit)
+                items = self._materialize_sheet_items(
+                    user_jobs, row_limit, global_scale=config.global_scale, sheet_id=sheet_id
+                )
                 if not items:
                     continue
                 active_placements = row_placements[: len(items)]
@@ -506,7 +508,7 @@ class PlotterDaemon:
                             heartbeat=True,
                         )
 
-                items = self._materialize_sheet_items(user_jobs, 1)
+                items = self._materialize_sheet_items(user_jobs, 1, global_scale=config.global_scale, sheet_id=sheet_id)
                 if not items:
                     continue
                 item = items[0]
@@ -669,7 +671,14 @@ class PlotterDaemon:
             return list(ALL_ORIGINS)
         return self.oracle_store.load_origin_filters()["print_origins"]
 
-    def _materialize_sheet_items(self, user_jobs: list[PlotJobLease], sheet_limit: int) -> list[SheetItem]:
+    def _materialize_sheet_items(
+        self,
+        user_jobs: list[PlotJobLease],
+        sheet_limit: int,
+        *,
+        global_scale: float = 1.0,
+        sheet_id: str = "",
+    ) -> list[SheetItem]:
         items: list[SheetItem] = []
         cache_dir = self.settings.spool_root / "cache"
         ensure_dir(cache_dir)
@@ -677,7 +686,7 @@ class PlotterDaemon:
         for job in user_jobs:
             local_svg = cache_dir / f"{job.session_id}.svg"
             self.remote.download_asset(job.svg_storage_path, local_svg)
-            _apply_current_mark_scale(local_svg, job.title)
+            _apply_current_mark_scale(local_svg, job.title, global_scale)
             source_kind = (
                 "placeholder"
                 if job.queue == "filler" or job.priority == "filler" or job.origin == ORIGIN_FILLER_MACBOOK
@@ -699,16 +708,23 @@ class PlotterDaemon:
         if remaining <= 0:
             return items
 
+        # Filler is deliberately exempt from the print origin filter: that filter chooses
+        # which remote job origins may be claimed, and filler is the fallback that completes
+        # the sheet regardless. See test_plotter_origin_filter_leaves_disallowed_job_pending
+        # _and_fills_row. The preview's own filter is separate and only hides cells on screen.
         placeholders = _list_placeholder_svg_paths(self.settings.placeholder_root)
         if not placeholders:
             return items
 
         start_index = self.runtime_state.placeholder_index
         placeholders = list(placeholders)
-        random.Random(time.time_ns() + start_index).shuffle(placeholders)
+        # Seeded from the sheet id, not the wall clock. time.time_ns() meant the same sheet
+        # could never be reproduced -- no preview could predict it, and a reprint after a
+        # failed run came back with different symbols.
+        random.Random(f"{sheet_id}:{start_index}").shuffle(placeholders)
         for offset in range(remaining):
             svg_path = placeholders[(start_index + offset) % len(placeholders)]
-            local_svg = _materialize_scaled_placeholder(svg_path, cache_dir)
+            local_svg = _materialize_scaled_placeholder(svg_path, cache_dir, global_scale)
             items.append(
                 SheetItem(
                     source_kind="placeholder",
@@ -1008,15 +1024,12 @@ class PlotterDaemon:
 
 
 def _list_placeholder_svg_paths(root: Path) -> list[Path]:
-    flat_svgs = sorted(path for path in root.glob("*.svg") if path.is_file())
-    package_svgs: list[Path] = []
-    for session_dir in sorted(path for path in root.iterdir() if path.is_dir()):
-        package_svgs.extend(sorted(session_dir.glob("*_plotter.svg")))
-    return flat_svgs + package_svgs
+    # One definition, shared with the operator preview so both draw from the same pool.
+    return list_fillable_symbols(root)
 
 
-def _apply_current_mark_scale(svg_path: Path, mark_name: str) -> None:
-    scale = _current_scale_for_mark(mark_name)
+def _apply_current_mark_scale(svg_path: Path, mark_name: str, global_scale: float = 1.0) -> None:
+    scale = _current_scale_for_mark(mark_name, global_scale)
     try:
         metadata = read_normalized_svg_metadata(svg_path)
     except ET.ParseError:
@@ -1041,8 +1054,8 @@ def _apply_current_mark_scale(svg_path: Path, mark_name: str) -> None:
         tree.write(svg_path, encoding="unicode")
 
 
-def _materialize_scaled_placeholder(svg_path: Path, cache_dir: Path) -> Path:
-    scale = _current_scale_for_symbol_file(svg_path)
+def _materialize_scaled_placeholder(svg_path: Path, cache_dir: Path, global_scale: float = 1.0) -> Path:
+    scale = _current_scale_for_symbol_file(svg_path, global_scale)
     ensure_dir(cache_dir)
     cache_path = cache_dir / f"placeholder_{svg_path.stem}.svg"
     cache_path.write_text(
@@ -1052,12 +1065,12 @@ def _materialize_scaled_placeholder(svg_path: Path, cache_dir: Path) -> Path:
     return cache_path
 
 
-def _current_scale_for_mark(mark_name: str) -> float | None:
+def _current_scale_for_mark(mark_name: str, global_scale: float = 1.0) -> float | None:
     normalized_name = mark_name.strip().upper()
     if not normalized_name:
         return None
     scale = scale_for_mark_name(normalized_name, _symbol_root(), _scale_config_path())
-    return _bounded_symbol_scale(scale)
+    return _bounded_symbol_scale(scale * global_scale)
 
 
 def _symbol_file_name_for_mark(mark_name: str) -> str | None:
@@ -1071,9 +1084,10 @@ def _symbol_file_name_for_mark(mark_name: str) -> str | None:
     return symbols[symbol_index].name
 
 
-def _current_scale_for_symbol_file(svg_path: Path) -> float:
+def _current_scale_for_symbol_file(svg_path: Path, global_scale: float = 1.0) -> float:
     payload = _load_scale_payload()
-    return _bounded_symbol_scale(float(payload.get(svg_path.name, 1.0)))
+    # Multiply then bound, matching the preview, so both sides clamp at the same point.
+    return _bounded_symbol_scale(float(payload.get(svg_path.name, 1.0)) * global_scale)
 
 
 def _load_scale_payload() -> dict[str, float]:

@@ -24,15 +24,14 @@ from ...shared.origin_markers import (
     marker_position_for_origin,
     normalize_origin,
 )
-from ..gcode.svg_gcode import symbol_diameter_for_cell
+from ..gcode.svg_gcode import ring_radii_mm, symbol_diameter_for_cell
 from ..symbols.session_generator import build_variant_svg
 from ..symbols.svg_normalizer import CANONICAL_BASE_DIAMETER, CANONICAL_CANVAS_SIZE, read_normalized_svg_metadata
 from .support import (
     GuiSettings,
     _build_layout_for_settings,
-    effective_randomness,
     layout_capacity,
-    list_base_symbols,
+    list_fillable_symbols,
     load_symbol_scales,
 )
 
@@ -101,12 +100,13 @@ def build_preview_svg(
             f'stroke="{cell_stroke}" stroke-width="{cell_stroke_width}"/>'
         )
         if settings.include_rings and visible_origin:
-            circles.append(
-                f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" stroke="{stroke}" stroke-width="1.4" data-ring="outer"/>'
-            )
-            if kind == "idle":
+            radii = ring_radii_mm(placement.diameter_mm, kind)
+            names = ("outer", "inner")
+            widths = ("1.4", "0.9")
+            for radius, name, stroke_width in zip(radii, names, widths, strict=False):
                 circles.append(
-                    f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" stroke="{stroke}" stroke-width="0.9" data-ring="inner"/>'
+                    f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{radius * scale:.2f}" fill="none" '
+                    f'stroke="{stroke}" stroke-width="{stroke_width}" data-ring="{name}"/>'
                 )
         if settings.include_markers and visible_origin:
             marker_x, marker_y = marker_center_for_position(
@@ -187,17 +187,22 @@ def build_symbol_preview_svg(
     marker_kind: str,
     scale: float,
     include_rings: bool,
-    randomness: float,
 ) -> str:
-    # Preview SVGs are displayed much smaller than the 800px source canvas, so the
-    # UI uses amplified jitter to make the Randomness slider visually legible.
-    jitter_px = max(0.0, min(randomness, 100.0)) / 100.0 * 80.0
+    """Render a symbol exactly as it sits on disk -- which is exactly what gets plotted.
+
+    This used to add jitter driven by the Randomness slider, amplified 80x "to make the
+    slider visually legible". Nothing downstream reproduced it: the plotter draws the
+    stored SVG, and the jitter that reaches paper is baked in earlier by
+    session_generator, from its own defaults rather than from this setting. So the slider
+    only ever roughed up the picture on screen, and the preview showed strokes the pen
+    would never make. A preview that invents detail is worse than one that omits it.
+    """
     return build_variant_svg(
         symbol_path,
         marker_kind=marker_kind,
         scale=scale,
         rng=random.Random(1),
-        jitter_px=jitter_px,
+        jitter_px=0.0,
         include_rings=include_rings,
     )
 
@@ -208,7 +213,9 @@ def _preview_symbol_images(
     symbol_root: Path | None = None,
     scale_path: Path | None = None,
 ) -> list[tuple[str, float]]:
-    symbols = list_base_symbols(symbol_root)
+    # The pool the plotter fills from, not just the top level of assets/symbols -- the
+    # preview could not otherwise show a session-package symbol the machine was about to draw.
+    symbols = list_fillable_symbols(symbol_root)
     if not symbols:
         return []
     scales = load_symbol_scales(scale_path, symbol_root)
@@ -220,7 +227,6 @@ def _preview_symbol_images(
             marker_kind="user",
             scale=symbol_scale,
             include_rings=False,
-            randomness=effective_randomness(settings),
         )
         encoded = b64encode(svg.encode("utf-8")).decode("ascii")
         images.append((f"data:image/svg+xml;base64,{encoded}", symbol_scale))
@@ -283,14 +289,13 @@ def _build_live_preview_svg(settings: GuiSettings, items: list[LivePreviewItem])
             continue
         if settings.include_rings:
             ring_opacity = "0.35" if state == "next" else "0.9"
-            elements.append(
-                f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size / 2.0:.2f}" fill="none" '
-                f'stroke="{stroke}" stroke-width="1.2" opacity="{ring_opacity}" data-ring="outer"/>'
-            )
-            if item.source_kind != "user":
+            radii = ring_radii_mm(placement.diameter_mm, item.source_kind)
+            names = ("outer", "inner")
+            widths = ("1.2", "0.8")
+            for radius, name, ring_width in zip(radii, names, widths, strict=False):
                 elements.append(
-                    f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{mark_size * 0.44:.2f}" fill="none" '
-                    f'stroke="{stroke}" stroke-width="0.8" opacity="{ring_opacity}" data-ring="inner"/>'
+                    f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{radius * scale:.2f}" fill="none" '
+                    f'stroke="{stroke}" stroke-width="{ring_width}" opacity="{ring_opacity}" data-ring="{name}"/>'
                 )
         if settings.include_markers:
             marker_x, marker_y = marker_center_for_position(

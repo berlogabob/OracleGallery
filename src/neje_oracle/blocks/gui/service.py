@@ -6,6 +6,7 @@ from pathlib import Path
 
 from nicegui import ui
 
+from ...shared.models import SystemMode
 from ...shared.origin_markers import (
     ALL_ORIGINS,
     ORIGIN_LABELS,
@@ -14,7 +15,7 @@ from ...shared.origin_markers import (
 )
 from . import tokens
 from .context import GuiContext
-from .ui import helper_text, mini_metric, warning_banner
+from .ui import client_timer, helper_text, mini_metric, select, warning_banner
 from .workspaces import calibration, connection, exhibition, generative, image, tests, texture, work
 
 PAGE_STYLE = """
@@ -23,10 +24,16 @@ __TOKENS_PLACEHOLDER__
   body { background: var(--cream); color: var(--ink); overflow: auto; }
   .q-field__control { min-height: 40px !important; }
   .q-field__label { font-size: 12px; }
-  .oracle-shell { min-height: 100vh; overflow: visible; }
+  /* nicegui's own page padding is absent from every height calculation below, so the
+     shell owns the viewport outright rather than racing it. */
+  .nicegui-content { padding: 0 !important; }
+  .oracle-shell { min-height: 100dvh; overflow: visible; box-sizing: border-box; }
   .oracle-card {
     width: 100%;
     padding: var(--space-md) 12px;
+    /* nicegui puts gap:1rem between every child of .nicegui-card. The old override set
+       padding only, so calibration's third card carried ~300px of invisible gap. */
+    gap: var(--space-sm);
     background: rgba(255, 252, 245, 0.94);
     border: 1px solid var(--rule);
     border-radius: 14px;
@@ -61,15 +68,23 @@ __TOKENS_PLACEHOLDER__
   }
   .workspace-tabs .q-tab { min-height: 42px; padding: 0 12px; letter-spacing: 0.08em; font-weight: 700; }
   .workspace-tabs .q-tab--active { color: var(--rust); }
-  .workspace-panel { min-height: calc(100vh - 104px); }
+  /* These were three hand-counted constants and all three were wrong: 104px was reserved
+     against 235px of real chrome, so 131px fell off the bottom -- clipped rather than
+     scrolled, because the shell is overflow:hidden at >=1200px. The scroll box was also
+     83px taller than the area it displayed in, putting the bottom of every workspace out
+     of reach even at the end of the scroll. Flex takes whatever the header actually
+     leaves, at any header height, so there is no number left to get wrong.
+     width:100% is what fills the dead column: workspace roots sized to their content. */
+  .workspace-panel { flex: 1 1 auto; min-height: 0; }
   .workspace-scroll {
-    max-height: calc(100vh - 120px);
+    width: 100%;
+    height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 8px;
     box-sizing: border-box;
   }
-  .preview-frame { max-height: calc(100vh - 210px); overflow: auto; width: 100%; }
+  .preview-frame { flex: 1 1 auto; min-height: 0; overflow: auto; width: 100%; }
   .preview-frame svg { display: block; width: auto; height: auto; max-width: none; max-height: none; }
   .path-label { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tight-slider .q-slider { min-height: 28px; }
@@ -87,12 +102,12 @@ __TOKENS_PLACEHOLDER__
   .legend-double-ring { box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4.4px var(--ink); }
   @media (min-width: 1200px) {
     body { overflow: hidden; }
-    .oracle-shell { height: 100vh; max-height: 100vh; overflow: hidden; }
-    .workspace-panel { height: calc(100vh - 104px); overflow: hidden; }
+    .oracle-shell { height: 100dvh; max-height: 100dvh; overflow: hidden; }
   }
   @media (max-width: 1199px) {
+    .oracle-shell { height: auto; overflow: visible; }
     .workspace-grid { grid-template-columns: 1fr !important; height: auto !important; overflow: visible !important; }
-    .workspace-scroll { max-height: none; overflow: visible; padding-right: 0; }
+    .workspace-scroll { height: auto; max-height: none; overflow: visible; padding-right: 0; }
     .preview-frame { max-height: 70vh; }
     .path-label { max-width: 100%; white-space: normal; }
     .live-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -156,7 +171,10 @@ def build_page() -> None:
 
     with ui.column().classes("oracle-shell w-full gap-2 p-3"):
         # Header + tabs + emergency stop
-        with ui.row().classes("w-full items-center gap-3"):
+        # flex-wrap: the header needs ~1500px in one line (title + 7 tabs + run profile +
+        # two stop buttons). Without wrapping it did not overflow the page -- Quasar hid
+        # the last tabs behind arrow-scroll instead, so IMAGE was unreachable at 1440px.
+        with ui.row().classes("w-full items-center gap-3 flex-wrap"):
             ui.label("THE ORACLE OPERATOR").classes("oracle-title text-lg")
             with ui.tabs(on_change=lambda event: ctx.workspace_changed(event.value)).classes(
                 "workspace-tabs"
@@ -170,6 +188,14 @@ def build_page() -> None:
                 image_tab = ui.tab("image", label="7 IMAGE")
             workspace_tabs.value = ctx.active_workspace["value"]
             ctx.workspace_tabs = workspace_tabs
+            # The run profile is an operator decision. It used to be inferred from whichever
+            # tab was open, so opening IMAGE to look at it silently rewrote Firebase policy.
+            ctx.run_profile_select = select(
+                {SystemMode.TEST.value: "TEST", SystemMode.EXHIBITION.value: "EXHIBITION"},
+                value=ctx.settings.system_mode,
+                label="Run profile",
+                on_change=lambda event: ctx.run_profile_changed(event.value),
+            )
             ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
             ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
 
@@ -189,7 +215,11 @@ def build_page() -> None:
             ctx.live_labels["blockers"] = mini_metric("Blockers", style="grid-column: 1 / -1")
 
         # Workspace column + always-visible preview
-        with ui.grid(columns="minmax(420px, 1fr) 480px").classes("w-full gap-2 min-h-0 workspace-panel workspace-grid"):
+        # The preview track was a fixed 480px, so every pixel lost to a narrower window
+        # came out of the workspace column: 656px of workspace at 1200px wide.
+        with ui.grid(columns="minmax(420px, 1fr) minmax(320px, 480px)").classes(
+            "w-full gap-2 min-h-0 workspace-panel workspace-grid"
+        ):
             with ui.tab_panels(workspace_tabs, value=ctx.active_workspace["value"]).classes("w-full h-full"):
                 with ui.tab_panel(connection_tab).classes("p-0"):
                     connection.build(ctx)
@@ -213,7 +243,7 @@ def build_page() -> None:
                 _preview_legend()
                 ctx.preview = ui.html().classes("preview-frame w-full")
 
-    ui.timer(2.0, ctx.refresh_status)
+    client_timer(2.0, ctx.refresh_status)
     ctx.persist_and_refresh()
 
 

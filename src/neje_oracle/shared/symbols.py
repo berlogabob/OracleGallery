@@ -24,6 +24,24 @@ def list_base_symbols(symbol_root: Path | None = None) -> list[Path]:
     return sorted(path for path in root.glob("*.svg") if path.is_file())
 
 
+def list_fillable_symbols(root: Path | None = None) -> list[Path]:
+    """Every symbol the plotter may drop into a filler cell, in a stable order.
+
+    The pool the daemon draws from, and therefore the pool the preview has to draw from.
+    They used to disagree: the preview listed only the top level of assets/symbols while
+    the plotter also took ``*_plotter.svg`` out of each session package below it, so the
+    preview could not show a symbol the machine was about to draw.
+    """
+    resolved = root or default_symbol_root()
+    if not resolved.exists():
+        return []
+    flat = sorted(path for path in resolved.glob("*.svg") if path.is_file())
+    packaged: list[Path] = []
+    for session_dir in sorted(path for path in resolved.iterdir() if path.is_dir()):
+        packaged.extend(sorted(session_dir.glob("*_plotter.svg")))
+    return flat + packaged
+
+
 def load_symbol_scales(scale_path: Path | None = None, symbol_root: Path | None = None) -> dict[str, float]:
     symbols = list_base_symbols(symbol_root)
     path = scale_path or default_scale_config_path()

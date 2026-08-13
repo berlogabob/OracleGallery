@@ -39,6 +39,9 @@ from ...shared.symbols import (
 from ...shared.symbols import (
     list_base_symbols as list_base_symbols,
 )
+from ...shared.symbols import (
+    list_fillable_symbols as list_fillable_symbols,
+)
 from ..gcode.direct_svg import DirectSvgPrintJob as DirectSvgPrintJob
 from ..gcode.direct_svg import create_direct_svg_print_job_from_gui as create_direct_svg_print_job_from_gui
 from ..gcode.dry_run import generate_dry_run_sheet as generate_dry_run_sheet

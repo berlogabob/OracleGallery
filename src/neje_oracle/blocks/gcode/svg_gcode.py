@@ -20,6 +20,28 @@ def symbol_diameter_for_cell(cell_diameter_mm: float) -> float:
     return max(0.0, cell_diameter_mm) * SYMBOL_FIT_RATIO
 
 
+INNER_RING_RATIO = 0.43
+
+
+def ring_radii_mm(cell_diameter_mm: float, source_kind: str) -> list[float]:
+    """Ring radii the pen actually draws, in mm, outermost first.
+
+    One definition, shared with the operator preview. Each side used to carry its own and
+    they disagreed on every sheet: the plotter drew D/2 and D*0.43, while the preview
+    drew D*0.43 and D*0.378 because it scaled by SYMBOL_FIT_RATIO first. So the preview's
+    outer ring sat exactly where the pen drew its *inner* one, and the pale cell guide --
+    which reads as decoration -- sat where the pen actually went.
+
+    Anything that is not a claimed user job is filler and gets the second ring; callers
+    spell that "idle" (preview) or "placeholder" (daemon), so only "user" is matched.
+    """
+    diameter = max(0.0, cell_diameter_mm)
+    outer = diameter / 2.0
+    if source_kind == "user":
+        return [outer]
+    return [outer, diameter * INNER_RING_RATIO]
+
+
 def parse_cell_progress_markers(gcode: str) -> list[tuple[int, int]]:
     """Return cell-start markers as ``(current_cell, total_cells)`` pairs."""
     markers: list[tuple[int, int]] = []
@@ -214,11 +236,10 @@ def _append_polyline_gcode(
 
 
 def _ring_polylines(placement: SheetPlacement, source_kind: str) -> list[list[tuple[float, float]]]:
-    outer = _circle_polyline(placement.center_x_mm, placement.center_y_mm, placement.diameter_mm / 2.0)
-    if source_kind == "user":
-        return [outer]
-    inner = _circle_polyline(placement.center_x_mm, placement.center_y_mm, placement.diameter_mm * 0.43)
-    return [outer, inner]
+    return [
+        _circle_polyline(placement.center_x_mm, placement.center_y_mm, radius)
+        for radius in ring_radii_mm(placement.diameter_mm, source_kind)
+    ]
 
 
 def _marker_polylines(

@@ -393,6 +393,10 @@ class PlotterRuntimeConfig:
     organic_rotation_ramp: float = 0.0
     organic_scale_ramp: float = 0.0
     organic_seed: int = 1007
+    # Multiplies every per-symbol scale from symbol_scales.json. The GUI preview always
+    # applied this; the plotter never received it, so the Global scale slider moved the
+    # picture on screen and nothing on the paper.
+    global_scale: float = 1.0
     run_mode: str = "exhibition"
     dry_run: bool = True
     include_rings: bool = True
