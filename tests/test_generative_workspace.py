@@ -65,17 +65,30 @@ def test_generative_svg_coordinates_within_bounds(tmp_path: Path) -> None:
 
 
 def test_should_send_frame_combinations() -> None:
-    ready = {"name": "generative_test.svg", "bytes": b"<svg/>"}
-    empty = {"name": "", "bytes": b""}
+    """Two states now, not three.
 
-    # Disabled: never send, even with a frame ready.
-    assert should_send_frame({"enabled": False, "busy": False}, ready) is False
+    It used to also require bytes sitting in a process-global capture buffer. That buffer is
+    gone: the browser no longer pushes SVG at the server, so the tick pulls the frame that is
+    on screen when it fires. There is nothing left to check but our own state.
+    """
+    # Disabled: never send.
+    assert should_send_frame({"enabled": False, "busy": False}) is False
 
     # Busy: don't send while a previous frame is still plotting.
-    assert should_send_frame({"enabled": True, "busy": True}, ready) is False
+    assert should_send_frame({"enabled": True, "busy": True}) is False
 
-    # Empty bytes: nothing captured yet.
-    assert should_send_frame({"enabled": True, "busy": False}, empty) is False
+    # All-go: enabled and idle.
+    assert should_send_frame({"enabled": True, "busy": False}) is True
 
-    # All-go: enabled, idle, and a frame is waiting.
-    assert should_send_frame({"enabled": True, "busy": False}, ready) is True
+
+def test_the_capture_buffer_is_gone() -> None:
+    """The buffer both producers wrote to is what let a texture be plotted by the sketch.
+
+    The node editor POSTed into the same slot the sketch's stream timer drained, so a texture
+    rendered for preview could reach paper unattended. Keeping this assertion means the slot
+    cannot quietly come back as a convenience.
+    """
+    from neje_oracle.blocks.gui.workspaces import generative
+
+    assert not hasattr(generative, "LATEST")
+    assert not hasattr(generative, "_handle_generative_svg")

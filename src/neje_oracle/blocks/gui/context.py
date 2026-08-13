@@ -273,34 +273,6 @@ class GuiContext:
         self.refresh_status()
         self.refresh_logs()
 
-    async def print_generative_svg(self, quiet: bool = False) -> None:
-        from .workspaces.generative import LATEST
-
-        if not LATEST["bytes"]:
-            ui.notify("Capture a pattern in the sketch first", color="warning")
-            return
-        self.pull_settings_from_fields()
-        self._save_settings()
-        if not quiet:
-            ui.notify("Printing SVG...", color="info")
-        state = await self._blocking(
-            self.supervisor.print_uploaded_svg,
-            self.settings,
-            svg_bytes=LATEST["bytes"],
-            original_name=str(LATEST["name"] or "generative.svg"),
-        )
-        if state.status == ComponentStatus.STOPPED:
-            LATEST["bytes"] = b""
-            LATEST["name"] = ""
-            ui.notify(state.message, color="positive")
-        else:
-            ui.notify(
-                state.last_error or state.message,
-                color="negative" if state.status == ComponentStatus.ERROR else "warning",
-            )
-        self.refresh_status()
-        self.refresh_logs()
-
     async def print_svg_payload(self, svg_bytes: bytes, name: str) -> bool:
         """Print an SVG built in-process (line text, image conversion). Returns success."""
         if not svg_bytes:

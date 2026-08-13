@@ -21,6 +21,7 @@ from ....blocks.imaging.sheet import SHAPES, frame_grid_capacity, images_to_shee
 from ....blocks.patterns import bank
 from ....blocks.patterns.ingest import DEFAULT_MODE as DEFAULT_MOTIF_MODE
 from ....blocks.patterns.ingest import CropBox, image_to_motif_polylines, motif_svg
+from .. import ui as oracle
 from ..context import GuiContext
 from ..support import plot_minutes_for, read_upload_event_payload
 from ..ui import helper_text, primary_action_button, safe_action_button
@@ -275,6 +276,16 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced", source: st
 
 
 def build(ctx: GuiContext) -> None:
+    # The conversion card is built partway down this function, but the upload handler and
+    # every knob above it already call refresh_preview(). Keeping the name and handing it a
+    # handle once the card exists means none of those call sites has to know the difference.
+    card_handle: dict[str, Any] = {}
+
+    def refresh_preview() -> None:
+        handle = card_handle.get("handle")
+        if handle is not None:
+            handle.refresh()
+
     with ui.column().classes("workspace-scroll gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Image to line art").classes("text-sm font-bold")
@@ -303,8 +314,7 @@ def build(ctx: GuiContext) -> None:
                 "accept=.png,.jpg,.jpeg,.bmp,.webp,.gif max-files=1 auto-upload"
             ).classes("w-full")
 
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Conversion").classes("text-sm font-bold")
+        def conversion_controls() -> None:
             mode_help = ui.label(MODE_HELP[STATE["mode"]]).classes("text-xs text-[#8f4f2b]")
 
             def set_field(key: str, value: Any) -> None:
@@ -411,18 +421,51 @@ def build(ctx: GuiContext) -> None:
                     value=STATE["invert"],
                     on_change=lambda e: set_field("invert", bool(e.value)),
                 )
-                ui.switch(
-                    "Travel lines",
-                    value=STATE["show_travel"],
-                    on_change=lambda e: set_field("show_travel", bool(e.value)),
-                ).tooltip("Off shows the drawing alone, as it will appear on paper. Never affects what is printed.")
 
-            cost_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
-            preview = ui.html().classes("preview-frame w-full")
+            quality_label.set_text(_quality_text())
 
-            with ui.row().classes("items-center gap-2"):
-                safe_action_button("REFRESH PREVIEW", lambda: refresh_preview())
-                primary_action_button("PRINT IMAGE", lambda: print_image())
+        def render_conversion() -> oracle.Render:
+            if not STATE["bytes"]:
+                raise ValueError("Upload an image to see the preview.")
+            # Typed dict[str, Any], not inferred: a bare {"pen_width_mm": float} splat narrows to
+            # dict[str, float], which mypy then reads as able to collide with image_to_polylines'
+            # levels: int | None and autocontrast: bool.
+            pen_param: dict[str, Any] = (
+                {"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}
+            )
+            polylines = image_to_polylines(
+                STATE["bytes"],
+                mode=str(STATE["mode"]),
+                width_mm=float(STATE["width_mm"]),
+                height_mm=float(STATE["height_mm"]),
+                cell_mm=float(STATE["cell_mm"]),
+                gamma=float(STATE["gamma"]),
+                invert=bool(STATE["invert"]),
+                max_segments=quality_max_segments(str(STATE["quality"])),
+                min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
+                **pen_param,
+                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
+            )
+            stem = str(STATE["name"] or "image").rsplit(".", 1)[0]
+            return oracle.Render(
+                polylines=polylines,
+                width_mm=float(STATE["width_mm"]),
+                height_mm=float(STATE["height_mm"]),
+                name=f"{stem}_{STATE['mode']}",
+            )
+
+        conversion = oracle.render_card(
+            ctx,
+            title="Conversion",
+            controls=conversion_controls,
+            render=render_conversion,
+            button_label="PRINT IMAGE",
+            travel_default=bool(STATE["show_travel"]),
+            # tests/test_gui_workspaces.py reads the printable bytes back off STATE, and so does
+            # anything else that already knows this module by its state dict.
+            on_render=lambda svg: STATE.__setitem__("svg", svg),
+        )
+        card_handle["handle"] = conversion
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Frame sheet").classes("text-sm font-bold")
@@ -615,78 +658,6 @@ def build(ctx: GuiContext) -> None:
             f"{stem}_sheet{int(SHEET_STATE['sheet_index'])}.svg",
         )
 
-    def refresh_preview() -> None:
-        if not STATE["bytes"]:
-            preview.content = ""
-            cost_label.set_text("Upload an image to see the preview.")
-            STATE["svg"] = ""
-            return
-        # Typed dict[str, Any], not inferred: a bare {"pen_width_mm": float} splat narrows to
-        # dict[str, float], which mypy then reads as able to collide with image_to_polylines'
-        # levels: int | None and autocontrast: bool.
-        pen_param: dict[str, Any] = (
-            {"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}
-        )
-        try:
-            polylines = image_to_polylines(
-                STATE["bytes"],
-                mode=str(STATE["mode"]),
-                width_mm=float(STATE["width_mm"]),
-                height_mm=float(STATE["height_mm"]),
-                cell_mm=float(STATE["cell_mm"]),
-                gamma=float(STATE["gamma"]),
-                invert=bool(STATE["invert"]),
-                max_segments=quality_max_segments(str(STATE["quality"])),
-                min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
-                **pen_param,
-                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
-            )
-        except ValueError as exc:
-            preview.content = ""
-            STATE["svg"] = ""
-            cost_label.set_text(str(exc))
-            ui.notify(str(exc), color="warning")
-            return
-        svg = polylines_to_svg(
-            polylines,
-            width_mm=float(STATE["width_mm"]),
-            height_mm=float(STATE["height_mm"]),
-            pen_width_mm=ctx.settings.pen_width_mm,
-        )
-        STATE["svg"] = svg
-        preview.content = preview_svg(
-            polylines,
-            width_mm=float(STATE["width_mm"]),
-            height_mm=float(STATE["height_mm"]),
-        )
-        preview.update()
-        draw_mm, travel_mm = travel_length_mm(polylines)
-        segments = sum(max(0, len(p) - 1) for p in polylines)
-        xy_minutes, pen_minutes = plot_minutes_for(
-            ctx.settings,
-            strokes=len(polylines),
-            draw_mm=draw_mm,
-            travel_mm=travel_mm,
-            use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
-        )
-        pen_note = f" + {pen_minutes:.0f} min pen lifts" if pen_minutes >= 0.5 else ""
-        cost_label.set_text(
-            f"{len(polylines)} strokes, {segments} segments, "
-            f"{draw_mm / 1000:.1f} m drawn + {travel_mm / 1000:.1f} m travel, "
-            f"~{xy_minutes + pen_minutes:.0f} min at current feeds "
-            f"({xy_minutes:.0f} min moving{pen_note})"
-        )
-
-    async def print_image() -> None:
-        if not STATE["svg"]:
-            refresh_preview()
-        if not STATE["svg"]:
-            ui.notify("Upload an image and refresh the preview first", color="warning")
-            return
-        stem = str(STATE["name"] or "image").rsplit(".", 1)[0]
-        await ctx.print_svg_payload(STATE["svg"].encode("utf-8"), f"{stem}_{STATE['mode']}.svg")
-
-    quality_label.set_text(_quality_text())
     refresh_preview()
     refresh_sheet_capacity()
 
