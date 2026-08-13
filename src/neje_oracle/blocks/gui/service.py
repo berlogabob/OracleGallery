@@ -52,7 +52,6 @@ __TOKENS_PLACEHOLDER__
   /* CREATE panes: one source visible at a time, canvas track + 340px knobs track.
      grid-auto-rows pins the single row to the pane height so h-full children resolve. */
   .create-pane { flex: 1 1 auto; min-height: 0; grid-auto-rows: 100%; }
-  .create-pane-scroll { overflow-y: auto; }
   .create-canvas { min-width: 0; overflow: hidden; }
   .create-panel { overflow-y: auto; }
   .create-strip { border-top: 1px solid var(--rule); padding-top: 4px; flex: 0 0 auto; }
