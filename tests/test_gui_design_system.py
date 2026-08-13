@@ -30,6 +30,12 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # -2 classes, -1 hex, -1 card: the generative workspace's hand-styled iframe became
 # ui.embedded_page, which the new texture workspace composes too rather than restyling.
 #
+# +7 classes, +1 card (2026-08-13, SETUP segmentation): the section containers that let a
+# segmented switch show one calibration section at a time, and the Advanced expansion
+# honestly becoming a card -- an expansion inside a segmented switch is an accordion inside
+# tabs, which hides state. New surface with a purpose, not un-migrated styling; the CREATE
+# rewrite takes these counts down again.
+#
 # -6 classes, -1 hex, -1 card: the image workspace's Conversion card became one
 # ui.render_card call, and the generative workspace lost the capture readout with the buffer.
 # ui.py is a STYLE_OWNER, so what a workspace hands it leaves these counts entirely rather
@@ -41,9 +47,9 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # the rail, and the status bar's state chip / position readout / e-stop gap -- not
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
-MAX_RAW_CLASSES = 211
-MAX_RAW_HEX = 45
-MAX_RAW_CARDS = 20
+MAX_RAW_CLASSES = 213
+MAX_RAW_HEX = 44
+MAX_RAW_CARDS = 19
 MAX_RAW_BUTTONS = 9
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b")

@@ -34,25 +34,24 @@ def build(ctx: GuiContext) -> None:
                 stub = ui.label("")
                 stub.set_visibility(False)
                 ctx.fluidnc_labels[key] = stub
-            ctx.fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
-            ctx.fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
+            message = ui.label("Not connected").classes("path-label text-xs font-bold")
+            ctx.fluidnc_labels["message"] = message
+            # The address detail rode along as its own cryptic line ("- · :23" before any
+            # connection). It is diagnostic, not operational: a tooltip on the message.
+            target = ui.label("")
+            target.set_visibility(False)
+            ctx.fluidnc_labels["target"] = target
+            message.tooltip("Hover shows the message; the target address lives in the logs and SCAN LAN output.")
 
-        # Controller recovery
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Controller Recovery").classes("text-sm font-bold")
-            with ui.row().classes("gap-2"):
+            ui.separator()
+            # Recovery belongs beside the connection it recovers, as a row -- it was a
+            # whole card for three buttons. The checklist card is gone with it: three lines
+            # of static prose, of which the one operational fact is now the helper above.
+            with ui.row().classes("gap-2 items-center"):
+                helper_text("Recovery (alarm or hold only):")
                 ui.button("UNLOCK", on_click=ctx.unlock_alarm).props("dense color=warning")
                 safe_action_button("Resume", ctx.resume_after_hold)
                 ui.button("RESET / ABORT", on_click=ctx.soft_reset).props("dense color=negative")
-
-        # Manual motion (shared card)
-
-        # Notes
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Connection checklist").classes("text-sm font-bold")
-            helper_text("1. Join the plotter Wi-Fi or hotspot.")
-            helper_text("2. Press CONNECT and verify WebUI, Telnet, and Idle.")
-            helper_text("3. Use recovery only for a known alarm or hold state.")
 
         # Defer the initial async probe until the page event loop is running.
         client_timer(0.1, lambda: ctx.check_fluidnc(scan=False), once=True)
