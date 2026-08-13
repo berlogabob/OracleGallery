@@ -47,7 +47,7 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # the rail, and the status bar's state chip / position readout / e-stop gap -- not
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
-MAX_RAW_CLASSES = 210  # +7: the CREATE pane grid containers, same precedent as the SETUP sections
+MAX_RAW_CLASSES = 212  # +7 pane grid containers, +2 the shared print strip row
 MAX_RAW_HEX = 42
 MAX_RAW_CARDS = 17
 MAX_RAW_BUTTONS = 9

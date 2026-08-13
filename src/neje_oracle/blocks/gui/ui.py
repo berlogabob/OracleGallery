@@ -264,6 +264,7 @@ def render_card(
     cost_suffix: Callable[[Render], str] | None = None,
     on_render: Callable[[str], None] | None = None,
     preview_slot: Any = None,
+    actions: bool = True,
 ) -> RenderCard:
     """A source, its knobs, an honest preview, a time estimate, and one print button.
 
@@ -343,9 +344,12 @@ def render_card(
             return await ctx.print_svg_payload(handle.svg.encode("utf-8"), f"{render().name}.svg")
 
         travel.on_value_change(lambda _: refresh())
-        with toolbar():
-            safe_action_button("REFRESH PREVIEW", refresh)
-            primary_action_button(button_label, do_print)
+        # actions=False is the CREATE screen: one shared print strip dispatches on the
+        # active source through the handle, so the card carries no buttons of its own.
+        if actions:
+            with toolbar():
+                safe_action_button("REFRESH PREVIEW", refresh)
+                primary_action_button(button_label, do_print)
 
     handle.preview = preview
     handle.travel = travel

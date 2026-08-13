@@ -144,36 +144,71 @@ def build_create(ctx: GuiContext) -> None:
                 panel = ui.column().classes("create-panel min-h-0 h-full gap-2")
             return canvas, panel
 
+        # mode -> what the shared strip below can do there. A source with no refresh (the
+        # live sketch) or no print (motif saves to the bank instead) just hides that button.
+        strip: dict[str, dict] = {}
+
         canvas, panel = pane("sketch")
         with canvas:
             generative.build_sketch_canvas()
         with panel:
-            generative.build_sketch_controls(ctx)
+            print_sketch = generative.build_sketch_controls(ctx)
+        strip["sketch"] = {"print": print_sketch, "label": "PRINT SKETCH"}
 
         canvas, panel = pane("texture")
         with canvas:
             texture.build_canvas()
         with panel:
-            texture.build_controls(ctx)
+            texture_handle, reload_textures = texture.build_controls(ctx, actions=False)
+        strip["texture"] = {"refresh": texture_handle.refresh, "print": texture_handle.print, "label": "PRINT TEXTURE"}
 
         image_canvas, image_panel = pane("image")
         sheet_canvas, sheet_panel = pane("sheet")
-        sections = image.build_sections(ctx, preview_slots={"image": image_canvas, "sheet": sheet_canvas})
+        sections, handles = image.build_sections(
+            ctx, preview_slots={"image": image_canvas, "sheet": sheet_canvas}, actions=False
+        )
         sections["image"].move(image_panel)
         sections["sheet"].move(sheet_panel)
+        strip["image"] = {"refresh": handles["image"].refresh, "print": handles["image"].print, "label": "PRINT IMAGE"}
+        strip["sheet"] = {"refresh": handles["sheet"].refresh, "print": handles["sheet"].print, "label": "PRINT SHEET"}
 
         canvas, panel = pane("text")
         with panel:
-            generative.build_text(ctx, preview_slot=canvas)
+            text_handle = generative.build_text(ctx, preview_slot=canvas, actions=False)
+        if text_handle is not None:
+            strip["text"] = {"refresh": text_handle.refresh, "print": text_handle.print, "label": "PRINT TEXT"}
 
         # ponytail: motif keeps its stacked card in a scrolling pane; D4 splits it into
         # picture-as-canvas + knobs like the others.
         panes["motif"] = ui.column().classes("create-pane create-pane-scroll w-full gap-2")
         sections["motif"].move(panes["motif"])
 
+        # The one print strip: every source that prints, prints here, exactly one way.
+        def _active() -> dict:
+            return strip.get(str(switch.value), {})
+
+        async def strip_print() -> None:
+            action = _active().get("print")
+            if action is not None:
+                await action()
+
+        with ui.row().classes("create-strip w-full items-center gap-2"):
+            refresh_button = safe_action_button("REFRESH PREVIEW", lambda: _active().get("refresh", lambda: None)())
+            ui.element("div").classes("status-spacer")
+            print_button = primary_action_button("PRINT", strip_print)
+
         def show(mode: object) -> None:
             for name, box in panes.items():
                 box.set_visibility(name == mode)
+            entry = strip.get(str(mode), {})
+            refresh_button.set_visibility(entry.get("refresh") is not None)
+            print_button.set_visibility(entry.get("print") is not None)
+            if entry.get("print") is not None:
+                print_button.set_text(entry["label"])
+            if mode == "texture":
+                # The graph list is the one thing the node editor changes behind this
+                # page's back; entering the pane is the moment it must be current.
+                reload_textures()
 
         switch.on_value_change(lambda event: show(event.value))
         show(switch.value)
