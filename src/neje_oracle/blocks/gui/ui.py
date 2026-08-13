@@ -13,13 +13,16 @@ card 28, section title 30, dense-outlined controls 34, action rows 25.
 from __future__ import annotations
 
 import contextlib
+import tempfile
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from nicegui import ui
 
+from ..gcode.svg_gcode import svg_to_polylines_mm
 from ..imaging.modes import Polylines, polylines_to_svg, travel_length_mm, travel_preview_svg
 from .support import plot_minutes_for
 
@@ -356,6 +359,30 @@ def render_card(
     handle._refresh = refresh
     handle._print = do_print
     return handle
+
+
+def svg_cost_line(ctx: Any, svg_bytes: bytes) -> str:
+    """What a finished SVG costs to plot, worded like every render card's estimate.
+
+    For sources that hand over SVG rather than polylines -- the streamed sketch frame --
+    so their operators get the same honest number before ink flows.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as handle:
+        handle.write(svg_bytes)
+        path = Path(handle.name)
+    try:
+        polylines = svg_to_polylines_mm(path, ctx.settings.sample_step_mm)
+    finally:
+        path.unlink(missing_ok=True)
+    draw_mm, travel_mm = travel_length_mm(polylines)
+    minutes = plot_minutes_for(
+        ctx.settings,
+        strokes=len(polylines),
+        draw_mm=draw_mm,
+        travel_mm=travel_mm,
+        use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
+    )
+    return "One frame: " + cost_line(polylines, draw_mm=draw_mm, travel_mm=travel_mm, minutes=minutes)
 
 
 def notify_if_connected(message: str, **kwargs: Any) -> None:
