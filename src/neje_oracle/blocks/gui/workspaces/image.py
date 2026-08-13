@@ -332,11 +332,14 @@ def build(ctx: GuiContext) -> None:
         build_sections(ctx)
 
 
-def build_sections(ctx: GuiContext, preview_slots: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_sections(
+    ctx: GuiContext, preview_slots: dict[str, Any] | None = None, *, actions: bool = True
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """The three image sources as separate columns the CREATE screen can place as panes.
 
     `preview_slots` maps a section name to a container its render preview should land in --
     the canvas column of that mode -- so knobs and picture live in different grid tracks.
+    Returns (sections, render-card handles) so the screen's print strip can dispatch.
     """
     slots = preview_slots or {}
     sections: dict[str, Any] = {}
@@ -576,6 +579,7 @@ def build_sections(ctx: GuiContext, preview_slots: dict[str, Any] | None = None)
             # anything else that already knows this module by its state dict.
             on_render=lambda svg: STATE.__setitem__("svg", svg),
             preview_slot=slots.get("image"),
+            actions=actions,
         )
         card_handle["handle"] = conversion
         # render_card owns the "Travel lines" switch, so register the one it built rather than
@@ -719,6 +723,7 @@ def build_sections(ctx: GuiContext, preview_slots: dict[str, Any] | None = None)
             # state dicts read the printable sheet back off SHEET_STATE.
             on_render=lambda svg: SHEET_STATE.__setitem__("svg", svg),
             preview_slot=slots.get("sheet"),
+            actions=actions,
         )
 
     sections["motif"] = ui.column().classes("w-full gap-2")
@@ -774,7 +779,7 @@ def build_sections(ctx: GuiContext, preview_slots: dict[str, Any] | None = None)
 
     refresh_preview()
     refresh_sheet_capacity()
-    return sections
+    return sections, {"image": card_handle["handle"], "sheet": sheet_card_handle["handle"]}
 
 
 def motif_crop() -> CropBox:

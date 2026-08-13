@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from typing import Any
 
 from nicegui import app, ui
 from starlette.requests import Request
@@ -150,8 +151,12 @@ def build_sketch_canvas() -> None:
     oracle.embedded_page("/generative/index.html", element_id="generative-frame")
 
 
-def build_sketch_controls(ctx: GuiContext) -> None:
-    """Print and stream controls for the sketch. Talk to the iframe by id, not by handle."""
+def build_sketch_controls(ctx: GuiContext) -> Any:
+    """Print and stream controls for the sketch. Talk to the iframe by id, not by handle.
+
+    Returns the print coroutine so the CREATE screen's shared print strip can dispatch to
+    it; the card itself carries no print button there.
+    """
     with ui.card().classes("oracle-card compact-card w-full"):
         ui.label("Send to plotter").classes("text-sm font-bold")
         origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
@@ -249,13 +254,13 @@ def build_sketch_controls(ctx: GuiContext) -> None:
         client_timer(3.0, _stream_tick)
 
 
-def build_text(ctx: GuiContext, preview_slot: object = None) -> None:
+def build_text(ctx: GuiContext, preview_slot: object = None, *, actions: bool = True) -> oracle.RenderCard | None:
     """Single-stroke SHX text: preview, then print through the direct-SVG path."""
     fonts = shx.list_fonts()
     if not fonts:
         with oracle.card("Line text"):
             helper_text("No usable SHX fonts found in assets/fonts/shx.")
-        return
+        return None
 
     # render_card builds the knobs itself, but every knob's handler already calls refresh().
     # Handing the name a handle once the card exists keeps those call sites unaware of it.
@@ -297,5 +302,7 @@ def build_text(ctx: GuiContext, preview_slot: object = None) -> None:
         render=render_text,
         button_label="PRINT TEXT",
         preview_slot=preview_slot,
+        actions=actions,
     )
     refresh()
+    return card_handle["handle"]

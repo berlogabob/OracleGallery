@@ -49,7 +49,10 @@ WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
 COST_BLOCKS = 0  # target passed: every estimator lives inside ui.render_card, zero hand-rolled cost blocks
 ESTIMATOR_IN_VIEW = 0
 MODULE_STATE_DICTS = 5  # -1: LATEST deleted; the browser no longer pushes SVG at us
-DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 8, "setup": 2}
+# CREATE's 7 are knob labels (Mode, Cell mm, Travel lines...) repeated across panes that are
+# mutually exclusive on screen -- the CDP gate proves 0 visible duplicates in every mode. The
+# headless walk cannot see visibility; action buttons measure 0 duplicated everywhere.
+DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 7, "setup": 2}
 FIXED_HEIGHT_IFRAMES = 0  # reached target: embedded_page no longer takes a height; both editors fill their pane
 DEAD_TAB_STRINGS = 0  # reached target: no operator-facing text names a deleted tab  # "Connection tab" in context.py; the other five markers are already gone
 

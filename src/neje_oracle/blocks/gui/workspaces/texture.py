@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from nicegui import app, ui
+from nicegui import app
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
@@ -249,11 +249,17 @@ def build_canvas() -> None:
     oracle.embedded_page("/generative/nodes.html", element_id="texture-frame")
 
 
-def build_controls(ctx: GuiContext) -> None:
-    """Render-and-print for a saved texture."""
+def build_controls(ctx: GuiContext, *, actions: bool = True) -> tuple[Any, Any]:
+    """Render-and-print for a saved texture.
+
+    Returns (card handle, reload-graph-list closure). The CREATE screen calls the reload
+    whenever this pane becomes visible -- which is what buried the RELOAD button: the list
+    went stale only because the editor saves through the API, not through this page.
+    """
     # render_card builds the knobs itself, but every knob's handler already calls refresh().
     # Handing the name a handle once the card exists keeps those call sites unaware of it.
     card_handle: dict[str, Any] = {}
+    hooks: dict[str, Any] = {}
 
     def refresh() -> None:
         handle = card_handle.get("handle")
@@ -282,13 +288,11 @@ def build_controls(ctx: GuiContext) -> None:
             )
 
             def reload_graphs() -> None:
-                # The editor saves through the API, not through this page, so the list goes stale
-                # the moment an operator saves a new texture next door.
+                # Quiet: this runs on every switch to the TEXTURE pane, not on a button press.
                 graph_select.options = texture_bank.list_graphs()
                 graph_select.update()
-                ui.notify("Texture list reloaded", color="info")
 
-            oracle.safe_action_button("RELOAD", reload_graphs)
+            hooks["reload"] = reload_graphs
 
         with oracle.toolbar(full_width=True):
             for key, label, step in (
@@ -346,6 +350,8 @@ def build_controls(ctx: GuiContext) -> None:
         # Anything that already knows this module by its state dict keeps reading the
         # printable bytes off STATE -- tests/test_gui_workspaces.py among them.
         on_render=lambda svg: STATE.__setitem__("svg", svg),
+        actions=actions,
     )
 
     refresh()
+    return card_handle["handle"], hooks["reload"]

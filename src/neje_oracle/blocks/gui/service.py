@@ -55,6 +55,7 @@ __TOKENS_PLACEHOLDER__
   .create-pane-scroll { overflow-y: auto; }
   .create-canvas { min-width: 0; overflow: hidden; }
   .create-panel { overflow-y: auto; }
+  .create-strip { border-top: 1px solid var(--rule); padding-top: 4px; flex: 0 0 auto; }
   .preview-fill { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius-md); }
   /* Quasar's tab panel is not a flex child by default, so height:100% below it resolves
      to auto and the canvas column grows past the viewport instead of letting the
