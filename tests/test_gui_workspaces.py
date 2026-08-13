@@ -51,7 +51,9 @@ def test_connection_workspace_builds_and_populates_fluidnc_and_jog_controls(monk
     with ui.column():
         connection.build(ctx)
 
-    assert {"jog_step", "jog_feed"} <= ctx.fields.keys()
+    # Jog no longer belongs to this tab -- it is in the machine rail, reachable from every
+    # workspace. See test_machine_rail_owns_the_controls_that_bring_the_machine_up.
+    assert {"jog_step", "jog_feed"}.isdisjoint(ctx.fields.keys())
     assert {"webui", "telnet", "state", "mpos", "pins", "modal", "message", "target"} <= ctx.fluidnc_labels.keys()
 
 
@@ -90,9 +92,6 @@ def test_calibration_workspace_builds_and_populates_layout_and_scale_fields(monk
         "z_up_mm",
         "z_down_mm",
         "z_feed_mm_min",
-        # from the shared motion panel
-        "jog_step",
-        "jog_feed",
     }
     assert expected_fields <= ctx.fields.keys()
 
@@ -485,6 +484,64 @@ def test_tuning_preview_shows_queued_user_cells_when_the_queue_has_work(monkeypa
     inner = ctx.preview.content.count('data-ring="inner"')
     # Two claimed user cells carry a single ring each; every remaining cell is filler.
     assert outer - inner == 2, f"expected 2 single-ring user cells, got outer={outer} inner={inner}"
+
+
+def test_machine_rail_owns_the_controls_that_bring_the_machine_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Homing, jogging and zeroing are reachable without changing tabs.
+
+    They used to be spread across four: home on CONNECTION/CALIBRATION, set work zero on
+    WORK, test print on TESTS, start print on EXHIBITION -- travelled 1 -> 1/2 -> 4 -> 3 -> 5.
+    """
+    from neje_oracle.blocks.gui.workspaces import motion
+
+    ctx = _new_ctx(monkeypatch)
+
+    with ui.column():
+        motion.render_machine_rail(ctx)
+
+    assert {"jog_step", "jog_feed"} <= ctx.fields.keys()
+    assert ctx.next_action_button is not None
+    assert "message" in ctx.ready_labels
+    assert ctx.blockers_label is not None
+
+    rendered = {
+        str(text)
+        for element in ui.context.slot.parent.descendants()
+        for text in (getattr(element, "text", None), element._props.get("label"))
+        if text
+    }
+    for control in ("HOME ALL", "HOME X", "HOME Y", "PEN UP", "PEN DOWN", "SET WORK ZERO"):
+        assert any(control in text for text in rendered), f"{control} must be reachable from every tab"
+
+
+def test_next_action_button_tracks_the_readiness_state_machine(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The state machine already existed; it was rendered as text next to no button.
+
+    context.refresh_status() computes both the blockers and the one action that advances
+    the job, and the operator then had to go and find the matching control in the tabs.
+    """
+    from neje_oracle.blocks.gui.workspaces import motion
+
+    ctx = _new_ctx(monkeypatch)
+    with ui.column():
+        motion.render_machine_rail(ctx)
+
+    class _Readiness:
+        work_zero_set = False
+        message = ""
+
+    monkeypatch.setattr(ctx.supervisor.runtime_store, "load_plotter_readiness", lambda: _Readiness())
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.read_plotter_status", lambda: {"status": "idle"})
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.read_queue_status", lambda **k: {"online": True})
+
+    ctx.refresh_status()
+    assert ctx.next_action_key == "work_zero"
+    assert ctx.next_action_button.text == "SET WORK ZERO"
+
+    _Readiness.work_zero_set = True
+    ctx.refresh_status()
+    assert ctx.next_action_key == "start_print"
+    assert ctx.next_action_button.text == "START PRINT"
 
 
 def test_run_profile_selector_sets_the_mode(monkeypatch: pytest.MonkeyPatch) -> None:

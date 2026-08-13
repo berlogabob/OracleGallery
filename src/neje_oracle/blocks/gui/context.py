@@ -86,6 +86,12 @@ class GuiContext:
         self.live_labels: dict[str, Any] = {}
         self.uploaded_svg: dict[str, Any] = {"name": "", "bytes": b""}
         self.run_profile_select: Any = None
+        # What the machine rail's primary button will do when pressed, kept in step with
+        # the readiness state machine in refresh_status().
+        self.next_action_key = "watch"
+        self.next_action_button: Any = None
+        self.blockers_label: Any = None
+        self.position_label: Any = None
 
         store = self.supervisor.runtime_store
         saved_workspace = str(store.load_json("gui_workspace", {"tab": "connection"}).get("tab", "connection"))
@@ -414,24 +420,31 @@ class GuiContext:
             # START TEST PRINT switches the profile on the operator's behalf; the selector
             # is the only place that says so, so it has to follow.
             self.run_profile_select.value = self.settings.system_mode
+        # Computed whether or not anything is rendered: the machine rail's primary button
+        # reads it, and the rail exists independently of the live strip.
+        if not readiness.work_zero_set:
+            next_action, self.next_action_key = "Set work zero", "work_zero"
+        elif not print_enabled:
+            next_action, self.next_action_key = "Start print", "start_print"
+        elif pending_users:
+            next_action, self.next_action_key = "Print queued sessions", "start_print"
+        else:
+            next_action, self.next_action_key = "Watch next sheet", "watch"
         if self.live_labels:
-            self.live_labels["fluidnc"].set_text(status_text.upper())
+            self._set_state_chip(status_text)
             self.live_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
             self.live_labels["firebase"].set_text(
                 "REQUIRED" if mode_policy(self.settings.mode).firebase_required else "TEST BYPASS"
             )
             self.live_labels["queue"].set_text("ONLINE" if queue_online else "OFFLINE")
             self.live_labels["sheet"].set_text(current_sheet)
-            if not readiness.work_zero_set:
-                next_action = "Set work zero"
-            elif not print_enabled:
-                next_action = "Start print"
-            elif pending_users:
-                next_action = "Print queued sessions"
-            else:
-                next_action = "Watch next sheet"
-            self.live_labels["next"].set_text(next_action)
-            self.live_labels["blockers"].set_text(" · ".join(blockers) if blockers else "none")
+        if self.blockers_label is not None:
+            self.blockers_label.set_text(f"blockers: {' · '.join(blockers)}" if blockers else "nothing blocking")
+        if self.next_action_button is not None:
+            self.next_action_button.set_text(next_action.upper())
+            # "Watch next sheet" is not something the operator does; leaving it pressable
+            # would make the rail's one primary control a no-op most of a run.
+            self.next_action_button.set_enabled(self.next_action_key != "watch")
         if self.ready_labels:
             self.ready_labels["message"].set_text(readiness.message)
         if self.preview_progress_label is not None:
@@ -621,6 +634,32 @@ class GuiContext:
 
     # ---- FluidNC / motion (one copy, shared by connection + calibration) ------
 
+    # Glyph first, colour second. ISA-101 and the high-performance-HMI literature both
+    # insist state is never encoded by colour alone -- an operator glancing across a room,
+    # or one of the ~8% of men with a colour vision deficiency, has to read it either way.
+    _STATE_MARKS = (
+        ("alarm", "\u25b2", "state-danger"),
+        ("error", "\u25b2", "state-danger"),
+        ("hold", "\u25ae\u25ae", "state-warn"),
+        ("paus", "\u25ae\u25ae", "state-warn"),
+        ("run", "\u25b6", "state-run"),
+        ("jog", "\u25b6", "state-run"),
+        ("idle", "\u25cf", "state-ok"),
+    )
+
+    def _set_state_chip(self, status_text: str) -> None:
+        chip = self.live_labels.get("fluidnc")
+        if chip is None:
+            return
+        lowered = status_text.lower()
+        glyph, tone = "\u2715", "state-offline"
+        for needle, mark, css in self._STATE_MARKS:
+            if needle in lowered:
+                glyph, tone = mark, css
+                break
+        chip.set_text(f"{glyph}  {status_text.upper()}")
+        chip.classes(replace=f"state-chip {tone}")
+
     def update_fluidnc_labels(self, result: dict[str, Any]) -> None:
         labels = self.fluidnc_labels
         if "webui" in labels:
@@ -631,6 +670,16 @@ class GuiContext:
             labels["state"].set_text(str(result.get("controller_state") or "Unknown"))
         if "mpos" in labels:
             labels["mpos"].set_text(_format_gui_tuple(result.get("machine_position")))
+        if self.position_label is not None:
+            # The position readout belongs in the persistent bar, not only inside the
+            # Connection tab: knowing where the head is matters most while jogging, which
+            # now happens from every screen.
+            position = result.get("machine_position")
+            self.position_label.set_text(
+                f"X {position[0]:.1f} · Y {position[1]:.1f}"
+                if isinstance(position, (list, tuple)) and len(position) >= 2
+                else "X — · Y —"
+            )
         if "pins" in labels:
             labels["pins"].set_text(str(result.get("pins") or "none"))
         if "modal" in labels:

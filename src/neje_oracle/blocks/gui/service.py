@@ -15,8 +15,18 @@ from ...shared.origin_markers import (
 )
 from . import tokens
 from .context import GuiContext
-from .ui import client_timer, helper_text, mini_metric, select, warning_banner
-from .workspaces import calibration, connection, exhibition, generative, image, tests, texture, work
+from .ui import client_timer, helper_text, mini_metric, select
+from .workspaces import (
+    calibration,
+    connection,
+    exhibition,
+    generative,
+    image,
+    motion,
+    tests,
+    texture,
+    work,
+)
 
 PAGE_STYLE = """
 <style>
@@ -41,11 +51,42 @@ __TOKENS_PLACEHOLDER__
   }
   .oracle-title { letter-spacing: 0.16em; color: var(--rust); }
   .compact-card { padding: 10px 12px !important; }
+  .status-bar {
+    background: rgba(255, 252, 245, 0.84);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 6px 10px;
+  }
+  .status-spacer { flex: 1 1 auto; }
+  /* A deliberate dead zone, not decoration: the one control that must never be pressed
+     by accident does not sit flush against the one next to it. */
+  .estop-gap { width: var(--space-lg); flex: 0 0 auto; }
+  .state-chip {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding: 5px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  .state-ok { color: var(--ok); border-color: var(--ok); }
+  .state-run { color: var(--ink); border-color: var(--ink); }
+  .state-warn { color: var(--warn); border-color: var(--warn); background: var(--warn-wash); }
+  .state-danger { color: var(--paper); background: var(--danger); border-color: var(--danger); }
+  .state-offline { color: var(--ink-muted); border-color: var(--rule); }
+  .position-readout {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
   .live-strip {
     display: grid;
-    grid-template-columns: repeat(6, minmax(110px, 1fr));
+    grid-template-columns: repeat(4, minmax(104px, 1fr));
     gap: 6px;
     align-items: stretch;
+    flex: 0 1 auto;
   }
   .live-strip .mini-metric { background: rgba(255, 252, 245, 0.9); }
   .live-strip .next-action { border-color: var(--rust); background: var(--paper); }
@@ -94,7 +135,6 @@ __TOKENS_PLACEHOLDER__
   .mini-metric { border: 1px solid var(--rule); border-radius: 10px; padding: 5px 7px; background: rgba(255,255,255,0.45); }
   .mini-metric .label { font-size: 9px; letter-spacing: 0.16em; color: var(--rust); text-transform: uppercase; }
   .mini-metric .value { font-size: 12px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .jog-pad .q-btn { width: 54px; }
   .preview-legend { border-top: 1px solid var(--rule); padding-top: 6px; }
   .legend-chip { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--ink); white-space: nowrap; }
   .legend-dot { width: 9px; height: 9px; border-radius: 999px; border: 1px solid var(--ink); display: inline-block; flex: 0 0 auto; }
@@ -111,12 +151,18 @@ __TOKENS_PLACEHOLDER__
     .preview-frame { max-height: 70vh; }
     .path-label { max-width: 100%; white-space: normal; }
     .live-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .status-spacer { display: none; }
   }
   @media (max-width: 760px) {
     .oracle-shell { min-width: 560px; }
     .mobile-operator-warning { display: block; }
     .workspace-tabs { overflow-x: auto; }
   }
+  /* The rail is fixed-width and always present, so it must not shrink with the
+     workspace beside it -- a jog button that moves is a jog button you mis-hit. */
+  .machine-rail { display: flex; flex-direction: column; gap: var(--space-sm); width: 100%; }
+  .jog-pad { display: grid; gap: 4px; width: 100%; justify-items: center; }
+  .jog-pad .q-btn { width: 100%; min-width: 0; }
   /* --- components (blocks/gui/ui.py emits these; nothing else styles) --- */
   .oracle-workspace { display: flex; flex-direction: column; gap: var(--space-sm); }
   .oracle-card-title { font-size: 13px; font-weight: 700; color: var(--ink); }
@@ -126,7 +172,17 @@ __TOKENS_PLACEHOLDER__
   .oracle-field { min-width: 7rem; }
   .oracle-btn { border-radius: var(--radius-sm); letter-spacing: 0.04em; }
   .oracle-btn-primary { background: var(--rust) !important; color: var(--paper) !important; }
-  .oracle-btn-safe { color: var(--ink-mid) !important; }
+  /* A bordered ghost, not bare text. Flat Quasar buttons render as a label with no
+     chrome, which is how PEN UP / HOME X / Z UP ended up visually indistinguishable from
+     static text while filled buttons sat beside them running the same class of machine
+     command (audit F-006, F-007, F-023, F-024). Every clickable action gets an
+     affordance. */
+  .oracle-btn-safe {
+    color: var(--ink-mid) !important;
+    border: 1px solid var(--rule);
+    background: var(--paper) !important;
+  }
+  .oracle-btn-safe:hover { border-color: var(--rust); color: var(--rust) !important; }
   .oracle-btn-danger { background: var(--danger) !important; color: var(--paper) !important; }
   .oracle-embed { width: 100%; border: 0; background: var(--paper); border-radius: var(--radius-md); }
   .oracle-metric-line { font-size: 12px; color: var(--rust); }
@@ -196,30 +252,40 @@ def build_page() -> None:
                 label="Run profile",
                 on_change=lambda event: ctx.run_profile_changed(event.value),
             )
-            ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
-            ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
-
-        warning_banner("Plotter output starts only after system checks pass, work zero is set, and FluidNC is Idle.")
         ui.label(
             "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
         ).classes("mobile-operator-warning")
 
-        # Live status strip
-        with ui.element("div").classes("live-strip w-full"):
-            _live_metric(ctx, "fluidnc", "Now")
-            _live_metric(ctx, "zero", "Work zero")
-            _live_metric(ctx, "firebase", "Firebase")
-            _live_metric(ctx, "queue", "Queue")
-            _live_metric(ctx, "sheet", "Sheet")
-            _live_metric(ctx, "next", "Next action", important=True)
-            ctx.live_labels["blockers"] = mini_metric("Blockers", style="grid-column: 1 / -1")
+        # Status bar: what the machine is doing, and the two ways to make it stop. The
+        # static "output starts only after checks pass" banner is gone -- it said the same
+        # thing on every screen forever, while the rail's blockers line says which of those
+        # conditions is actually unmet right now.
+        with ui.row().classes("status-bar w-full items-center gap-2 flex-wrap"):
+            ctx.live_labels["fluidnc"] = ui.label("—").classes("state-chip")
+            ctx.position_label = ui.label("X — · Y —").classes("position-readout")
+            with ui.element("div").classes("live-strip"):
+                _live_metric(ctx, "zero", "Work zero")
+                _live_metric(ctx, "firebase", "Firebase")
+                _live_metric(ctx, "queue", "Queue")
+                _live_metric(ctx, "sheet", "Sheet")
+            # Pushes the stop controls to the far end, and keeps EMERGENCY STOP away from
+            # everything else: Fluidd #250 is operators repeatedly hitting E-stop while
+            # reaching for the control next to it.
+            ui.element("div").classes("status-spacer")
+            ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
+            ui.element("div").classes("estop-gap")
+            ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
 
-        # Workspace column + always-visible preview
+        # Machine rail + workspace + always-visible preview. The rail is the point: jog,
+        # homing and work zero are reachable from every tab, so bringing the machine up no
+        # longer means travelling 1 -> 1/2 -> 4 -> 3 -> 5 through the tab strip.
         # The preview track was a fixed 480px, so every pixel lost to a narrower window
         # came out of the workspace column: 656px of workspace at 1200px wide.
-        with ui.grid(columns="minmax(420px, 1fr) minmax(320px, 480px)").classes(
+        with ui.grid(columns="260px minmax(340px, 1fr) minmax(300px, 460px)").classes(
             "w-full gap-2 min-h-0 workspace-panel workspace-grid"
         ):
+            with ui.column().classes("workspace-scroll"):
+                motion.render_machine_rail(ctx)
             with ui.tab_panels(workspace_tabs, value=ctx.active_workspace["value"]).classes("w-full h-full"):
                 with ui.tab_panel(connection_tab).classes("p-0"):
                     connection.build(ctx)
