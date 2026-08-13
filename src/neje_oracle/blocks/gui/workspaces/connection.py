@@ -20,16 +20,20 @@ def build(ctx: GuiContext) -> None:
             with ui.row().classes("gap-2"):
                 primary_action_button("CONNECT", lambda: ctx.check_fluidnc(scan=False))
                 safe_action_button("SCAN LAN", ctx.scan_fluidnc)
-            with ui.grid(columns=2).classes("w-full gap-1"):
+            with ui.grid(columns=4).classes("w-full gap-1"):
                 for key, label in (
                     ("webui", "WebUI"),
                     ("telnet", "Telnet"),
-                    ("state", "State"),
-                    ("mpos", "MPos"),
                     ("pins", "Inputs"),
                     ("modal", "Modal"),
                 ):
                     ctx.fluidnc_labels[key] = mini_metric(label)
+            # The status bar owns the machine state chip and position readout; these keys
+            # survive invisibly for context.update_fluidnc_labels and the workspace test.
+            for key in ("state", "mpos"):
+                stub = ui.label("")
+                stub.set_visibility(False)
+                ctx.fluidnc_labels[key] = stub
             ctx.fluidnc_labels["message"] = ui.label("Not connected").classes("path-label text-xs font-bold")
             ctx.fluidnc_labels["target"] = ui.label("-").classes("path-label text-[10px] text-[#8f4f2b]")
 

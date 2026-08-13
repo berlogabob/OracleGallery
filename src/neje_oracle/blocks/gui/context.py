@@ -459,9 +459,9 @@ class GuiContext:
         if self.live_labels:
             self._set_state_chip(status_text)
             self.live_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
-            self.live_labels["firebase"].set_text(
-                "REQUIRED" if mode_policy(self.settings.mode).firebase_required else "TEST BYPASS"
-            )
+            # The firebase tile has one writer: refresh_component_status (called below)
+            # shows whether Firebase is UP; whether it is *required* lives in the
+            # run-profile select, not here.
             self.live_labels["queue"].set_text("ONLINE" if queue_online else "OFFLINE")
             self.live_labels["sheet"].set_text(current_sheet)
         if self.blockers_label is not None:

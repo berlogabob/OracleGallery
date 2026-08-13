@@ -41,14 +41,18 @@ def build_run(ctx: GuiContext) -> None:
 
     with ui.card().classes("oracle-card compact-card w-full"):
         ui.label("Queue").classes("text-sm font-bold")
-        with ui.grid(columns=4).classes("w-full gap-1"):
+        with ui.grid(columns=3).classes("w-full gap-1"):
             for key, label in (
-                ("state", "Queue"),
                 ("pending", "Pending"),
                 ("active", "Active"),
                 ("failed", "Fail/Skip"),
             ):
                 ctx.queue_labels[key] = mini_metric(label)
+        # Queue online/offline is the status bar's fact; the key survives invisibly for
+        # the refresh writer and the workspace test.
+        state_stub = ui.label("")
+        state_stub.set_visibility(False)
+        ctx.queue_labels["state"] = state_stub
         ctx.queue_labels["message"] = ui.label("-").classes("path-label text-[10px]")
 
 
