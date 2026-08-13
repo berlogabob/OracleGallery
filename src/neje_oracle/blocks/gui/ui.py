@@ -15,9 +15,13 @@ from __future__ import annotations
 import contextlib
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from nicegui import ui
+
+from ..imaging.modes import Polylines, polylines_to_svg, travel_length_mm, travel_preview_svg
+from .support import plot_minutes_for
 
 # --- actions --------------------------------------------------------------------
 # Three intents, three styles. The prior audit raised DS-BTN-1 (5 differently styled
@@ -190,6 +194,142 @@ def client_timer(interval: float, callback: Callable[[], Any], *, once: bool = F
         # actually cancelled. This helper had no callers until now, so nothing caught it.
         ui.context.client.on_disconnect(lambda *_: timer.cancel())
     return timer
+
+
+# --- render + print --------------------------------------------------------------
+# Three workspaces each carried their own copy of: render -> polylines_to_svg -> travel
+# preview -> travel_length_mm -> plot_minutes -> format a cost string. Same fifty lines, three
+# slightly different cost sentences, and one of them reached into a sibling workspace to
+# borrow the estimator. It lives here because ui.py is a design-system STYLE_OWNER: every
+# .classes() and ui.card() absorbed from a workspace is deleted from the ratchet counts rather
+# than moved around behind them.
+
+
+@dataclass(frozen=True)
+class Render:
+    """What a source hands the print pipeline. The only currency it accepts."""
+
+    polylines: Polylines
+    width_mm: float
+    height_mm: float
+    name: str
+
+
+class RenderCard:
+    """Handle onto a rendered card: the printable SVG, a refresh, and the print itself."""
+
+    def __init__(self) -> None:
+        self.svg = ""
+        # The preview element is exposed so a test can prove the screen-only travel overlay
+        # never leaks into `svg`. That leak would put pen-up hairlines on the paper.
+        self.preview: Any = None
+        self._refresh: Callable[[], None] = lambda: None
+        self._print: Callable[[], Any] = lambda: None
+
+    def refresh(self) -> None:
+        self._refresh()
+
+    async def print(self) -> Any:
+        return await self._print()
+
+
+def cost_line(polylines: Polylines, *, draw_mm: float, travel_mm: float, minutes: tuple[float, float]) -> str:
+    """The operator's time estimate, worded once.
+
+    The pen-lift term is only mentioned when it is big enough to matter -- on a servo pen it
+    routinely dominates, and a 488-stroke halftone that reads as "1.7 min" is how a plot gets
+    started that will still be running an hour later.
+    """
+    xy_minutes, pen_minutes = minutes
+    segments = sum(max(0, len(polyline) - 1) for polyline in polylines)
+    pen_note = f" + {pen_minutes:.0f} min pen lifts" if pen_minutes >= 0.5 else ""
+    return (
+        f"{len(polylines)} strokes, {segments} segments, "
+        f"{draw_mm / 1000:.1f} m drawn + {travel_mm / 1000:.1f} m travel, "
+        f"~{xy_minutes + pen_minutes:.0f} min at current feeds "
+        f"({xy_minutes:.0f} min moving{pen_note})"
+    )
+
+
+def render_card(
+    ctx: Any,
+    *,
+    title: str,
+    render: Callable[[], Render],
+    helper: str = "",
+    controls: Callable[[], None] | None = None,
+    button_label: str = "PRINT",
+    travel_default: bool = True,
+    cost_suffix: Callable[[Render], str] | None = None,
+) -> RenderCard:
+    """A source, its knobs, an honest preview, a time estimate, and one print button.
+
+    `render` raises ValueError to say something the operator should read -- a cap breached, no
+    image chosen -- and it lands in the cost line rather than as a traceback. Every existing
+    copy already treated a cap breach as a normal outcome; this keeps that.
+
+    With travel lines off the preview *is* the bytes that will be sent, which is the property
+    that makes it a proof rather than an illustration. travel_preview_svg draws pen-up moves
+    as real <line> elements, and svg_gcode would gladly draw every one of them.
+    """
+    handle = RenderCard()
+
+    with card(title, helper or None):
+        if controls is not None:
+            controls()
+        travel = switch("Travel lines", value=travel_default)
+        cost = metric_line()
+        preview = preview_pane()
+
+        def refresh() -> None:
+            try:
+                result = render()
+            except (ValueError, OSError) as exc:
+                handle.svg = ""
+                preview.content = ""
+                preview.update()
+                cost.set_text(str(exc))
+                return
+            handle.svg = polylines_to_svg(
+                result.polylines,
+                width_mm=result.width_mm,
+                height_mm=result.height_mm,
+                pen_width_mm=ctx.settings.pen_width_mm,
+            )
+            preview.content = (
+                travel_preview_svg(result.polylines, width_mm=result.width_mm, height_mm=result.height_mm)
+                if travel.value
+                else handle.svg
+            )
+            preview.update()
+            draw_mm, travel_mm = travel_length_mm(result.polylines)
+            minutes = plot_minutes_for(
+                ctx.settings,
+                strokes=len(result.polylines),
+                draw_mm=draw_mm,
+                travel_mm=travel_mm,
+                use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
+            )
+            text = cost_line(result.polylines, draw_mm=draw_mm, travel_mm=travel_mm, minutes=minutes)
+            cost.set_text(text + (cost_suffix(result) if cost_suffix else ""))
+
+        async def do_print() -> Any:
+            if not handle.svg:
+                refresh()
+            if not handle.svg:
+                ui.notify("Nothing to print yet.", color="warning")
+                return False
+            return await ctx.print_svg_payload(handle.svg.encode("utf-8"), f"{render().name}.svg")
+
+        travel.on_value_change(lambda _: refresh())
+        with toolbar():
+            safe_action_button("REFRESH PREVIEW", refresh)
+            primary_action_button(button_label, do_print)
+
+    handle.preview = preview
+    handle._refresh = refresh
+    handle._print = do_print
+    return handle
 
 
 def notify_if_connected(message: str, **kwargs: Any) -> None:
