@@ -546,5 +546,5 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
 
     helper_text(
         "Shipped values are starting points, not measurements. Print the pen calibration sheet "
-        "on the TESTS tab, read the best rung off each ladder, then save the result here."
+        "(Pen calibration, below), read the best rung off each ladder, then save the result here."
     )

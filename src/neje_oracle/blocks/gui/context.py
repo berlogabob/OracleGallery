@@ -92,6 +92,7 @@ class GuiContext:
         # the readiness state machine in refresh_status().
         self.next_action_key = "watch"
         self.next_action_button: Any = None
+        self.next_action_hint: Any = None
         self.blockers_label: Any = None
         self.position_label: Any = None
 
@@ -114,7 +115,6 @@ class GuiContext:
         self.system_check_label: Any = None
         self.logs_view: Any = None
         self.uploaded_svg_label: Any = None
-        self.start_print_button: Any = None
         self.workspace_tabs: Any = None
 
     # ---- settings persistence -------------------------------------------------
@@ -248,8 +248,6 @@ class GuiContext:
         if self.capacity_label is not None:
             self.capacity_label.set_text(f"{layout_capacity(self.settings)} cells")
         self.update_gcode_detail_labels()
-        if self.start_print_button is not None:
-            self.start_print_button.enable()
         self.refresh_status()
         self.refresh_component_status()
 
@@ -469,10 +467,23 @@ class GuiContext:
         if self.blockers_label is not None:
             self.blockers_label.set_text(f"blockers: {' · '.join(blockers)}" if blockers else "nothing blocking")
         if self.next_action_button is not None:
-            self.next_action_button.set_text(next_action.upper())
-            # "Watch next sheet" is not something the operator does; leaving it pressable
-            # would make the rail's one primary control a no-op most of a run.
-            self.next_action_button.set_enabled(self.next_action_key != "watch")
+            # The button renders only when starting a print, which is the one action whose
+            # home is this button. For "set work zero" the hint points at the rail's own
+            # SET WORK ZERO control instead of duplicating it -- the audit found that pair
+            # rendered two identical buttons two cards apart in the same rail.
+            if self.next_action_key == "start_print":
+                self.next_action_button.set_text(next_action.upper())
+                self.next_action_button.set_visibility(True)
+                hint = ""
+            elif self.next_action_key == "work_zero":
+                self.next_action_button.set_visibility(False)
+                hint = "Jog to the paper origin, then SET WORK ZERO below."
+            else:
+                self.next_action_button.set_visibility(False)
+                hint = "Sheet is drawing."
+            if self.next_action_hint is not None:
+                self.next_action_hint.set_text(hint)
+                self.next_action_hint.set_visibility(bool(hint))
         if self.ready_labels:
             self.ready_labels["message"].set_text(readiness.message)
         if self.preview_progress_label is not None:
@@ -699,9 +710,9 @@ class GuiContext:
         if "mpos" in labels:
             labels["mpos"].set_text(_format_gui_tuple(result.get("machine_position")))
         if self.position_label is not None:
-            # The position readout belongs in the persistent bar, not only inside the
-            # Connection tab: knowing where the head is matters most while jogging, which
-            # now happens from every screen.
+            # The position readout belongs in the persistent bar, not buried in the
+            # connection details: knowing where the head is matters most while jogging,
+            # which happens from every screen.
             position = result.get("machine_position")
             self.position_label.set_text(
                 f"X {position[0]:.1f} · Y {position[1]:.1f}"
@@ -751,7 +762,7 @@ class GuiContext:
             return
         self._fluidnc_offline_notified = True
         ui.notify(
-            "Plotter offline — check power and WiFi. Use CONNECT on the Connection tab to retry.",
+            "Plotter offline — check power and WiFi, then press CONNECT on SETUP.",
             caption=detail,
             type="negative",
             close_button="DISMISS",

@@ -28,7 +28,7 @@ def build(ctx: GuiContext) -> None:
             helper_text(
                 "One sheet, a ladder per setting: draw feed, pen-down Z and dwell each vary row by row, so "
                 "a single print tells you the right value for the pen that is fitted. Read the best rung off "
-                "each ladder, type it into CALIBRATION, then SAVE AS PROFILE."
+                "each ladder, type it into Motion speed below, then SAVE AS PROFILE."
             )
             helper_text(
                 "The Z ladder is bounded to +/-1mm around the current pen-down depth and never passes -30mm, "
@@ -71,7 +71,7 @@ def build(ctx: GuiContext) -> None:
                 ctx.uploaded_svg_label = ui.label("No SVG selected").classes("path-label text-xs")
 
         with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Test workspace notes").classes("text-sm font-bold")
+            ui.label("Test print notes").classes("text-sm font-bold")
             helper_text("Tests run real FluidNC motion after the same readiness checks.")
             helper_text("Use generated G-code first when validating layout or sampling changes.")
             helper_text("The preview remains centered so the expected sheet is visible before print.")
