@@ -27,6 +27,7 @@ from ...shared.gui_settings import (
     gui_settings_to_plotter_config as gui_settings_to_plotter_config,
 )
 from ...shared.store import OracleRuntimeStore, PlotterStore
+from ..imaging.modes import plot_minutes as modes_plot_minutes
 from ...shared.symbols import (
     default_idle_root as default_idle_root,
 )
@@ -179,6 +180,33 @@ def latest_spool_manifest(spool_root: Path) -> Path | None:
 
 def effective_randomness(settings: GuiSettings) -> float:
     return max(0.0, min(settings.randomness * 0.5 + settings.randomness_fine, 100.0))
+
+
+def plot_minutes_for(
+    settings: GuiSettings, *, strokes: int, draw_mm: float, travel_mm: float, use_z_servo: bool
+) -> tuple[float, float]:
+    """Cost a plot from GUI settings. The one place that unpacks them for the estimator.
+
+    modes.plot_minutes takes plain floats so the imaging block stays ignorant of the GUI
+    settings shape; this is the adapter, and it lives on the GUI side where that shape is
+    already known. Three call sites used to repeat the unpack, one of them by importing
+    across from a sibling workspace module.
+
+    use_z_servo stays a parameter rather than being read from PlotterSettings() here: callers
+    pass the supervisor's live value, and quietly substituting a fresh default would change
+    the estimate on any machine configured away from it.
+    """
+    return modes_plot_minutes(
+        strokes=strokes,
+        draw_mm=draw_mm,
+        travel_mm=travel_mm,
+        draw_rate=settings.draw_rate,
+        travel_rate=settings.travel_rate,
+        z_down_mm=settings.z_down_mm,
+        z_up_mm=settings.z_up_mm,
+        z_feed_mm_min=settings.z_feed_mm_min,
+        use_z_servo=use_z_servo,
+    )
 
 
 def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:

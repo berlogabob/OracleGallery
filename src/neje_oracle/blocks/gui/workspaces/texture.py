@@ -17,10 +17,7 @@ from ....blocks.imaging import texture, texture_bank
 from ....blocks.imaging.modes import MODES, polylines_to_svg, travel_length_mm, travel_preview_svg
 from .. import ui as oracle
 from ..context import GuiContext
-
-# plot_minutes lives with the image workspace for historical reasons; it is generic, so it is
-# imported rather than moved -- test_gui_workspaces imports it from there.
-from .image import plot_minutes
+from ..support import plot_minutes_for
 
 # A graph is about a kilobyte of JSON. The 2 MB cap in generative.py is for SVG payloads; a body
 # this size here is a bug or an attack, not a texture.
@@ -288,7 +285,7 @@ def build(ctx: GuiContext) -> None:
             preview.update()
 
             draw_mm, travel_mm = travel_length_mm(polylines)
-            xy_minutes, pen_minutes = plot_minutes(
+            xy_minutes, pen_minutes = plot_minutes_for(
                 ctx.settings,
                 strokes=len(polylines),
                 draw_mm=draw_mm,

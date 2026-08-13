@@ -27,9 +27,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from neje_oracle.blocks.gcode.svg_gcode import svg_to_polylines_mm  # noqa: E402
-from neje_oracle.blocks.gui.support import load_gui_settings  # noqa: E402
+from neje_oracle.blocks.gui.support import load_gui_settings, plot_minutes_for  # noqa: E402
 from neje_oracle.blocks.gui.workspaces.generative import sketch_canvas_mm  # noqa: E402
-from neje_oracle.blocks.gui.workspaces.image import plot_minutes  # noqa: E402
 from neje_oracle.blocks.imaging.modes import travel_length_mm  # noqa: E402
 from neje_oracle.blocks.patterns import bank  # noqa: E402
 from neje_oracle.shared.config import PlotterSettings  # noqa: E402
@@ -79,7 +78,7 @@ def main() -> int:
     # cost of the file as it will actually be plotted -- not of the shapes we just built.
     polylines = svg_to_polylines_mm(OUTPUT, 1.0)
     draw_mm, travel_mm = travel_length_mm(polylines)
-    xy_minutes, pen_minutes = plot_minutes(
+    xy_minutes, pen_minutes = plot_minutes_for(
         settings,
         strokes=len(polylines),
         draw_mm=draw_mm,

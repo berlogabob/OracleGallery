@@ -29,11 +29,13 @@ from nicegui import ui
 from PIL import Image, ImageDraw
 
 from neje_oracle.blocks.gui.context import GuiContext
+from neje_oracle.blocks.gui.support import plot_minutes_for
 from neje_oracle.blocks.gui.workspaces import calibration, connection, exhibition, generative, work
 from neje_oracle.blocks.gui.workspaces import image as image_workspace
 from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
 from neje_oracle.blocks.gui.workspaces import texture as texture_workspace
 from neje_oracle.blocks.imaging.modes import MODES, image_to_polylines, polylines_to_svg
+from neje_oracle.blocks.imaging.modes import plot_minutes as modes_plot_minutes
 from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.models import SystemMode
 from neje_oracle.shared.origin_markers import ALL_ORIGINS
@@ -409,13 +411,25 @@ def test_plot_estimate_counts_pen_lift_time() -> None:
     settings = GuiSettings(draw_rate=1800.0, travel_rate=5000.0, z_down_mm=-25.0, z_up_mm=0.0, z_feed_mm_min=1000.0)
     kwargs = {"strokes": 488, "draw_mm": 2000.0, "travel_mm": 2700.0}
 
-    xy, pen = image_workspace.plot_minutes(settings, use_z_servo=True, **kwargs)
+    xy, pen = plot_minutes_for(settings, use_z_servo=True, **kwargs)
     assert xy == pytest.approx(1.65, abs=0.05)
     # 488 strokes x (25 mm down at 1000 + 25 mm up at 5000). This term was missing entirely.
     assert pen == pytest.approx(14.6, abs=0.1)
 
     # A laser-style M3/M5 pen has no Z round trip, so the old number was right there.
-    assert image_workspace.plot_minutes(settings, use_z_servo=False, **kwargs) == (xy, 0.0)
+    assert plot_minutes_for(settings, use_z_servo=False, **kwargs) == (xy, 0.0)
+
+    # The estimator itself now lives beside travel_length_mm in the imaging block and takes
+    # plain floats, so it no longer drags the GUI settings shape into blocks/imaging.
+    assert modes_plot_minutes(
+        draw_rate=1800.0,
+        travel_rate=5000.0,
+        z_down_mm=-25.0,
+        z_up_mm=0.0,
+        z_feed_mm_min=1000.0,
+        use_z_servo=True,
+        **kwargs,
+    ) == (xy, pen)
 
 
 def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pytest.MonkeyPatch) -> None:

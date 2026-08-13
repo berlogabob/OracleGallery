@@ -21,9 +21,8 @@ from ....blocks.imaging.sheet import SHAPES, frame_grid_capacity, images_to_shee
 from ....blocks.patterns import bank
 from ....blocks.patterns.ingest import DEFAULT_MODE as DEFAULT_MOTIF_MODE
 from ....blocks.patterns.ingest import CropBox, image_to_motif_polylines, motif_svg
-from ....shared.gui_settings import GuiSettings
 from ..context import GuiContext
-from ..support import read_upload_event_payload
+from ..support import plot_minutes_for, read_upload_event_payload
 from ..ui import helper_text, primary_action_button, safe_action_button
 
 # ponytail: image knobs stay in-module, not in GUI_DEFAULTS/GuiSettings — they are
@@ -182,30 +181,6 @@ def quality_cell_mm(mode: str, quality: str, pen_width_mm: float = PEN_WIDTH_MM_
 
 def quality_max_segments(quality: str) -> int:
     return _MAX_SEGMENTS[quality_index(quality)]
-
-
-def plot_minutes(
-    settings: GuiSettings,
-    *,
-    strokes: int,
-    draw_mm: float,
-    travel_mm: float,
-    use_z_servo: bool,
-) -> tuple[float, float]:
-    """Split the plot into (xy_minutes, pen_minutes).
-
-    Every stroke costs a Z round trip, and at the shipped -25 mm throw / 1000 mm/min that
-    is ~1.8 s of pen for ~0.2 s of ink. Counting only XY under-reported a 488-stroke
-    halftone as 1.7 min when the machine actually spent ~18. Legs are costed the way
-    svg_gcode emits them: down is a G1 at z_feed_mm_min, up is a G0 under the file's
-    G0 F<travel_rate>.
-    """
-    xy_minutes = draw_mm / max(settings.draw_rate, 1.0) + travel_mm / max(settings.travel_rate, 1.0)
-    if not use_z_servo:
-        return xy_minutes, 0.0
-    throw_mm = abs(settings.z_down_mm - settings.z_up_mm)
-    per_cycle = throw_mm / max(settings.z_feed_mm_min, 1.0) + throw_mm / max(settings.travel_rate, 1.0)
-    return xy_minutes, strokes * per_cycle
 
 
 def preview_svg(polylines: list[list[tuple[float, float]]], *, width_mm: float, height_mm: float) -> str:
@@ -614,7 +589,7 @@ def build(ctx: GuiContext) -> None:
         )
         sheet_preview.update()
         draw_mm, travel_mm = travel_length_mm(polylines)
-        xy_minutes, pen_minutes = plot_minutes(
+        xy_minutes, pen_minutes = plot_minutes_for(
             ctx.settings,
             strokes=len(polylines),
             draw_mm=draw_mm,
@@ -687,7 +662,7 @@ def build(ctx: GuiContext) -> None:
         preview.update()
         draw_mm, travel_mm = travel_length_mm(polylines)
         segments = sum(max(0, len(p) - 1) for p in polylines)
-        xy_minutes, pen_minutes = plot_minutes(
+        xy_minutes, pen_minutes = plot_minutes_for(
             ctx.settings,
             strokes=len(polylines),
             draw_mm=draw_mm,
