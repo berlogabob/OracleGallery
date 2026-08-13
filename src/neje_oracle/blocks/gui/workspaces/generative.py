@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 
 from nicegui import app, ui
@@ -10,10 +11,11 @@ from starlette.responses import JSONResponse
 
 from ....blocks.patterns import bank
 from ....blocks.text import shx
+from ....shared.gui_settings import GUI_DEFAULTS
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import load_gui_settings
-from ..ui import helper_text, primary_action_button
+from ..ui import client_timer, helper_text, primary_action_button
 
 LATEST: dict = {"name": "", "bytes": b""}
 STREAM: dict = {"enabled": False, "busy": False}
@@ -147,26 +149,41 @@ def build(ctx: GuiContext) -> None:
                 if origin_x is not None and origin_y is not None:
                     origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on TESTS tab)")
 
-            ui.timer(1.0, update_capture_label)
+            client_timer(1.0, update_capture_label)
 
             with ui.row().classes("items-center gap-2"):
                 primary_action_button("PRINT CAPTURED SVG", lambda: ctx.print_generative_svg())
 
             def push_stream_state() -> None:
-                seconds = max(5, float(stream_interval.value or 15))
-                ui.run_javascript(
-                    f"""const frame = document.getElementById('generative-frame');
-                    frame?.contentWindow?.postMessage({{type: 'stream', enabled: {str(STREAM["enabled"]).lower()}, seconds: {seconds}}}, '*');"""
-                )
+                seconds = max(5, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"]))
+                # Telling a browser that is not attached is a no-op, not a failure: this
+                # runs from a once-timer at load and from headless tests with no client.
+                with contextlib.suppress(Exception):
+                    ui.run_javascript(
+                        f"""const frame = document.getElementById('generative-frame');
+                        frame?.contentWindow?.postMessage({{type: 'stream', enabled: {str(STREAM["enabled"]).lower()}, seconds: {seconds}}}, '*');"""
+                    )
 
             def stream_toggled(event) -> None:
                 STREAM["enabled"] = bool(event.value)
+                ctx.settings.stream_enabled = STREAM["enabled"]
+                ctx.save_settings()
                 push_stream_state()
                 if not STREAM["enabled"]:
                     ui.notify("Stream stopped", color="info")
 
+            def interval_changed(_: object) -> None:
+                ctx.settings.stream_interval_seconds = max(
+                    5.0, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"])
+                )
+                ctx.save_settings()
+                push_stream_state()
+
+            # The switch renders from the persisted setting, so it has to start there too --
+            # STREAM is a module global that outlives the page but not the process.
+            STREAM["enabled"] = bool(ctx.settings.stream_enabled)
             with ui.row().classes("items-center gap-2"):
-                ui.switch(
+                ctx.fields["stream_enabled"] = ui.switch(
                     "Stream to plotter (auto-print each captured frame)",
                     value=STREAM["enabled"],
                     on_change=stream_toggled,
@@ -174,14 +191,21 @@ def build(ctx: GuiContext) -> None:
                 stream_interval = (
                     ui.number(
                         "Interval s",
-                        value=15,
+                        value=ctx.settings.stream_interval_seconds,
                         min=5,
                         step=1,
-                        on_change=lambda _: push_stream_state(),
+                        on_change=interval_changed,
                     )
                     .props("dense outlined")
                     .classes("w-28")
                 )
+                ctx.fields["stream_interval_seconds"] = stream_interval
+
+            # Tell the freshly-built iframe what the switch already says. Without this the
+            # switch came back ON after a reload while nothing streamed: push_stream_state()
+            # only ever ran from the change handlers, so the new iframe was never told, and
+            # toggling off-then-on was the only way to start it.
+            client_timer(2.0, push_stream_state, once=True)
 
             async def _stream_tick() -> None:
                 if not should_send_frame(STREAM, LATEST):
@@ -196,7 +220,7 @@ def build(ctx: GuiContext) -> None:
 
             # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; set NEJE_FLUIDNC_STREAMING=char_count for char-counting GRBL streaming if frames lag
 
-            ui.timer(3.0, _stream_tick)
+            client_timer(3.0, _stream_tick)
 
         _build_line_text_card(ctx)
         # A texture is a generative source, so it lives in this workspace rather than a tab of its

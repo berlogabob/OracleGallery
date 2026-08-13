@@ -25,6 +25,8 @@ class GuiDefaults(TypedDict):
     randomness: float
     randomness_fine: float
     include_rings: bool
+    stream_enabled: bool
+    stream_interval_seconds: float
     include_markers: bool
     marker_diameter_mm: float
     sample_step_mm: float
@@ -74,6 +76,7 @@ type NumericGuiDefaultKey = Literal[
     "pen_down_dwell_ms",
     "direct_svg_origin_x_mm",
     "direct_svg_origin_y_mm",
+    "stream_interval_seconds",
 ]
 
 
@@ -93,6 +96,10 @@ GUI_DEFAULTS: GuiDefaults = {
     "randomness": 35.0,
     "randomness_fine": 0.0,
     "include_rings": True,
+    # Unattended streaming survives a reload now; it used to reset to off with the
+    # interval pinned at a literal 15, while the switch still rendered as ON.
+    "stream_enabled": False,
+    "stream_interval_seconds": 15.0,
     "include_markers": True,
     "marker_diameter_mm": DEFAULT_MARKER_DIAMETER_MM,
     "sample_step_mm": 1.0,
@@ -135,6 +142,8 @@ class GuiSettings:
     randomness: float = GUI_DEFAULTS["randomness"]
     randomness_fine: float = GUI_DEFAULTS["randomness_fine"]
     include_rings: bool = GUI_DEFAULTS["include_rings"]
+    stream_enabled: bool = GUI_DEFAULTS["stream_enabled"]
+    stream_interval_seconds: float = GUI_DEFAULTS["stream_interval_seconds"]
     include_markers: bool = GUI_DEFAULTS["include_markers"]
     marker_diameter_mm: float = GUI_DEFAULTS["marker_diameter_mm"]
     sample_step_mm: float = GUI_DEFAULTS["sample_step_mm"]
@@ -203,6 +212,7 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
             organic_rotation_ramp=settings.organic_rotation_ramp,
             organic_scale_ramp=settings.organic_scale_ramp,
             organic_seed=settings.organic_seed,
+            global_scale=settings.global_scale,
             run_mode=settings.run_mode,
             dry_run=settings.dry_run,
             include_rings=settings.include_rings,

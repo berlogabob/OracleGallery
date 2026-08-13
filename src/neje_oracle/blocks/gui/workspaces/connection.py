@@ -8,7 +8,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import helper_text, mini_metric, primary_action_button, safe_action_button
+from ..ui import client_timer, helper_text, mini_metric, primary_action_button, safe_action_button
 from .motion import render_motion_panel
 
 
@@ -53,4 +53,4 @@ def build(ctx: GuiContext) -> None:
             helper_text("3. Use recovery only for a known alarm or hold state.")
 
         # Defer the initial async probe until the page event loop is running.
-        ui.timer(0.1, lambda: ctx.check_fluidnc(scan=False), once=True)
+        client_timer(0.1, lambda: ctx.check_fluidnc(scan=False), once=True)

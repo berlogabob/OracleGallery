@@ -375,6 +375,11 @@ def build(ctx: GuiContext) -> None:
             helper_text(
                 "Display filters affect preview immediately. Print filters apply from the next row, never mid-row."
             )
+            # The two columns do different jobs and reading them as a pair misleads: Preview
+            # only hides cells on screen, and Print only decides which remote job origins may
+            # be claimed. Filler is the fallback that completes every sheet either way, so
+            # unchecking its Print box does not stop it reaching paper.
+            helper_text("Preview hides cells on screen only. Print selects claimable job origins; filler always fills.")
             with ui.grid(columns=3).classes("w-full gap-1"):
                 ui.label("Origin").classes("text-[10px] font-bold text-[#8f4f2b]")
                 ui.label("Preview").classes("text-[10px] font-bold text-[#8f4f2b]")
@@ -393,7 +398,11 @@ def build(ctx: GuiContext) -> None:
                     )
 
             ui.label("Symbol scale correction").classes("text-sm font-bold")
-            helper_text("These controls define how generated symbols will look before test generation and printing.")
+            helper_text("Global scale multiplies every per-symbol scale, on screen and on paper.")
+            # ponytail: Random coarse/fine are read by nothing but this card -- the jitter that
+            # reaches paper is baked in by session_generator from its own defaults. Left in
+            # place and labelled rather than deleted; wire them to the generator or drop them.
+            helper_text("Random coarse/fine do not reach the plotter yet -- they change no output.")
             calibration_slider_row(
                 "Random coarse",
                 "randomness",
@@ -450,7 +459,10 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
     """
     profiles = load_pen_profiles()
 
-    with ui.row().classes("w-full items-center gap-2 mt-2"):
+    # flex-wrap: this row needs ~796px (helper + modified label + select + name + button)
+    # in a column that is 622px at 1200px wide, and .workspace-scroll clips overflow-x
+    # with no scrollbar -- so SAVE AS PROFILE was simply invisible below ~1360px.
+    with ui.row().classes("w-full items-center gap-2 mt-2 flex-wrap"):
         helper_text("Pen profile")
         modified_label = ui.label("").classes("text-xs text-[#8f4f2b]")
 
@@ -512,6 +524,9 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
             profiles[name] = capture_pen_profile(ctx.settings)
             save_pen_profiles(profiles)
             ctx.settings.pen_profile = name
+            # The profile file was written but gui_settings.json was not, so which pen is
+            # fitted was lost on reload until some unrelated control happened to save.
+            ctx.persist_and_refresh()
             profile_select.options = sorted(profiles)
             profile_select.value = name
             profile_select.update()

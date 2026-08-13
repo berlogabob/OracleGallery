@@ -42,7 +42,7 @@ from .support import (
     save_oracle_plotter_config,
     save_symbol_scales,
 )
-from .ui import helper_text
+from .ui import helper_text, notify_if_connected
 
 VALID_WORKSPACES = {"connection", "calibration", "tests", "work", "exhibition", "generative", "image"}
 
@@ -85,6 +85,7 @@ class GuiContext:
         self.ready_labels: dict[str, Any] = {}
         self.live_labels: dict[str, Any] = {}
         self.uploaded_svg: dict[str, Any] = {"name": "", "bytes": b""}
+        self.run_profile_select: Any = None
 
         store = self.supervisor.runtime_store
         saved_workspace = str(store.load_json("gui_workspace", {"tab": "connection"}).get("tab", "connection"))
@@ -125,6 +126,12 @@ class GuiContext:
         settings.randomness_fine = _field_or_default(fields, "randomness_fine")
         settings.include_rings = bool(fields["include_rings"].value)
         settings.include_markers = bool(fields["include_markers"].value)
+        # Guarded, unlike the calibration fields above: the generative workspace is not
+        # always built (tests render subsets), so these two may legitimately be absent.
+        if (stream_switch := fields.get("stream_enabled")) is not None:
+            settings.stream_enabled = bool(stream_switch.value)
+        if (stream_interval := fields.get("stream_interval_seconds")) is not None:
+            settings.stream_interval_seconds = float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"])
         settings.marker_diameter_mm = _field_or_default(fields, "marker_diameter_mm")
         settings.sample_step_mm = _field_or_default(fields, "sample_step_mm")
         settings.sample_density_exponent = _field_or_default(fields, "sample_density_exponent")
@@ -162,6 +169,15 @@ class GuiContext:
     def _save_settings(self) -> None:
         save_gui_settings(self.settings)
         save_oracle_plotter_config(self.settings)
+
+    def save_settings(self) -> None:
+        """Persist without re-reading every widget.
+
+        pull_settings_from_fields() indexes the calibration fields directly, so it only
+        works once that workspace has been built. Controls that already hold their own
+        value save through here instead of depending on an unrelated tab existing.
+        """
+        self._save_settings()
 
     def persist_and_refresh(self) -> None:
         self.pull_settings_from_fields()
@@ -338,10 +354,18 @@ class GuiContext:
             queue = queue if queue is not None else read_queue_status(ttl_seconds=30.0)
             self.preview.content = build_realtime_preview_svg(self.settings, status, queue)
         else:
+            # Real sheets are mostly filler, and filler cells are drawn with a second ring
+            # (svg_gcode.ring_radii_mm). Asking for a sheet of nothing but user cells drew
+            # one ring per cell on screen while the pen put two on the paper, and stamped
+            # every origin dot in the user corner. Ask for the mix the daemon will claim.
+            queue = queue if queue is not None else read_queue_status(ttl_seconds=30.0)
+            capacity = layout_capacity(self.settings)
+            pending = int(queue.get("pendingUserAfterBaseline", queue.get("pendingAfterBaseline", 0)) or 0)
+            user_count = max(0, min(pending, capacity))
             self.preview.content = build_preview_svg(
                 self.settings,
-                user_count=layout_capacity(self.settings),
-                idle_count=0,
+                user_count=user_count,
+                idle_count=capacity - user_count,
                 randomize_symbols=True,
             )
         self.preview.update()
@@ -386,6 +410,10 @@ class GuiContext:
             blockers.append("FluidNC")
         if not print_enabled:
             blockers.append("print paused")
+        if self.run_profile_select is not None and self.run_profile_select.value != self.settings.system_mode:
+            # START TEST PRINT switches the profile on the operator's behalf; the selector
+            # is the only place that says so, so it has to follow.
+            self.run_profile_select.value = self.settings.system_mode
         if self.live_labels:
             self.live_labels["fluidnc"].set_text(status_text.upper())
             self.live_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
@@ -416,8 +444,15 @@ class GuiContext:
                     f"{total}/{layout_capacity(self.settings)} cells in last sheet"
                 )
             else:
+                # Say what this actually is. Geometry, ring counts and the user/filler mix
+                # are now the real ones; which symbol lands in which cell is still decided
+                # when the sheet is built, so the caption promises layout and nothing more.
+                capacity = layout_capacity(self.settings)
+                filler = max(0, capacity - min(pending_users, capacity))
                 self.preview_progress_label.set_text(
-                    f"preview tuning | random symbols | {layout_capacity(self.settings)} cells"
+                    f"layout preview | {capacity} cells | "
+                    f"{min(pending_users, capacity)} queued, {filler} filler | "
+                    "symbols picked at print time"
                 )
         self.refresh_component_status()
 
@@ -468,21 +503,25 @@ class GuiContext:
             ui.notify(f"Mode set to {mode_policy(self.settings.mode).label}.", color="warning")
         self.refresh_status()
 
+    def run_profile_changed(self, value: Any) -> None:
+        """The operator's explicit choice of run profile, replacing the tab-name coupling."""
+        mode = SystemMode(str(value))
+        if mode != self.settings.mode:
+            self.set_system_mode(mode)
+
     def workspace_changed(self, value: Any) -> None:
+        """Record which workspace is open. Navigation changes nothing else.
+
+        This used to derive the system mode from the tab name -- TEST for tests/generative/
+        image, EXHIBITION for everything else -- so merely opening a tab to look at it
+        silently rewrote Firebase and test-tool policy, and persisted that. The guard added
+        for the mid-print case only narrowed the blast radius; the coupling itself was the
+        bug. Mode is an operator decision, made in the run-profile selector in service.py.
+        """
         workspace = _workspace_name(value)
         if workspace in VALID_WORKSPACES:
             self.active_workspace["value"] = workspace
             self.supervisor.runtime_store.save_json("gui_workspace", {"tab": workspace})
-        # Navigation must never change machine state. Switching tabs used to flip the
-        # system mode, which sets print_enabled=False and silently aborted the sheet.
-        if self.supervisor.is_printing():
-            return
-        if workspace in ("tests", "generative", "image"):
-            if self.settings.mode != SystemMode.TEST:
-                self.set_system_mode(SystemMode.TEST, notify=False)
-            return
-        if self.settings.mode == SystemMode.TEST:
-            self.set_system_mode(SystemMode.EXHIBITION, notify=False)
 
     def preview_mode_changed(self, value: Any) -> None:
         mode = str(value or "preview")
@@ -665,11 +704,11 @@ class GuiContext:
         self.restore_workspace()
 
     async def check_fluidnc(self, *, scan: bool = False) -> None:
-        ui.notify("Checking FluidNC...", color="info")
+        notify_if_connected("Checking FluidNC...", color="info")
         try:
             probe = await self._blocking(self.supervisor.probe_fluidnc, scan=scan)
         except Exception as exc:  # noqa: BLE001
-            ui.notify(f"FluidNC check failed: {exc}", color="negative")
+            notify_if_connected(f"FluidNC check failed: {exc}", color="negative")
             self.refresh_logs()
             self.restore_workspace()
             return
@@ -684,7 +723,7 @@ class GuiContext:
         self.update_fluidnc_labels(result)
         if probe.online:
             self._fluidnc_offline_notified = False
-            ui.notify(probe.message, color="positive")
+            notify_if_connected(probe.message, color="positive")
         else:
             self._notify_fluidnc_offline(probe.message)
         self.refresh_logs()

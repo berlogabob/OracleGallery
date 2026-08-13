@@ -97,7 +97,10 @@ def embedded_page(src: str, *, height_px: int, element_id: str = "") -> Any:
     only the height ever differed, so that is the only thing left as an argument.
     """
     props = f'src="{src}"' + (f' id="{element_id}"' if element_id else "")
-    return ui.element("iframe").props(props).classes("oracle-embed").style(f"height:{height_px}px;")
+    # Capped against the viewport: a flat 900px sketch iframe filled a 587px-tall scroll
+    # box on its own, pushing every control under it -- Regenerate, Send to plotter, the
+    # stream switch, and the whole texture workspace below -- off the bottom of the page.
+    return ui.element("iframe").props(props).classes("oracle-embed").style(f"height:min({height_px}px, 62vh);")
 
 
 def metric_line(text: str = "-") -> Any:
@@ -182,8 +185,23 @@ def client_timer(interval: float, callback: Callable[[], Any], *, once: bool = F
     # No client context (headless tests, auto-index page) means the timer is bound to the
     # app rather than a client, so there is no slot for it to outlive.
     with contextlib.suppress(Exception):
-        ui.context.client.on_disconnect(timer.cancel)
+        # Swallow the argument nicegui hands disconnect handlers: Timer.cancel() takes
+        # none, so passing it directly raised on every disconnect and the timer was never
+        # actually cancelled. This helper had no callers until now, so nothing caught it.
+        ui.context.client.on_disconnect(lambda *_: timer.cancel())
     return timer
+
+
+def notify_if_connected(message: str, **kwargs: Any) -> None:
+    """ui.notify that gives up quietly once its client has gone.
+
+    An async handler started from a page-load timer routinely outlives the browser tab --
+    a probe that takes seconds, a tab closed mid-check. Notifying a torn-down slot raises,
+    and the traceback reads exactly like a real fault in the log an unattended run is
+    judged by. The message has nobody to reach at that point; the log entry is pure noise.
+    """
+    with contextlib.suppress(Exception):
+        ui.notify(message, **kwargs)
 
 
 def _reset_control(control: Any, default: float, on_change: Callable[[], Any]) -> None:

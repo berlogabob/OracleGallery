@@ -35,6 +35,7 @@ from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
 from neje_oracle.blocks.gui.workspaces import texture as texture_workspace
 from neje_oracle.blocks.imaging.modes import MODES, image_to_polylines, polylines_to_svg
 from neje_oracle.shared.gui_settings import GuiSettings
+from neje_oracle.shared.models import SystemMode
 from neje_oracle.shared.origin_markers import ALL_ORIGINS
 from neje_oracle.shared.pen_profiles import PEN_PROFILE_FIELDS, apply_pen_profile
 
@@ -150,10 +151,23 @@ def test_generative_workspace_builds_sketch_and_line_text_cards_without_raising(
     with ui.column():
         generative.build(ctx)
 
-    # Generative doesn't register anything on ctx.fields/labels -- reaching this
-    # point without raising is the regression signal (catches a renamed ctx
-    # attribute, e.g. print_generative_svg or a shx.list_fonts() break).
-    assert ctx.fields == {}
+    # Building without raising is the regression signal (catches a renamed ctx attribute,
+    # e.g. print_generative_svg, or a shx.list_fonts() break).
+    #
+    # This used to assert ctx.fields == {}, pinning the defect it was meant to guard: the
+    # stream controls reached no persistence layer at all, so after a reload the switch
+    # rendered ON from a module global while the fresh iframe had never been told to
+    # stream. They register now, and pull_settings_from_fields persists them.
+    assert {"stream_enabled", "stream_interval_seconds"} <= ctx.fields.keys()
+
+    # Driven through the widgets' own handlers, which is the path a reload has to survive.
+    # These controls save via ctx.save_settings() rather than pull_settings_from_fields(),
+    # because that indexes the calibration fields and this tab can be built on its own.
+    ctx.fields["stream_enabled"].value = True
+    ctx.fields["stream_interval_seconds"].value = 42
+
+    assert ctx.settings.stream_enabled is True
+    assert ctx.settings.stream_interval_seconds == 42
 
 
 def test_texture_workspace_builds_and_renders_a_shipped_preset(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -423,15 +437,69 @@ def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pyte
     assert ctx.active_workspace["value"] == "tests"
 
 
-def test_tab_switch_still_sets_system_mode_when_not_printing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tab_switch_never_sets_system_mode_even_when_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The idle case was the other half of the same bug.
+
+    Guarding only the mid-print case left navigation still rewriting Firebase and
+    test-tool policy whenever the operator opened a tab to look at it -- persisted, and
+    with notify=False, so nothing said so. The run profile is chosen explicitly now.
+    """
     ctx = _new_ctx(monkeypatch)
     changed: list[object] = []
     monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
     monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: False)
 
-    ctx.workspace_changed("tests")
+    for workspace in ("tests", "generative", "image", "work", "exhibition"):
+        ctx.workspace_changed(workspace)
 
-    assert changed, "tab-linked mode default should still apply when idle"
+    assert changed == [], "navigation must not touch the run profile"
+    assert ctx.active_workspace["value"] == "exhibition"
+
+
+def test_tuning_preview_draws_filler_cells_not_a_sheet_of_user_cells(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty queue means the next sheet is all filler, and filler gets a second ring.
+
+    The tuning preview asked for user_count=capacity, idle_count=0, so it drew one ring per
+    cell and a user-corner origin dot on every one, while the pen put two rings on the
+    paper. Nothing on screen said the content was notional.
+    """
+    ctx = _new_ctx(monkeypatch)
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.read_queue_status", lambda **k: {"pendingUserAfterBaseline": 0})
+    with ui.column():
+        ctx.preview = ui.html()
+
+    ctx.update_preview()
+
+    assert 'data-ring="inner"' in ctx.preview.content, "an empty queue should preview as filler cells"
+
+
+def test_tuning_preview_shows_queued_user_cells_when_the_queue_has_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx = _new_ctx(monkeypatch)
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.read_queue_status", lambda **k: {"pendingUserAfterBaseline": 2})
+    with ui.column():
+        ctx.preview = ui.html()
+
+    ctx.update_preview()
+
+    outer = ctx.preview.content.count('data-ring="outer"')
+    inner = ctx.preview.content.count('data-ring="inner"')
+    # Two claimed user cells carry a single ring each; every remaining cell is filler.
+    assert outer - inner == 2, f"expected 2 single-ring user cells, got outer={outer} inner={inner}"
+
+
+def test_run_profile_selector_sets_the_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The explicit control that replaces the tab coupling."""
+    ctx = _new_ctx(monkeypatch)
+    changed: list[object] = []
+    monkeypatch.setattr(ctx, "set_system_mode", lambda mode, **k: changed.append(mode))
+
+    ctx.run_profile_changed(SystemMode.TEST.value)
+    assert changed == [SystemMode.TEST]
+
+    # Selecting the mode already in force is not a state change.
+    ctx.settings.system_mode = SystemMode.TEST.value
+    ctx.run_profile_changed(SystemMode.TEST.value)
+    assert changed == [SystemMode.TEST]
 
 
 def _line_art_png(size: int = 600) -> bytes:

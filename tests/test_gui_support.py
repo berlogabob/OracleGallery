@@ -449,28 +449,26 @@ def test_realtime_preview_uses_queue_before_filler_for_unmaterialized_next(tmp_p
     assert 'data-origin-marker="filler_macbook"' in filler_preview
 
 
-def test_symbol_preview_randomness_visibly_changes_svg(tmp_path: Path) -> None:
+def test_symbol_preview_draws_the_stored_geometry_untouched(tmp_path: Path) -> None:
+    """The preview must not invent strokes the pen will not make.
+
+    This used to assert the opposite -- that the Randomness slider visibly roughed up the
+    preview. It did, by 80x-amplified jitter that nothing downstream reproduced: the
+    plotter draws the stored SVG, and whatever jitter reaches paper is baked in earlier by
+    session_generator from its own defaults. So the slider only ever changed the picture on
+    screen. The preview now renders the symbol exactly as stored, which is what prints.
+    """
     from neje_oracle.blocks.gui.support import build_symbol_preview_svg
 
     root = _symbol_root(tmp_path)
-    stable = build_symbol_preview_svg(
+    preview = build_symbol_preview_svg(
         root / "symbol_0.svg",
         marker_kind="user",
         scale=1.0,
         include_rings=False,
-        randomness=0,
-    )
-    rough = build_symbol_preview_svg(
-        root / "symbol_0.svg",
-        marker_kind="user",
-        scale=1.0,
-        include_rings=False,
-        randomness=100,
     )
 
-    assert stable != rough
-    assert "100,100 700,100 700,700 100,700" in stable
-    assert "100,100 700,100 700,700 100,700" not in rough
+    assert "100,100 700,100 700,700 100,700" in preview, "stored geometry must survive to the preview"
 
 
 def test_effective_randomness_combines_coarse_and_fine() -> None:
