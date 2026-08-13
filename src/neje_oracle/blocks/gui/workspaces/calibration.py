@@ -26,7 +26,14 @@ from ..support import GUI_DEFAULTS
 from ..ui import helper_text, mini_metric, number_control, primary_action_button
 
 
-def build(ctx: GuiContext) -> None:
+def build_sections(ctx: GuiContext) -> dict[str, Any]:
+    """Build the calibration content as three sections and hand back their containers.
+
+    The SETUP screen shows one section at a time behind a segmented switch, which is how
+    2000px of stacked calibration fits a 760px viewport with zero page scroll. Everything
+    is still *built* -- every field registers, persistence and the workspace tests see the
+    identical control set -- only visibility is segmented.
+    """
     settings = ctx.settings
     fields = ctx.fields
     scales = ctx.scales
@@ -114,11 +121,11 @@ def build(ctx: GuiContext) -> None:
             on_change=persist_and_refresh,
         )
 
+    sections: dict[str, Any] = {}
     with ui.column().classes("w-full gap-2"):
-        # Manual motion (shared card)
-
-        # Motion speed
-        with ui.card().classes("oracle-card compact-card w-full"):
+        # -- PEN: feeds, Z, pen geometry, profiles -----------------------------------
+        sections["pen"] = ui.column().classes("w-full gap-2")
+        with sections["pen"], ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Motion speed").classes("text-sm font-bold")
             helper_text(
                 "XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings."
@@ -217,8 +224,9 @@ def build(ctx: GuiContext) -> None:
 
             _build_pen_profile_row(ctx)
 
-        # Layout
-        with ui.card().classes("oracle-card compact-card w-full"):
+        # -- SHEET: layout geometry + organic ----------------------------------------
+        sections["sheet"] = ui.column().classes("w-full gap-2")
+        with sections["sheet"], ui.card().classes("oracle-card compact-card w-full"):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("Layout").classes("text-sm font-bold")
                 ctx.capacity_label = ui.label("-").classes("status-pill text-xs font-bold")
@@ -259,8 +267,7 @@ def build(ctx: GuiContext) -> None:
                 num("sheet_margin_mm", "Margin", settings.sheet_margin_mm, 0, "Safe border inside printable field.")
                 num("marker_diameter_mm", "Dot mm", settings.marker_diameter_mm, 0.5, "Printed origin-dot diameter.")
 
-        # Organic / Voronoi
-        with ui.card().classes("oracle-card compact-card w-full"):
+        with sections["sheet"], ui.card().classes("oracle-card compact-card w-full"):
             with ui.row().classes("items-center gap-2"):
                 fields["organic_enabled"] = ui.switch(
                     "Organic / Voronoi", value=settings.organic_enabled
@@ -303,8 +310,11 @@ def build(ctx: GuiContext) -> None:
                 on_change=persist_and_refresh,
             )
 
-        # Advanced
-        with ui.expansion("Advanced calibration", icon="tune").classes("oracle-card compact-card w-full"):
+        # -- ADVANCED: sampling, filters, symbol correction --------------------------
+        # A plain section now; it used to be an expansion, but inside a segmented switch a
+        # second layer of fold-away is exactly the accordion-inside-tabs anti-pattern.
+        sections["advanced"] = ui.column().classes("w-full gap-2")
+        with sections["advanced"], ui.card().classes("oracle-card compact-card w-full"):
             helper_text(
                 "Use these controls for curve sampling, origin filters, and symbol correction after the physical layout is stable."
             )
@@ -434,18 +444,40 @@ def build(ctx: GuiContext) -> None:
             helper_text(
                 "Double-click any scale slider to reset it to 1.0. Scale changes are applied and saved immediately."
             )
+            # One slider per symbol used to render as a wall -- unbounded rows, most of the
+            # Advanced section's height. Every row is still built (the scale: fields are the
+            # persistence contract), but only the selected symbol's row is visible.
+            symbol_rows: dict[str, Any] = {}
             with ui.column().classes("w-full gap-0"):
+                picker = ui.select(
+                    {symbol.name: symbol.stem[:30] for symbol in ctx.symbols},
+                    value=ctx.symbols[0].name if ctx.symbols else None,
+                    label="Symbol",
+                    with_input=True,
+                ).props("dense outlined")
                 for symbol in ctx.symbols:
-                    calibration_slider_row(
-                        symbol.stem[:20],
-                        f"scale:{symbol.name}",
-                        value=scales.get(symbol.name, 1.0),
-                        default=1.0,
-                        min_value=0.3,
-                        max_value=5.0,
-                        step=0.01,
-                        on_change=ctx.update_scales_from_fields,
-                    )
+                    row = ui.column().classes("w-full")
+                    with row:
+                        calibration_slider_row(
+                            symbol.stem[:20],
+                            f"scale:{symbol.name}",
+                            value=scales.get(symbol.name, 1.0),
+                            default=1.0,
+                            min_value=0.3,
+                            max_value=5.0,
+                            step=0.01,
+                            on_change=ctx.update_scales_from_fields,
+                        )
+                    symbol_rows[symbol.name] = row
+
+                def show_symbol(name: object) -> None:
+                    for key, box in symbol_rows.items():
+                        box.set_visibility(key == name)
+
+                picker.on_value_change(lambda e: show_symbol(e.value))
+                show_symbol(picker.value)
+
+    return sections
 
 
 def _build_pen_profile_row(ctx: GuiContext) -> None:
@@ -548,3 +580,8 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
         "Shipped values are starting points, not measurements. Print the pen calibration sheet "
         "(Pen calibration, below), read the best rung off each ladder, then save the result here."
     )
+
+
+def build(ctx: GuiContext) -> None:
+    """All sections, stacked and visible -- the pre-segmentation whole, kept for tests."""
+    build_sections(ctx)

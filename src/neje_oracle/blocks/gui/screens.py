@@ -119,14 +119,43 @@ def build_create(ctx: GuiContext) -> None:
 
 
 def build_setup(ctx: GuiContext) -> None:
-    """Getting the machine right, with the rarely-touched parts folded away.
+    """Getting the machine right, one section at a time.
 
-    Diagnostics and commissioning are collapsed rather than deleted: they are needed on site
-    and occasionally urgent, but they are not what an operator opens this screen for.
+    SETUP stacked ~2400px of connection, calibration and test-print content into a 760px
+    viewport. A segmented switch shows one section, sized to fit, and everything is still
+    built underneath -- fields register, persistence sees the full control set -- so the
+    segmentation is visibility, not amputation. NN/g's finding drove the pattern choice:
+    tabs hold a region's height constant, accordions hide state and reopen at a cost, and
+    on an operator screen hidden state is a safety property.
     """
     with ui.column().classes("workspace-scroll gap-2"):
-        connection.build(ctx)
-        calibration.build(ctx)
-        tests.build(ctx)
-        with ui.expansion("Diagnostics", icon="build").classes("w-full oracle-card compact-card"):
-            work.build_diagnostics(ctx)
+        switch = ui.toggle(
+            {"machine": "MACHINE", "pen": "PEN", "sheet": "SHEET", "verify": "VERIFY", "advanced": "ADVANCED"},
+            value="machine",
+        ).props("dense no-caps unelevated toggle-color=primary")
+
+        boxes: dict[str, ui.column] = {}
+        boxes["machine"] = ui.column().classes("w-full gap-2")
+        with boxes["machine"]:
+            connection.build(ctx)
+
+        calibration_sections = calibration.build_sections(ctx)
+        boxes["pen"] = calibration_sections["pen"]
+        boxes["sheet"] = calibration_sections["sheet"]
+
+        boxes["verify"] = ui.column().classes("w-full gap-2")
+        with boxes["verify"]:
+            tests.build(ctx)
+
+        boxes["advanced"] = ui.column().classes("w-full gap-2")
+        with boxes["advanced"]:
+            calibration_sections["advanced"].move(boxes["advanced"])
+            with ui.expansion("Diagnostics", icon="build").classes("w-full oracle-card compact-card"):
+                work.build_diagnostics(ctx)
+
+        def show(section: object) -> None:
+            for name, box in boxes.items():
+                box.set_visibility(name == section)
+
+        switch.on_value_change(lambda event: show(event.value))
+        show(switch.value)
