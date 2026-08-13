@@ -30,7 +30,7 @@ from ...shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS, ORIGIN_MARKER_P
 from . import tokens
 from .context import GuiContext
 from .ui import danger_action_button, helper_text, mini_metric, primary_action_button, safe_action_button, section_title
-from .workspaces import calibration, connection, generative, image, tests, work
+from .workspaces import calibration, connection, generative, image, tests, texture, work
 
 
 def _legend_dialog() -> ui.dialog:
@@ -112,10 +112,71 @@ def build_print(ctx: GuiContext) -> None:
 
 
 def build_create(ctx: GuiContext) -> None:
-    """Authoring a source. Every one of these ends at the same print pipeline."""
+    """One generative system: six sources, one canvas, one visible at a time.
+
+    Six cards used to stack 3300px into a 760px viewport, each with its own preview, its
+    own REFRESH, two editors capped at 62vh scrolling inside the page scroll. Now a
+    segmented switch picks the source; its pane is canvas (the editor or the render
+    preview, full height) plus a narrow knobs panel. Everything is still *built* --
+    fields register, iframes stay mounted so the editors keep their state (an iframe
+    removed from the DOM reloads cold; set_visibility only toggles CSS).
+    """
     with ui.column().classes("workspace-scroll gap-2"):
-        generative.build(ctx)
-        image.build(ctx)
+        switch = ui.toggle(
+            {
+                "sketch": "SKETCH",
+                "texture": "TEXTURE",
+                "image": "IMAGE",
+                "text": "TEXT",
+                "sheet": "SHEET",
+                "motif": "MOTIF",
+            },
+            value="sketch",
+        ).props("dense no-caps unelevated toggle-color=primary")
+
+        panes: dict[str, ui.element] = {}
+
+        def pane(name: str) -> tuple[ui.column, ui.column]:
+            grid = ui.grid(columns="minmax(0, 1fr) 340px").classes("create-pane w-full gap-2")
+            panes[name] = grid
+            with grid:
+                canvas = ui.column().classes("create-canvas min-h-0 h-full gap-1")
+                panel = ui.column().classes("create-panel min-h-0 h-full gap-2")
+            return canvas, panel
+
+        canvas, panel = pane("sketch")
+        with canvas:
+            generative.build_sketch_canvas()
+        with panel:
+            generative.build_sketch_controls(ctx)
+
+        canvas, panel = pane("texture")
+        with canvas:
+            texture.build_canvas()
+        with panel:
+            texture.build_controls(ctx)
+
+        image_canvas, image_panel = pane("image")
+        sheet_canvas, sheet_panel = pane("sheet")
+        sections = image.build_sections(ctx, preview_slots={"image": image_canvas, "sheet": sheet_canvas})
+        sections["image"].move(image_panel)
+        sections["sheet"].move(sheet_panel)
+
+        canvas, panel = pane("text")
+        with panel:
+            generative.build_text(ctx, preview_slot=canvas)
+
+        # ponytail: motif keeps its stacked card in a scrolling pane; D4 splits it into
+        # picture-as-canvas + knobs like the others.
+        panes["motif"] = ui.column().classes("create-pane create-pane-scroll w-full gap-2")
+        sections["motif"].move(panes["motif"])
+
+        def show(mode: object) -> None:
+            for name, box in panes.items():
+                box.set_visibility(name == mode)
+
+        switch.on_value_change(lambda event: show(event.value))
+        show(switch.value)
 
 
 def build_setup(ctx: GuiContext) -> None:

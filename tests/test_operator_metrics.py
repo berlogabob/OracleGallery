@@ -50,7 +50,7 @@ COST_BLOCKS = 0  # target passed: every estimator lives inside ui.render_card, z
 ESTIMATOR_IN_VIEW = 0
 MODULE_STATE_DICTS = 5  # -1: LATEST deleted; the browser no longer pushes SVG at us
 DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 8, "setup": 2}
-FIXED_HEIGHT_IFRAMES = 2  # generative sketch + texture nodes, each an embedded_page(height_px=...)
+FIXED_HEIGHT_IFRAMES = 0  # reached target: embedded_page no longer takes a height; both editors fill their pane
 DEAD_TAB_STRINGS = 0  # reached target: no operator-facing text names a deleted tab  # "Connection tab" in context.py; the other five markers are already gone
 
 _TAB = re.compile(r"ui\.tab\(")
@@ -59,7 +59,7 @@ _SEND_BUTTON = re.compile(r'id="send-btn"')
 _COST_CALL = re.compile(r"plot_minutes_for\(|plot_minutes\(")
 _ESTIMATOR_DEF = re.compile(r"def plot_minutes")
 _STATE_DICT = re.compile(r"(?m)^(STATE|SHEET_STATE|MOTIF_STATE|LATEST|STREAM)\b")
-_EMBEDDED_PAGE = re.compile(r"embedded_page\(")
+_EMBEDDED_PAGE = re.compile(r"embedded_page\(.*height_px|height_px=")
 
 # Operator-facing sentences that name tabs deleted in M1. Exact markers rather than a regex
 # over string literals, because "exclude comments and docstrings" is not a regex-shaped job.
@@ -186,12 +186,12 @@ def test_duplicate_action_labels_per_screen(monkeypatch: pytest.MonkeyPatch) -> 
 def test_fixed_height_iframes() -> None:
     """A fixed-height iframe scrolls inside the page's scroll, and clips at the wrong size.
 
-    Each embedded_page() call site pins a height in pixels (min-capped at 62vh), so the sketch
-    and the node editor get a letterboxed window instead of the room the screen actually has.
-    Target is 0 -- the embedded pages become canvas-hosted flex children.
+    An embedded_page() call site that pins a height in pixels gives the editor a letterboxed
+    window instead of the room the screen actually has. The height_px form is gone from the
+    API; this holds the door shut against it coming back.
     """
     assert _count(_EMBEDDED_PAGE, _workspace_files()) == FIXED_HEIGHT_IFRAMES, (
-        "embedded_page call sites changed; set FIXED_HEIGHT_IFRAMES to the measured value. Target is 0."
+        "a fixed-height embedded_page came back; the editors must fill their pane instead."
     )
 
 

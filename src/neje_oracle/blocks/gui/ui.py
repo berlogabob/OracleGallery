@@ -94,19 +94,15 @@ def mini_metric(label: str, *, extra_classes: str = "", style: str = "") -> Any:
         return ui.label("-").classes("value")
 
 
-def embedded_page(src: str, *, height_px: int = 0, element_id: str = "", fill: bool = False) -> Any:
+def embedded_page(src: str, *, element_id: str = "") -> Any:
     """An iframe onto one of the pages under the /generative static mount.
 
-    fill=True is the canvas mode: the iframe takes its pane's full height, which is how the
-    editors stop being 62vh boxes with their own scrollbars inside a scrolling page --
-    scrollbars inside scroll was the measured shape of the old CREATE screen. The capped
-    height_px form remains for any embed that genuinely lives inside flowing content.
+    Always fills its pane: the fixed-height form (900px, then min(px, 62vh)) put an editor
+    with its own scrollbar inside a scrolling page -- the measured shape of the old CREATE
+    screen. An editor is a canvas; the pane it sits in decides its size.
     """
     props = f'src="{src}"' + (f' id="{element_id}"' if element_id else "")
-    element = ui.element("iframe").props(props).classes("oracle-embed")
-    if fill:
-        return element.classes("oracle-embed-fill")
-    return element.style(f"height:min({height_px}px, 62vh);")
+    return ui.element("iframe").props(props).classes("oracle-embed oracle-embed-fill")
 
 
 def metric_line(text: str = "-") -> Any:
@@ -267,6 +263,7 @@ def render_card(
     travel_default: bool = True,
     cost_suffix: Callable[[Render], str] | None = None,
     on_render: Callable[[str], None] | None = None,
+    preview_slot: Any = None,
 ) -> RenderCard:
     """A source, its knobs, an honest preview, a time estimate, and one print button.
 
@@ -280,15 +277,24 @@ def render_card(
     With travel lines off the preview *is* the bytes that will be sent, which is the property
     that makes it a proof rather than an illustration. travel_preview_svg draws pen-up moves
     as real <line> elements, and svg_gcode would gladly draw every one of them.
+
+    `preview_slot` moves the preview out of the card and into that container -- the CREATE
+    screen's canvas column -- so a source's knobs and its picture can live in different grid
+    tracks while staying one refresh.
     """
     handle = RenderCard()
+
+    if preview_slot is not None:
+        with preview_slot:
+            preview = preview_pane().classes("preview-fill")
 
     with card(title, helper or None):
         if controls is not None:
             controls()
         travel = switch("Travel lines", value=travel_default)
         cost = metric_line()
-        preview = preview_pane()
+        if preview_slot is None:
+            preview = preview_pane()
 
         def refresh() -> None:
             try:

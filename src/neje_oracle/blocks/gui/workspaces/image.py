@@ -327,6 +327,19 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced", source: st
 
 
 def build(ctx: GuiContext) -> None:
+    """Legacy stacked form, kept for tests that build this workspace alone."""
+    with ui.column().classes("w-full gap-2"):
+        build_sections(ctx)
+
+
+def build_sections(ctx: GuiContext, preview_slots: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The three image sources as separate columns the CREATE screen can place as panes.
+
+    `preview_slots` maps a section name to a container its render preview should land in --
+    the canvas column of that mode -- so knobs and picture live in different grid tracks.
+    """
+    slots = preview_slots or {}
+    sections: dict[str, Any] = {}
     # Before a single widget is created: every control below reads its initial value from
     # these dicts, so the restore has to land first or the page renders last session's
     # defaults and then writes them back.
@@ -349,7 +362,8 @@ def build(ctx: GuiContext) -> None:
     sheet_info: Any = None
     sheet_card_handle: dict[str, Any] = {}
 
-    with ui.column().classes("w-full gap-2"):
+    sections["image"] = ui.column().classes("w-full gap-2")
+    with sections["image"]:
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Image to line art").classes("text-sm font-bold")
             helper_text(
@@ -561,12 +575,16 @@ def build(ctx: GuiContext) -> None:
             # tests/test_gui_workspaces.py reads the printable bytes back off STATE, and so does
             # anything else that already knows this module by its state dict.
             on_render=lambda svg: STATE.__setitem__("svg", svg),
+            preview_slot=slots.get("image"),
         )
         card_handle["handle"] = conversion
         # render_card owns the "Travel lines" switch, so register the one it built rather than
         # a second switch of our own. Without this the setting could be restored on load but
         # never recorded when the operator changed it.
         ctx.fields["image_show_travel"] = conversion.travel
+
+    sections["sheet"] = ui.column().classes("w-full gap-2")
+    with sections["sheet"]:
 
         def set_sheet(key: str, value: Any) -> None:
             SHEET_STATE[key] = value
@@ -700,8 +718,11 @@ def build(ctx: GuiContext) -> None:
             # tests/test_gui_workspaces.py and anything else that knows this module by its
             # state dicts read the printable sheet back off SHEET_STATE.
             on_render=lambda svg: SHEET_STATE.__setitem__("svg", svg),
+            preview_slot=slots.get("sheet"),
         )
 
+    sections["motif"] = ui.column().classes("w-full gap-2")
+    with sections["motif"]:
         _build_motif_import_card(ctx)
 
     def _sheet_files() -> list[Path]:
@@ -753,6 +774,7 @@ def build(ctx: GuiContext) -> None:
 
     refresh_preview()
     refresh_sheet_capacity()
+    return sections
 
 
 def motif_crop() -> CropBox:
