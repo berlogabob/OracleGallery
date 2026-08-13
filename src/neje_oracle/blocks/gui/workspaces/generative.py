@@ -241,56 +241,49 @@ def build(ctx: GuiContext) -> None:
 def _build_line_text_card(ctx: GuiContext) -> None:
     """Single-stroke SHX text: preview, then print through the direct-SVG path."""
     fonts = shx.list_fonts()
-
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Line text").classes("text-sm font-bold")
-        if not fonts:
+    if not fonts:
+        with oracle.card("Line text"):
             helper_text("No usable SHX fonts found in assets/fonts/shx.")
-            return
-        helper_text("Single-stroke engraving fonts. One pen pass per letter, no outlines to fill.")
+        return
 
+    # render_card builds the knobs itself, but every knob's handler already calls refresh().
+    # Handing the name a handle once the card exists keeps those call sites unaware of it.
+    card_handle: dict[str, oracle.RenderCard] = {}
+
+    def refresh() -> None:
+        handle = card_handle.get("handle")
+        if handle is not None:
+            handle.refresh()
+
+    font_select: ui.select
+    cap_height: ui.number
+    text_input: ui.textarea
+
+    def text_controls() -> None:
+        nonlocal font_select, cap_height, text_input
         with ui.row().classes("gap-2 w-full items-center"):
             font_select = ui.select(fonts, value=fonts[0], label="Font").props("dense outlined").classes("w-48")
             cap_height = ui.number("Cap height mm", value=10.0, min=1, step=1).props("dense outlined").classes("w-32")
         text_input = ui.textarea("Text", value="NEJE\nORACLE").props("dense outlined autogrow").classes("w-full")
-
-        extent_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
-        preview = ui.html().classes("preview-frame w-full")
-
-        def build_svg() -> str:
-            return shx.text_svg(
-                str(text_input.value or ""),
-                font=str(font_select.value),
-                cap_height_mm=float(cap_height.value or 10.0),
-            )
-
-        def refresh() -> None:
-            try:
-                svg = build_svg()
-                width_mm, height_mm = shx.text_extents(
-                    str(text_input.value or ""),
-                    font=str(font_select.value),
-                    cap_height_mm=float(cap_height.value or 10.0),
-                )
-            except ValueError as exc:
-                preview.content = ""
-                extent_label.set_text(str(exc))
-                return
-            preview.content = svg
-            preview.update()
-            extent_label.set_text(f"{width_mm:.1f} x {height_mm:.1f} mm")
-
         for control in (font_select, cap_height, text_input):
             control.on_value_change(lambda _: refresh())
 
-        async def print_text() -> None:
-            text = str(text_input.value or "").strip()
-            if not text:
-                ui.notify("Type something to print", color="warning")
-                return
-            await ctx.print_svg_payload(build_svg().encode("utf-8"), f"text_{font_select.value}.svg")
+    def render_text() -> oracle.Render:
+        text = str(text_input.value or "")
+        if not text.strip():
+            raise ValueError("Type some text first.")
+        font = str(font_select.value)
+        cap_height_mm = float(cap_height.value or 10.0)
+        polylines = shx.text_polylines(text, font=font, cap_height_mm=cap_height_mm)
+        width_mm, height_mm = shx.text_extents(text, font=font, cap_height_mm=cap_height_mm)
+        return oracle.Render(polylines=polylines, width_mm=width_mm, height_mm=height_mm, name=f"text_{font}")
 
-        with ui.row().classes("items-center gap-2"):
-            primary_action_button("PRINT TEXT", lambda: print_text())
-
-        refresh()
+    card_handle["handle"] = oracle.render_card(
+        ctx,
+        title="Line text",
+        helper="Single-stroke engraving fonts. One pen pass per letter, no outlines to fill.",
+        controls=text_controls,
+        render=render_text,
+        button_label="PRINT TEXT",
+    )
+    refresh()
