@@ -14,10 +14,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from ....blocks.imaging import texture, texture_bank
-from ....blocks.imaging.modes import MODES, polylines_to_svg, travel_length_mm, travel_preview_svg
+from ....blocks.imaging.modes import MODES, polylines_to_svg, travel_length_mm
 from .. import ui as oracle
 from ..context import GuiContext
-from ..support import plot_minutes_for
 
 # A graph is about a kilobyte of JSON. The 2 MB cap in generative.py is for SVG payloads; a body
 # this size here is a bug or an attack, not a texture.
@@ -247,61 +246,20 @@ def build(ctx: GuiContext) -> None:
     ):
         oracle.embedded_page("/generative/nodes.html", height_px=760, element_id="texture-frame")
 
-    with oracle.card("Print texture"):
-        cost_label = oracle.metric_line()
-        preview = oracle.preview_pane()
+    # render_card builds the knobs itself, but every knob's handler already calls refresh().
+    # Handing the name a handle once the card exists keeps those call sites unaware of it.
+    card_handle: dict[str, Any] = {}
 
-        def refresh() -> None:
-            name = str(STATE["graph"] or "")
-            if not name:
-                STATE["svg"] = ""
-                preview.content = ""
-                cost_label.set_text("Save a texture in the editor above, then pick it here.")
-                return
-            try:
-                graph = texture_bank.load_graph(name)
-                polylines = texture.texture_to_polylines(
-                    graph,
-                    mode=str(STATE["mode"]),
-                    width_mm=float(STATE["width_mm"]),
-                    height_mm=float(STATE["height_mm"]),
-                    cell_mm=float(STATE["cell_mm"]),
-                    seed=int(STATE["seed"]),
-                    max_segments=240_000,
-                )
-            except ValueError as error:
-                # The segment cap and the cell-size cap both land here. A texture is dark
-                # everywhere, unlike a photograph, so these are reachable by accident -- the
-                # operator gets the advice rather than a blank preview.
-                STATE["svg"] = ""
-                preview.content = ""
-                cost_label.set_text(str(error))
-                return
+    def refresh() -> None:
+        handle = card_handle.get("handle")
+        if handle is not None:
+            handle.refresh()
 
-            width_mm = float(STATE["width_mm"])
-            height_mm = float(STATE["height_mm"])
-            STATE["svg"] = polylines_to_svg(polylines, width_mm=width_mm, height_mm=height_mm)
-            preview.content = travel_preview_svg(polylines, width_mm=width_mm, height_mm=height_mm)
-            preview.update()
+    def set_field(key: str, value: Any) -> None:
+        STATE[key] = value
+        refresh()
 
-            draw_mm, travel_mm = travel_length_mm(polylines)
-            xy_minutes, pen_minutes = plot_minutes_for(
-                ctx.settings,
-                strokes=len(polylines),
-                draw_mm=draw_mm,
-                travel_mm=travel_mm,
-                use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
-            )
-            cost_label.set_text(
-                f"{len(polylines)} strokes, {sum(len(p) - 1 for p in polylines)} segments, "
-                f"{draw_mm / 1000:.1f} m drawn + {travel_mm / 1000:.1f} m travel, "
-                f"~{xy_minutes + pen_minutes:.0f} min"
-            )
-
-        def set_field(key: str, value: Any) -> None:
-            STATE[key] = value
-            refresh()
-
+    def texture_controls() -> None:
         with oracle.toolbar(full_width=True):
             graph_select = oracle.select(
                 texture_bank.list_graphs(),
@@ -350,15 +308,39 @@ def build(ctx: GuiContext) -> None:
                     on_change=lambda: None,
                 ).on_value_change(lambda event, key=key: set_field(key, event.value))
 
-        async def print_texture() -> None:
-            if not STATE["svg"]:
-                ui.notify("Nothing to print yet", color="warning")
-                return
-            await ctx.print_svg_payload(
-                str(STATE["svg"]).encode("utf-8"), f"texture_{STATE['graph']}_{STATE['mode']}.svg"
-            )
+    def render_texture() -> oracle.Render:
+        name = str(STATE["graph"] or "")
+        if not name:
+            raise ValueError("Save a texture in the editor above, then pick it here.")
+        # load_graph, the segment cap and the cell-size cap all raise ValueError, and render_card
+        # puts the message in the cost line. A texture is dark everywhere, unlike a photograph,
+        # so the caps are reachable by accident -- the operator gets the advice, not a traceback.
+        polylines = texture.texture_to_polylines(
+            texture_bank.load_graph(name),
+            mode=str(STATE["mode"]),
+            width_mm=float(STATE["width_mm"]),
+            height_mm=float(STATE["height_mm"]),
+            cell_mm=float(STATE["cell_mm"]),
+            seed=int(STATE["seed"]),
+            max_segments=240_000,
+        )
+        return oracle.Render(
+            polylines=polylines,
+            width_mm=float(STATE["width_mm"]),
+            height_mm=float(STATE["height_mm"]),
+            name=f"texture_{name}_{STATE['mode']}",
+        )
 
-        with oracle.toolbar():
-            oracle.primary_action_button("PRINT TEXTURE", lambda: print_texture())
+    card_handle["handle"] = oracle.render_card(
+        ctx,
+        title="Print texture",
+        helper="Render a saved graph through a plotter mode, then send it to the machine.",
+        controls=texture_controls,
+        render=render_texture,
+        button_label="PRINT TEXTURE",
+        # Anything that already knows this module by its state dict keeps reading the
+        # printable bytes off STATE -- tests/test_gui_workspaces.py among them.
+        on_render=lambda svg: STATE.__setitem__("svg", svg),
+    )
 
-        refresh()
+    refresh()

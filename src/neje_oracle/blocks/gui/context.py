@@ -171,6 +171,60 @@ class GuiContext:
         settings.pen_down_dwell_ms = _field_or_default(fields, "pen_down_dwell_ms")
         settings.direct_svg_origin_x_mm = _field_or_default(fields, "direct_svg_origin_x_mm")
         settings.direct_svg_origin_y_mm = _field_or_default(fields, "direct_svg_origin_y_mm")
+        # Image workspace. Guarded like the stream pair above, and for the same reason: this
+        # tab is not always built. image_quality is absent on purpose — its widget is a preset
+        # index, so image.py mirrors the name straight onto settings instead.
+        if (control := fields.get("image_mode")) is not None:
+            settings.image_mode = str(control.value)
+        if (control := fields.get("image_source")) is not None:
+            settings.image_source = str(control.value)
+        if (control := fields.get("image_width_mm")) is not None:
+            settings.image_width_mm = float(control.value or GUI_DEFAULTS["image_width_mm"])
+        if (control := fields.get("image_height_mm")) is not None:
+            settings.image_height_mm = float(control.value or GUI_DEFAULTS["image_height_mm"])
+        if (control := fields.get("image_cell_mm")) is not None:
+            settings.image_cell_mm = float(control.value or GUI_DEFAULTS["image_cell_mm"])
+        if (control := fields.get("image_detail")) is not None:
+            settings.image_detail = float(control.value or GUI_DEFAULTS["image_detail"])
+        if (control := fields.get("image_gamma")) is not None:
+            settings.image_gamma = float(control.value or GUI_DEFAULTS["image_gamma"])
+        if (control := fields.get("image_invert")) is not None:
+            settings.image_invert = bool(control.value)
+        if (control := fields.get("image_show_travel")) is not None:
+            settings.image_show_travel = bool(control.value)
+        if (control := fields.get("sheet_cell_width_mm")) is not None:
+            settings.sheet_cell_width_mm = float(control.value or GUI_DEFAULTS["sheet_cell_width_mm"])
+        if (control := fields.get("sheet_cell_height_mm")) is not None:
+            settings.sheet_cell_height_mm = float(control.value or GUI_DEFAULTS["sheet_cell_height_mm"])
+        if (control := fields.get("sheet_gap_mm")) is not None:
+            # `or` would turn a deliberate 0 into the default, and 0 is the setting that butts
+            # the cells together — the whole point of the control.
+            settings.sheet_gap_mm = float(control.value if control.value is not None else GUI_DEFAULTS["sheet_gap_mm"])
+        if (control := fields.get("sheet_padding_mm")) is not None:
+            settings.sheet_padding_mm = float(
+                control.value if control.value is not None else GUI_DEFAULTS["sheet_padding_mm"]
+            )
+        if (control := fields.get("sheet_shape")) is not None:
+            settings.sheet_shape = str(control.value)
+        if (control := fields.get("motif_mode")) is not None:
+            settings.motif_mode = str(control.value)
+        if (control := fields.get("motif_cell_mm")) is not None:
+            settings.motif_cell_mm = float(control.value or GUI_DEFAULTS["motif_cell_mm"])
+        if (control := fields.get("motif_gamma")) is not None:
+            settings.motif_gamma = float(control.value or GUI_DEFAULTS["motif_gamma"])
+        if (control := fields.get("motif_autocontrast")) is not None:
+            settings.motif_autocontrast = bool(control.value)
+        if (control := fields.get("motif_invert")) is not None:
+            settings.motif_invert = bool(control.value)
+        if (control := fields.get("motif_despeckle_mm")) is not None:
+            # Same zero-is-meaningful case: 0 mm is "keep every speck".
+            settings.motif_despeckle_mm = float(
+                control.value if control.value is not None else GUI_DEFAULTS["motif_despeckle_mm"]
+            )
+        if (control := fields.get("motif_simplify_mm")) is not None:
+            settings.motif_simplify_mm = float(
+                control.value if control.value is not None else GUI_DEFAULTS["motif_simplify_mm"]
+            )
 
     def _save_settings(self) -> None:
         save_gui_settings(self.settings)

@@ -21,13 +21,17 @@ from ....blocks.imaging.sheet import SHAPES, frame_grid_capacity, images_to_shee
 from ....blocks.patterns import bank
 from ....blocks.patterns.ingest import DEFAULT_MODE as DEFAULT_MOTIF_MODE
 from ....blocks.patterns.ingest import CropBox, image_to_motif_polylines, motif_svg
+from ....shared.gui_settings import GuiSettings
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import plot_minutes_for, read_upload_event_payload
 from ..ui import helper_text, primary_action_button, safe_action_button
 
-# ponytail: image knobs stay in-module, not in GUI_DEFAULTS/GuiSettings — they are
-# per-image choices, not machine calibration. Promote them if operators ask for sticky values.
+# These dicts are still the workspace's working state, but the tune-once knobs are no longer
+# only here: operators asked for sticky values, so they are mirrored to GuiSettings (see
+# _PERSISTED_* below). What stays purely in-module is per-picture — bytes, names, the crop box,
+# the folder and the sheet index — because carrying those across a restart is a bug, not a
+# preference.
 STATE: dict[str, Any] = {
     "name": "",
     "bytes": b"",
@@ -78,6 +82,54 @@ MOTIF_STATE: dict[str, Any] = {
     "simplify_mm": 0.4,
     "motif_name": "",
 }
+
+# in-module key -> GuiSettings field. Only the sticky ones appear here; anything missing is
+# per-picture and is meant to reset. The same names are registered into ctx.fields below, which
+# is what makes GuiContext.pull_settings_from_fields read them back.
+_PERSISTED_IMAGE_KEYS = {
+    "mode": "image_mode",
+    "quality": "image_quality",
+    "source": "image_source",
+    "width_mm": "image_width_mm",
+    "height_mm": "image_height_mm",
+    "cell_mm": "image_cell_mm",
+    "detail": "image_detail",
+    "gamma": "image_gamma",
+    "invert": "image_invert",
+    "show_travel": "image_show_travel",
+}
+_PERSISTED_SHEET_KEYS = {
+    "cell_w": "sheet_cell_width_mm",
+    "cell_h": "sheet_cell_height_mm",
+    "gap": "sheet_gap_mm",
+    "padding": "sheet_padding_mm",
+    "shape": "sheet_shape",
+}
+_PERSISTED_MOTIF_KEYS = {
+    "mode": "motif_mode",
+    "cell_mm": "motif_cell_mm",
+    "gamma": "motif_gamma",
+    "autocontrast": "motif_autocontrast",
+    "invert": "motif_invert",
+    "despeckle_mm": "motif_despeckle_mm",
+    "simplify_mm": "motif_simplify_mm",
+}
+
+
+def seed_state_from_settings(settings: GuiSettings) -> None:
+    """Restore what the operator last chose, so a process restart is not a reset.
+
+    The module dicts survive a browser reload but not a restart, and they are shared by
+    every browser session; GuiSettings is the thing that is actually written to disk.
+    """
+    for state, mapping in (
+        (STATE, _PERSISTED_IMAGE_KEYS),
+        (SHEET_STATE, _PERSISTED_SHEET_KEYS),
+        (MOTIF_STATE, _PERSISTED_MOTIF_KEYS),
+    ):
+        for key, field_name in mapping.items():
+            state[key] = getattr(settings, field_name)
+
 
 MODE_HELP = {
     "trace": "Follows the drawing's own lines, filling bold strokes to weight. For ink drawings and line art.",
@@ -276,6 +328,11 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced", source: st
 
 
 def build(ctx: GuiContext) -> None:
+    # Before a single widget is created: every control below reads its initial value from
+    # these dicts, so the restore has to land first or the page renders last session's
+    # defaults and then writes them back.
+    seed_state_from_settings(ctx.settings)
+
     # The conversion card is built partway down this function, but the upload handler and
     # every knob above it already call refresh_preview(). Keeping the name and handing it a
     # handle once the card exists means none of those call sites has to know the difference.
@@ -326,6 +383,12 @@ def build(ctx: GuiContext) -> None:
                     )
                     cell_field.set_value(STATE["cell_mm"])
                     quality_label.set_text(_quality_text())
+                if key == "quality":
+                    # The only sticky knob whose widget value is not the stored value: the
+                    # fader holds a preset index, not "fine". Mirrored here rather than
+                    # registered in ctx.fields, because pull_settings_from_fields would
+                    # otherwise persist the string "3".
+                    ctx.settings.image_quality = str(value)
                 refresh_preview()
 
             def _quality_text() -> str:
@@ -336,35 +399,54 @@ def build(ctx: GuiContext) -> None:
                 )
 
             with ui.row().classes("gap-2 w-full items-center"):
-                ui.select(
-                    sorted(MODES),
-                    value=STATE["mode"],
-                    label="Mode",
-                    on_change=lambda e: set_field("mode", e.value),
-                ).props("dense outlined").classes("w-36")
-                ui.select(
-                    list(SOURCE_PROFILES),
-                    value=STATE["source"],
-                    label="Source",
-                    on_change=lambda e: set_field("source", e.value),
-                ).props("dense outlined").classes("w-32").tooltip(
-                    "Trace only. 'ai line art' drops the weight passes and despeckles, which "
-                    "plots a diffusion render ~6x faster at one nib width throughout."
+                # Registered under their GuiSettings names so pull_settings_from_fields sees
+                # them; without that a control is silently inert however well it renders.
+                ctx.fields["image_mode"] = (
+                    ui.select(
+                        sorted(MODES),
+                        value=STATE["mode"],
+                        label="Mode",
+                        on_change=lambda e: set_field("mode", e.value),
+                    )
+                    .props("dense outlined")
+                    .classes("w-36")
                 )
-                ui.number(
-                    "Width mm",
-                    value=STATE["width_mm"],
-                    min=5,
-                    step=5,
-                    on_change=lambda e: set_field("width_mm", float(e.value or 150.0)),
-                ).props("dense outlined").classes("w-28")
-                ui.number(
-                    "Height mm",
-                    value=STATE["height_mm"],
-                    min=5,
-                    step=5,
-                    on_change=lambda e: set_field("height_mm", float(e.value or 150.0)),
-                ).props("dense outlined").classes("w-28")
+                ctx.fields["image_source"] = (
+                    ui.select(
+                        list(SOURCE_PROFILES),
+                        value=STATE["source"],
+                        label="Source",
+                        on_change=lambda e: set_field("source", e.value),
+                    )
+                    .props("dense outlined")
+                    .classes("w-32")
+                    .tooltip(
+                        "Trace only. 'ai line art' drops the weight passes and despeckles, which "
+                        "plots a diffusion render ~6x faster at one nib width throughout."
+                    )
+                )
+                ctx.fields["image_width_mm"] = (
+                    ui.number(
+                        "Width mm",
+                        value=STATE["width_mm"],
+                        min=5,
+                        step=5,
+                        on_change=lambda e: set_field("width_mm", float(e.value or 150.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-28")
+                )
+                ctx.fields["image_height_mm"] = (
+                    ui.number(
+                        "Height mm",
+                        value=STATE["height_mm"],
+                        min=5,
+                        step=5,
+                        on_change=lambda e: set_field("height_mm", float(e.value or 150.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-28")
+                )
 
             quality_label = ui.label("").classes("text-xs text-[#8f4f2b]")
             ui.slider(
@@ -399,24 +481,33 @@ def build(ctx: GuiContext) -> None:
                         "where smaller means more detail and a much longer plot. Switching mode resets it."
                     )
                 )
-                ui.number(
-                    "Detail",
-                    value=STATE["detail"],
-                    min=0.2,
-                    step=0.2,
-                    on_change=lambda e: set_field("detail", float(e.value or 1.0)),
-                ).props("dense outlined").classes("w-28").tooltip(
-                    "Hatch: line spacing mm. Contour: band count. Ignored by halftone/dither."
+                ctx.fields["image_cell_mm"] = cell_field
+                ctx.fields["image_detail"] = (
+                    ui.number(
+                        "Detail",
+                        value=STATE["detail"],
+                        min=0.2,
+                        step=0.2,
+                        on_change=lambda e: set_field("detail", float(e.value or 1.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-28")
+                    .tooltip("Hatch: line spacing mm. Contour: band count. Ignored by halftone/dither.")
                 )
-                ui.number(
-                    "Gamma",
-                    value=STATE["gamma"],
-                    min=0.2,
-                    max=4.0,
-                    step=0.1,
-                    on_change=lambda e: set_field("gamma", float(e.value or 1.0)),
-                ).props("dense outlined").classes("w-24").tooltip("Above 1 lightens midtones, below 1 darkens them.")
-                ui.switch(
+                ctx.fields["image_gamma"] = (
+                    ui.number(
+                        "Gamma",
+                        value=STATE["gamma"],
+                        min=0.2,
+                        max=4.0,
+                        step=0.1,
+                        on_change=lambda e: set_field("gamma", float(e.value or 1.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-24")
+                    .tooltip("Above 1 lightens midtones, below 1 darkens them.")
+                )
+                ctx.fields["image_invert"] = ui.switch(
                     "Invert",
                     value=STATE["invert"],
                     on_change=lambda e: set_field("invert", bool(e.value)),
@@ -466,6 +557,10 @@ def build(ctx: GuiContext) -> None:
             on_render=lambda svg: STATE.__setitem__("svg", svg),
         )
         card_handle["handle"] = conversion
+        # render_card owns the "Travel lines" switch, so register the one it built rather than
+        # a second switch of our own. Without this the setting could be restored on load but
+        # never recorded when the operator changed it.
+        ctx.fields["image_show_travel"] = conversion.travel
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Frame sheet").classes("text-sm font-bold")
@@ -486,42 +581,64 @@ def build(ctx: GuiContext) -> None:
             ).props("dense outlined clearable").classes("w-full")
 
             with ui.row().classes("gap-2 w-full items-center"):
-                ui.number(
-                    "Cell width mm",
-                    value=SHEET_STATE["cell_w"],
-                    min=5,
-                    step=5,
-                    on_change=lambda e: set_sheet("cell_w", float(e.value or 40.0)),
-                ).props("dense outlined").classes("w-32")
-                ui.number(
-                    "Cell height mm",
-                    value=SHEET_STATE["cell_h"],
-                    min=5,
-                    step=5,
-                    on_change=lambda e: set_sheet("cell_h", float(e.value or 60.0)),
-                ).props("dense outlined").classes("w-32")
-                ui.number(
-                    "Gap mm",
-                    value=SHEET_STATE["gap"],
-                    min=0,
-                    step=1,
-                    on_change=lambda e: set_sheet("gap", float(e.value or 0.0)),
-                ).props("dense outlined").classes("w-24").tooltip("0 = cells butt together. Above 0 = alley to cut in.")
-                ui.number(
-                    "Padding mm",
-                    value=SHEET_STATE["padding"],
-                    min=0,
-                    step=0.5,
-                    on_change=lambda e: set_sheet("padding", float(e.value or 0.0)),
-                ).props("dense outlined").classes("w-28").tooltip("Blank border between the cut line and the art.")
+                ctx.fields["sheet_cell_width_mm"] = (
+                    ui.number(
+                        "Cell width mm",
+                        value=SHEET_STATE["cell_w"],
+                        min=5,
+                        step=5,
+                        on_change=lambda e: set_sheet("cell_w", float(e.value or 40.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-32")
+                )
+                ctx.fields["sheet_cell_height_mm"] = (
+                    ui.number(
+                        "Cell height mm",
+                        value=SHEET_STATE["cell_h"],
+                        min=5,
+                        step=5,
+                        on_change=lambda e: set_sheet("cell_h", float(e.value or 60.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-32")
+                )
+                ctx.fields["sheet_gap_mm"] = (
+                    ui.number(
+                        "Gap mm",
+                        value=SHEET_STATE["gap"],
+                        min=0,
+                        step=1,
+                        on_change=lambda e: set_sheet("gap", float(e.value or 0.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-24")
+                    .tooltip("0 = cells butt together. Above 0 = alley to cut in.")
+                )
+                ctx.fields["sheet_padding_mm"] = (
+                    ui.number(
+                        "Padding mm",
+                        value=SHEET_STATE["padding"],
+                        min=0,
+                        step=0.5,
+                        on_change=lambda e: set_sheet("padding", float(e.value or 0.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-28")
+                    .tooltip("Blank border between the cut line and the art.")
+                )
 
             with ui.row().classes("gap-2 w-full items-center"):
-                ui.select(
-                    list(SHAPES),
-                    value=SHEET_STATE["shape"],
-                    label="Cut line",
-                    on_change=lambda e: set_sheet("shape", str(e.value)),
-                ).props("dense outlined").classes("w-32")
+                ctx.fields["sheet_shape"] = (
+                    ui.select(
+                        list(SHAPES),
+                        value=SHEET_STATE["shape"],
+                        label="Cut line",
+                        on_change=lambda e: set_sheet("shape", str(e.value)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-32")
+                )
                 ui.number(
                     "Sheet #",
                     value=SHEET_STATE["sheet_index"],
@@ -538,7 +655,7 @@ def build(ctx: GuiContext) -> None:
                 safe_action_button("BUILD SHEET", lambda: build_sheet())
                 primary_action_button("PRINT SHEET", lambda: print_sheet())
 
-        _build_motif_import_card()
+        _build_motif_import_card(ctx)
 
     def _sheet_files() -> list[Path]:
         folder = Path(SHEET_STATE["folder"]).expanduser()
@@ -687,8 +804,12 @@ def build_motif_svg() -> tuple[str, int, int]:
     return motif_svg(polylines), len(polylines), sum(len(p) for p in polylines)
 
 
-def _build_motif_import_card() -> None:
-    """Picture -> cropped, traced, optimised motif -> assets/patterns/."""
+def _build_motif_import_card(ctx: GuiContext) -> None:
+    """Picture -> cropped, traced, optimised motif -> assets/patterns/.
+
+    Takes `ctx` only so its sticky knobs can register into ctx.fields; the crop box and the
+    motif name stay per-picture and are deliberately not registered.
+    """
     with ui.card().classes("oracle-card compact-card w-full"):
         ui.label("Import motif from picture").classes("text-sm font-bold")
         helper_text(
@@ -772,48 +893,72 @@ def _build_motif_import_card() -> None:
                 ).props("dense outlined").classes("w-28")
 
         with ui.row().classes("gap-2 w-full items-center"):
-            ui.select(
-                sorted(MODES),
-                value=MOTIF_STATE["mode"],
-                label="Mode",
-                on_change=lambda e: set_motif("mode", str(e.value)),
-            ).props("dense outlined").classes("w-40")
-            ui.number(
-                "Cell mm",
-                value=MOTIF_STATE["cell_mm"],
-                min=0.1,
-                step=0.1,
-                on_change=lambda e: set_motif("cell_mm", float(e.value or 0.8)),
-            ).props("dense outlined").classes("w-28").tooltip("Sampling pitch. Smaller = more detail and more points.")
-            ui.number(
-                "Gamma",
-                value=MOTIF_STATE["gamma"],
-                min=0.1,
-                step=0.1,
-                on_change=lambda e: set_motif("gamma", float(e.value or 1.0)),
-            ).props("dense outlined").classes("w-28").tooltip("Above 1 pushes midtones to white and drops texture.")
+            ctx.fields["motif_mode"] = (
+                ui.select(
+                    sorted(MODES),
+                    value=MOTIF_STATE["mode"],
+                    label="Mode",
+                    on_change=lambda e: set_motif("mode", str(e.value)),
+                )
+                .props("dense outlined")
+                .classes("w-40")
+            )
+            ctx.fields["motif_cell_mm"] = (
+                ui.number(
+                    "Cell mm",
+                    value=MOTIF_STATE["cell_mm"],
+                    min=0.1,
+                    step=0.1,
+                    on_change=lambda e: set_motif("cell_mm", float(e.value or 0.8)),
+                )
+                .props("dense outlined")
+                .classes("w-28")
+                .tooltip("Sampling pitch. Smaller = more detail and more points.")
+            )
+            ctx.fields["motif_gamma"] = (
+                ui.number(
+                    "Gamma",
+                    value=MOTIF_STATE["gamma"],
+                    min=0.1,
+                    step=0.1,
+                    on_change=lambda e: set_motif("gamma", float(e.value or 1.0)),
+                )
+                .props("dense outlined")
+                .classes("w-28")
+                .tooltip("Above 1 pushes midtones to white and drops texture.")
+            )
 
         with ui.row().classes("gap-2 w-full items-center"):
-            ui.number(
-                "Despeckle mm",
-                value=MOTIF_STATE["despeckle_mm"],
-                min=0,
-                step=0.5,
-                on_change=lambda e: set_motif("despeckle_mm", float(e.value or 0.0)),
-            ).props("dense outlined").classes("w-32").tooltip("Drops strokes whose bounding box is smaller than this.")
-            ui.number(
-                "Simplify mm",
-                value=MOTIF_STATE["simplify_mm"],
-                min=0,
-                step=0.1,
-                on_change=lambda e: set_motif("simplify_mm", float(e.value or 0.0)),
-            ).props("dense outlined").classes("w-32").tooltip("Douglas-Peucker tolerance on a 100 mm motif.")
-            ui.switch(
+            ctx.fields["motif_despeckle_mm"] = (
+                ui.number(
+                    "Despeckle mm",
+                    value=MOTIF_STATE["despeckle_mm"],
+                    min=0,
+                    step=0.5,
+                    on_change=lambda e: set_motif("despeckle_mm", float(e.value or 0.0)),
+                )
+                .props("dense outlined")
+                .classes("w-32")
+                .tooltip("Drops strokes whose bounding box is smaller than this.")
+            )
+            ctx.fields["motif_simplify_mm"] = (
+                ui.number(
+                    "Simplify mm",
+                    value=MOTIF_STATE["simplify_mm"],
+                    min=0,
+                    step=0.1,
+                    on_change=lambda e: set_motif("simplify_mm", float(e.value or 0.0)),
+                )
+                .props("dense outlined")
+                .classes("w-32")
+                .tooltip("Douglas-Peucker tolerance on a 100 mm motif.")
+            )
+            ctx.fields["motif_autocontrast"] = ui.switch(
                 "Autocontrast",
                 value=MOTIF_STATE["autocontrast"],
                 on_change=lambda e: set_motif("autocontrast", bool(e.value)),
             ).tooltip("Off for fabric photos: on, it stretches weave texture into ink.")
-            ui.switch(
+            ctx.fields["motif_invert"] = ui.switch(
                 "Invert",
                 value=MOTIF_STATE["invert"],
                 on_change=lambda e: set_motif("invert", bool(e.value)),
