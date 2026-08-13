@@ -128,108 +128,15 @@ async def current_sketch_svg() -> bytes:
 
 
 def build(ctx: GuiContext) -> None:
-    """Build the generative workspace UI."""
+    """Legacy stacked form, kept for tests that build this workspace alone.
+
+    The CREATE screen composes the pieces itself: canvas and controls land in different
+    grid tracks there, which a single stacked column cannot express.
+    """
     with ui.column().classes("w-full gap-2"):
-        with oracle.card("Generative sketch"):
-            oracle.embedded_page("/generative/index.html", height_px=900, element_id="generative-frame")
-
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Send to plotter").classes("text-sm font-bold")
-            origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
-
-            def update_origin_label() -> None:
-                origin_x = ctx.fields.get("direct_svg_origin_x_mm")
-                origin_y = ctx.fields.get("direct_svg_origin_y_mm")
-                if origin_x is not None and origin_y is not None:
-                    origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on SETUP)")
-
-            client_timer(1.0, update_origin_label)
-
-            async def print_sketch(quiet: bool = False) -> None:
-                # "Capture" is gone as a concept: there is nothing to capture into. The button
-                # reads the frame that is on screen right now, which is what an operator
-                # pressing PRINT expects it to mean.
-                try:
-                    svg_bytes = await current_sketch_svg()
-                except ValueError as exc:
-                    if not quiet:
-                        ui.notify(str(exc), color="warning")
-                    return
-                await ctx.print_svg_payload(svg_bytes, f"generative_{time.strftime('%Y%m%d_%H%M%S')}.svg")
-
-            with ui.row().classes("items-center gap-2"):
-                primary_action_button("PRINT SKETCH", print_sketch)
-
-            def push_stream_state() -> None:
-                seconds = max(5, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"]))
-                # Telling a browser that is not attached is a no-op, not a failure: this
-                # runs from a once-timer at load and from headless tests with no client.
-                with contextlib.suppress(Exception):
-                    ui.run_javascript(
-                        f"""const frame = document.getElementById('generative-frame');
-                        frame?.contentWindow?.postMessage({{type: 'stream', enabled: {str(STREAM["enabled"]).lower()}, seconds: {seconds}}}, '*');"""
-                    )
-
-            def stream_toggled(event) -> None:
-                STREAM["enabled"] = bool(event.value)
-                ctx.settings.stream_enabled = STREAM["enabled"]
-                ctx.save_settings()
-                push_stream_state()
-                if not STREAM["enabled"]:
-                    ui.notify("Stream stopped", color="info")
-
-            def interval_changed(_: object) -> None:
-                ctx.settings.stream_interval_seconds = max(
-                    5.0, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"])
-                )
-                ctx.save_settings()
-                push_stream_state()
-
-            # The switch renders from the persisted setting, so it has to start there too --
-            # STREAM is a module global that outlives the page but not the process.
-            STREAM["enabled"] = bool(ctx.settings.stream_enabled)
-            with ui.row().classes("items-center gap-2"):
-                ctx.fields["stream_enabled"] = ui.switch(
-                    "Stream to plotter (auto-print each captured frame)",
-                    value=STREAM["enabled"],
-                    on_change=stream_toggled,
-                )
-                stream_interval = (
-                    ui.number(
-                        "Interval s",
-                        value=ctx.settings.stream_interval_seconds,
-                        min=5,
-                        step=1,
-                        on_change=interval_changed,
-                    )
-                    .props("dense outlined")
-                    .classes("w-28")
-                )
-                ctx.fields["stream_interval_seconds"] = stream_interval
-
-            # Tell the freshly-built iframe what the switch already says. Without this the
-            # switch came back ON after a reload while nothing streamed: push_stream_state()
-            # only ever ran from the change handlers, so the new iframe was never told, and
-            # toggling off-then-on was the only way to start it.
-            client_timer(2.0, push_stream_state, once=True)
-
-            async def _stream_tick() -> None:
-                if not should_send_frame(STREAM):
-                    return
-                STREAM["busy"] = True
-                try:
-                    # quiet=True matters here: with no browser attached the pull raises, and
-                    # this runs every 3 seconds forever on an unattended machine. A toast per
-                    # tick would bury the log the run is judged by.
-                    await print_sketch(quiet=True)  # blocks (io_bound) while plotting
-                finally:
-                    STREAM["busy"] = False
-
-            # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; set NEJE_FLUIDNC_STREAMING=char_count for char-counting GRBL streaming if frames lag
-
-            client_timer(3.0, _stream_tick)
-
-        _build_line_text_card(ctx)
+        build_sketch_canvas()
+        build_sketch_controls(ctx)
+        build_text(ctx)
         # A texture is a generative source, so it lives in this workspace rather than a tab of its
         # own. Imported here rather than at module scope: workspaces.texture imports from .image,
         # and a top-level import would drag the image workspace into every generative-only test.
@@ -238,7 +145,111 @@ def build(ctx: GuiContext) -> None:
         texture_workspace.build(ctx)
 
 
-def _build_line_text_card(ctx: GuiContext) -> None:
+def build_sketch_canvas() -> None:
+    """The p5 editor itself. No card: on the CREATE screen the editor is the canvas."""
+    oracle.embedded_page("/generative/index.html", element_id="generative-frame")
+
+
+def build_sketch_controls(ctx: GuiContext) -> None:
+    """Print and stream controls for the sketch. Talk to the iframe by id, not by handle."""
+    with ui.card().classes("oracle-card compact-card w-full"):
+        ui.label("Send to plotter").classes("text-sm font-bold")
+        origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
+
+        def update_origin_label() -> None:
+            origin_x = ctx.fields.get("direct_svg_origin_x_mm")
+            origin_y = ctx.fields.get("direct_svg_origin_y_mm")
+            if origin_x is not None and origin_y is not None:
+                origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on SETUP)")
+
+        client_timer(1.0, update_origin_label)
+
+        async def print_sketch(quiet: bool = False) -> None:
+            # "Capture" is gone as a concept: there is nothing to capture into. The button
+            # reads the frame that is on screen right now, which is what an operator
+            # pressing PRINT expects it to mean.
+            try:
+                svg_bytes = await current_sketch_svg()
+            except ValueError as exc:
+                if not quiet:
+                    ui.notify(str(exc), color="warning")
+                return
+            await ctx.print_svg_payload(svg_bytes, f"generative_{time.strftime('%Y%m%d_%H%M%S')}.svg")
+
+        with ui.row().classes("items-center gap-2"):
+            primary_action_button("PRINT SKETCH", print_sketch)
+
+        def push_stream_state() -> None:
+            seconds = max(5, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"]))
+            # Telling a browser that is not attached is a no-op, not a failure: this
+            # runs from a once-timer at load and from headless tests with no client.
+            with contextlib.suppress(Exception):
+                ui.run_javascript(
+                    f"""const frame = document.getElementById('generative-frame');
+                        frame?.contentWindow?.postMessage({{type: 'stream', enabled: {str(STREAM["enabled"]).lower()}, seconds: {seconds}}}, '*');"""
+                )
+
+        def stream_toggled(event) -> None:
+            STREAM["enabled"] = bool(event.value)
+            ctx.settings.stream_enabled = STREAM["enabled"]
+            ctx.save_settings()
+            push_stream_state()
+            if not STREAM["enabled"]:
+                ui.notify("Stream stopped", color="info")
+
+        def interval_changed(_: object) -> None:
+            ctx.settings.stream_interval_seconds = max(
+                5.0, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"])
+            )
+            ctx.save_settings()
+            push_stream_state()
+
+        # The switch renders from the persisted setting, so it has to start there too --
+        # STREAM is a module global that outlives the page but not the process.
+        STREAM["enabled"] = bool(ctx.settings.stream_enabled)
+        with ui.row().classes("items-center gap-2"):
+            ctx.fields["stream_enabled"] = ui.switch(
+                "Stream to plotter (auto-print each captured frame)",
+                value=STREAM["enabled"],
+                on_change=stream_toggled,
+            )
+            stream_interval = (
+                ui.number(
+                    "Interval s",
+                    value=ctx.settings.stream_interval_seconds,
+                    min=5,
+                    step=1,
+                    on_change=interval_changed,
+                )
+                .props("dense outlined")
+                .classes("w-28")
+            )
+            ctx.fields["stream_interval_seconds"] = stream_interval
+
+        # Tell the freshly-built iframe what the switch already says. Without this the
+        # switch came back ON after a reload while nothing streamed: push_stream_state()
+        # only ever ran from the change handlers, so the new iframe was never told, and
+        # toggling off-then-on was the only way to start it.
+        client_timer(2.0, push_stream_state, once=True)
+
+        async def _stream_tick() -> None:
+            if not should_send_frame(STREAM):
+                return
+            STREAM["busy"] = True
+            try:
+                # quiet=True matters here: with no browser attached the pull raises, and
+                # this runs every 3 seconds forever on an unattended machine. A toast per
+                # tick would bury the log the run is judged by.
+                await print_sketch(quiet=True)  # blocks (io_bound) while plotting
+            finally:
+                STREAM["busy"] = False
+
+        # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; set NEJE_FLUIDNC_STREAMING=char_count for char-counting GRBL streaming if frames lag
+
+        client_timer(3.0, _stream_tick)
+
+
+def build_text(ctx: GuiContext, preview_slot: object = None) -> None:
     """Single-stroke SHX text: preview, then print through the direct-SVG path."""
     fonts = shx.list_fonts()
     if not fonts:
@@ -285,5 +296,6 @@ def _build_line_text_card(ctx: GuiContext) -> None:
         controls=text_controls,
         render=render_text,
         button_label="PRINT TEXT",
+        preview_slot=preview_slot,
     )
     refresh()

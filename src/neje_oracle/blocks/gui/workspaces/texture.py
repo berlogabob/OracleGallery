@@ -239,13 +239,18 @@ def register_routes() -> None:
 # The operator-facing card
 # ---------------------------------------------------------------------------
 def build(ctx: GuiContext) -> None:
-    """Node editor iframe, plus render-and-print for a saved texture."""
-    with oracle.card(
-        "Texture nodes",
-        "Noise, mixing and masking as a node graph. Save a texture to use it here and in the sketch.",
-    ):
-        oracle.embedded_page("/generative/nodes.html", height_px=760, element_id="texture-frame")
+    """Legacy stacked form, kept for tests that build this workspace alone."""
+    build_canvas()
+    build_controls(ctx)
 
+
+def build_canvas() -> None:
+    """The node editor itself. No card: on the CREATE screen the editor is the canvas."""
+    oracle.embedded_page("/generative/nodes.html", element_id="texture-frame")
+
+
+def build_controls(ctx: GuiContext) -> None:
+    """Render-and-print for a saved texture."""
     # render_card builds the knobs itself, but every knob's handler already calls refresh().
     # Handing the name a handle once the card exists keeps those call sites unaware of it.
     card_handle: dict[str, Any] = {}
@@ -311,7 +316,7 @@ def build(ctx: GuiContext) -> None:
     def render_texture() -> oracle.Render:
         name = str(STATE["graph"] or "")
         if not name:
-            raise ValueError("Save a texture in the editor above, then pick it here.")
+            raise ValueError("Save a texture in the editor, then pick it here.")
         # load_graph, the segment cap and the cell-size cap all raise ValueError, and render_card
         # puts the message in the cost line. A texture is dark everywhere, unlike a photograph,
         # so the caps are reachable by accident -- the operator gets the advice, not a traceback.

@@ -49,6 +49,13 @@ __TOKENS_PLACEHOLDER__
   .top-bar .workspace-tabs { border: 0; background: transparent; min-height: 36px; flex: 0 1 auto; }
   .top-bar .q-tab { min-height: 34px; }
   .print-canvas { min-width: 0; overflow: hidden; }
+  /* CREATE panes: one source visible at a time, canvas track + 340px knobs track.
+     grid-auto-rows pins the single row to the pane height so h-full children resolve. */
+  .create-pane { flex: 1 1 auto; min-height: 0; grid-auto-rows: 100%; }
+  .create-pane-scroll { overflow-y: auto; }
+  .create-canvas { min-width: 0; overflow: hidden; }
+  .create-panel { overflow-y: auto; }
+  .preview-fill { background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius-md); }
   /* Quasar's tab panel is not a flex child by default, so height:100% below it resolves
      to auto and the canvas column grows past the viewport instead of letting the
      preview scroll internally. Chain the height down explicitly. */
