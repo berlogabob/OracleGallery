@@ -16,7 +16,7 @@ from ....shared.gui_settings import GUI_DEFAULTS
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import load_gui_settings
-from ..ui import client_timer, helper_text, primary_action_button
+from ..ui import client_timer, helper_text
 
 STREAM: dict = {"enabled": False, "busy": False}
 _ROUTES_REGISTERED = False
@@ -181,9 +181,6 @@ def build_sketch_controls(ctx: GuiContext) -> Any:
                 return
             await ctx.print_svg_payload(svg_bytes, f"generative_{time.strftime('%Y%m%d_%H%M%S')}.svg")
 
-        with ui.row().classes("items-center gap-2"):
-            primary_action_button("PRINT SKETCH", print_sketch)
-
         def push_stream_state() -> None:
             seconds = max(5, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"]))
             # Telling a browser that is not attached is a no-op, not a failure: this
@@ -194,13 +191,47 @@ def build_sketch_controls(ctx: GuiContext) -> Any:
                         frame?.contentWindow?.postMessage({{type: 'stream', enabled: {str(STREAM["enabled"]).lower()}, seconds: {seconds}}}, '*');"""
                 )
 
-        def stream_toggled(event) -> None:
-            STREAM["enabled"] = bool(event.value)
-            ctx.settings.stream_enabled = STREAM["enabled"]
+        def _apply_stream(enabled: bool) -> None:
+            STREAM["enabled"] = enabled
+            ctx.settings.stream_enabled = enabled
             ctx.save_settings()
             push_stream_state()
-            if not STREAM["enabled"]:
-                ui.notify("Stream stopped", color="info")
+
+        # The arm gate: streaming prints real ink unattended, every interval, forever.
+        # Arming shows what one frame costs and waits for an explicit ARM -- flicking a
+        # switch is how an hour-per-frame stream gets started by accident.
+        with ui.dialog().props("persistent") as arm_dialog, ui.card().classes("oracle-card"):
+            oracle.section_title("Arm streaming?")
+            helper_text("Every interval, the frame on screen is printed with real ink, unattended.")
+            arm_estimate = ui.label("-").classes("text-xs font-bold")
+
+            def arm_stream() -> None:
+                _apply_stream(True)
+                arm_dialog.close()
+                ui.notify("Streaming armed", color="warning")
+
+            def cancel_arm() -> None:
+                arm_dialog.close()
+                ctx.fields["stream_enabled"].set_value(False)
+
+            with ui.row().classes("items-center gap-2"):
+                oracle.safe_action_button("CANCEL", cancel_arm)
+                oracle.danger_action_button("ARM STREAM", arm_stream)
+
+        async def stream_toggled(event) -> None:
+            if not bool(event.value):
+                if STREAM["enabled"]:
+                    _apply_stream(False)
+                    ui.notify("Stream stopped", color="info")
+                return
+            if STREAM["enabled"]:
+                return  # already armed (e.g. the switch restored from settings)
+            try:
+                svg_bytes = await current_sketch_svg()
+                arm_estimate.set_text(oracle.svg_cost_line(ctx, svg_bytes))
+            except ValueError as exc:
+                arm_estimate.set_text(f"Could not estimate the current frame: {exc}")
+            arm_dialog.open()
 
         def interval_changed(_: object) -> None:
             ctx.settings.stream_interval_seconds = max(
@@ -252,6 +283,8 @@ def build_sketch_controls(ctx: GuiContext) -> Any:
         # ponytail: line-by-line ok-wait transport (~1 line/RTT) is the throughput ceiling; set NEJE_FLUIDNC_STREAMING=char_count for char-counting GRBL streaming if frames lag
 
         client_timer(3.0, _stream_tick)
+
+        return print_sketch
 
 
 def build_text(ctx: GuiContext, preview_slot: object = None, *, actions: bool = True) -> oracle.RenderCard | None:

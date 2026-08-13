@@ -180,11 +180,22 @@ def test_generative_workspace_builds_sketch_and_line_text_cards_without_raising(
     # Driven through the widgets' own handlers, which is the path a reload has to survive.
     # These controls save via ctx.save_settings() rather than pull_settings_from_fields(),
     # because that indexes the calibration fields and this tab can be built on its own.
-    ctx.fields["stream_enabled"].value = True
     ctx.fields["stream_interval_seconds"].value = 42
-
-    assert ctx.settings.stream_enabled is True
     assert ctx.settings.stream_interval_seconds == 42
+
+    # The switch alone must NOT arm the stream: streaming draws real ink unattended, so
+    # flicking it opens the arm gate (estimate + explicit ARM STREAM) instead of persisting.
+    ctx.fields["stream_enabled"].value = True
+    assert ctx.settings.stream_enabled is False
+    # Dialogs teleport to the page container, outside the column subtree -- search the
+    # client's element registry instead of the tree.
+    rendered = {
+        str(text)
+        for element in ui.context.client.elements.values()
+        for text in (getattr(element, "text", None), element._props.get("label"))
+        if text
+    }
+    assert "ARM STREAM" in rendered
 
 
 def test_texture_workspace_builds_and_renders_a_shipped_preset(monkeypatch: pytest.MonkeyPatch) -> None:
