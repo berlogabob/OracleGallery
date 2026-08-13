@@ -16,7 +16,7 @@ def build(ctx: GuiContext) -> None:
         # FluidNC connection
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("FluidNC Connection").classes("text-sm font-bold")
-            helper_text("Network/controller checks only. No motion except emergency, unlock, resume and reset.")
+            helper_text("Connect and recover the controller. Jog and homing are in the left rail.")
             with ui.row().classes("gap-2"):
                 primary_action_button("CONNECT", lambda: ctx.check_fluidnc(scan=False))
                 safe_action_button("SCAN LAN", ctx.scan_fluidnc)

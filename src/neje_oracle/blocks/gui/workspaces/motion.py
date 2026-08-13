@@ -2,15 +2,15 @@
 
 Jog, homing, pen and work zero do not belong to a workspace. Bringing the machine up is
 one continuous job -- connect, home, set zero, mark, run -- and it used to be spread across
-four tabs, travelling 1 -> 1/2 -> 4 -> 3 -> 5, forward then backward then forward.
-RUNBOOK.md:474-491 documents the pen-calibration loop as ping-ponging between two of them.
+four tabs. These controls live in a rail visible from every screen (LightBurn's docked
+laser window, Mainsail's locked status panel, FluidNC's own ESP3D-WebUI all do the same;
+ISA-101 states the rule: displays organised by task, "not on P&IDs").
 
-So these controls leave the tab set entirely. Every machine UI that operators rate well
-does this -- LightBurn's docked laser window, OctoPrint's sidebar, Mainsail's locked status
-panel, and FluidNC's own ESP3D-WebUI, which puts homing, the position readout and per-axis
-zero in one panel inches apart. ISA-101 states the underlying rule: displays should be
-organised by task analysis, "not on P&IDs" -- and tabs named CONNECTION/CALIBRATION/TESTS
-are exactly this machine's P&ID.
+One home per action. SET WORK ZERO lives at the end of the jog flow -- it is literally the
+last step of jogging to the paper origin -- and START PRINT lives on the next-action button.
+The rail used to render SET WORK ZERO twice (its own card plus the next-action button
+whenever zero was unset), which meant the single most consequential rail control appeared
+as a pair of identical buttons two cards apart.
 """
 
 from __future__ import annotations
@@ -31,34 +31,30 @@ def render_machine_rail(ctx: GuiContext) -> None:
     """Machine control that never changes with navigation."""
     with ui.column().classes("machine-rail"):
         _next_action(ctx)
-        _jog(ctx)
-        _work_zero(ctx)
+        _jog_and_zero(ctx)
 
 
 def _next_action(ctx: GuiContext) -> None:
-    """The readiness state machine, promoted from a text box to the control it describes.
+    """The readiness state machine as a control.
 
-    context.refresh_status() has always computed both the blockers and the single next
-    action -- it just printed them into a metric tile and left the operator to go and find
-    the button somewhere in the tabs.
+    The button renders only when the next action's home is *this button* -- starting a
+    print. When the next step is setting work zero, the hint points at the SET WORK ZERO
+    control below instead of growing an identical twin of it; two buttons for one
+    irreversible machine action is how the wrong one gets pressed.
     """
 
     async def run() -> None:
-        key = ctx.next_action_key
-        if key == "work_zero":
-            ctx.set_work_zero()
-        elif key == "start_print":
+        if ctx.next_action_key == "start_print":
             await ctx.start_print()
-        else:
-            ui.notify("Nothing to do -- the sheet is drawing.", color="info")
 
     with ui.card().classes("oracle-card compact-card w-full"):
         section_title("Next action")
         ctx.next_action_button = primary_action_button("—", run).classes("w-full")
+        ctx.next_action_hint = helper_text("—")
         ctx.blockers_label = ui.label("blockers: —").classes("oracle-helper")
 
 
-def _jog(ctx: GuiContext) -> None:
+def _jog_and_zero(ctx: GuiContext) -> None:
     with ui.card().classes("oracle-card compact-card w-full"):
         section_title("Manual motion")
         helper_text("Blocked while G-code streams.")
@@ -97,11 +93,10 @@ def _jog(ctx: GuiContext) -> None:
         # Homing is routine setup, not a caution action; it used to carry the same gold as
         # STOP SYSTEM, so one colour meant both "do this next" and "halt" (audit F-022/F-026).
         safe_action_button("HOME ALL", ctx.home_xy).classes("w-full")
-
-
-def _work_zero(ctx: GuiContext) -> None:
-    with ui.card().classes("oracle-card compact-card w-full"):
-        section_title("Work zero")
-        helper_text("Fix paper, jog to the upper-left origin, lower Z and set pen contact, then confirm.")
-        danger_action_button("SET WORK ZERO", ctx.set_work_zero).classes("w-full")
+        # Zeroing concludes the jog flow: fix paper, jog to the upper-left origin, lower Z
+        # to pen contact, then confirm. It moves the machine's idea of where the sheet is,
+        # hence the danger treatment.
+        danger_action_button("SET WORK ZERO", ctx.set_work_zero).classes("w-full").tooltip(
+            "Fix paper, jog to the upper-left origin, lower Z and set pen contact, then confirm."
+        )
         ctx.ready_labels["message"] = ui.label("-").classes("oracle-helper path-label")

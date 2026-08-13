@@ -133,15 +133,27 @@ def test_work_workspace_builds_and_populates_thermal_queue_and_log_controls(monk
     assert ctx.logs_view is not None
 
 
-def test_exhibition_workspace_builds_minimal_live_print_controls(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_exhibition_workspace_is_readouts_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live print state carries no start button any more.
+
+    START PRINT used to exist twice -- here and on the rail's next-action button -- so the
+    single most consequential control had two homes and an operator had to know which one
+    was "real". The rail is the one home; this card only reports.
+    """
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
         exhibition.build(ctx)
 
-    assert ctx.start_print_button is not None
     assert {"sheet", "cells", "message"} <= ctx.plotter_labels.keys()
     assert ctx.progress is not None
+    rendered = {
+        str(text)
+        for element in ui.context.slot.parent.descendants()
+        for text in (getattr(element, "text", None), element._props.get("label"))
+        if text
+    }
+    assert not any("START PRINT" in t for t in rendered), "starting a run has exactly one home: the rail"
 
 
 def test_generative_workspace_builds_sketch_and_line_text_cards_without_raising(
@@ -559,11 +571,15 @@ def test_next_action_button_tracks_the_readiness_state_machine(monkeypatch: pyte
 
     ctx.refresh_status()
     assert ctx.next_action_key == "work_zero"
-    assert ctx.next_action_button.text == "SET WORK ZERO"
+    # No twin button: the rail already has SET WORK ZERO at the end of the jog flow, so the
+    # next-action slot points at it instead of duplicating it.
+    assert ctx.next_action_button.visible is False
+    assert "SET WORK ZERO" in ctx.next_action_hint.text
 
     _Readiness.work_zero_set = True
     ctx.refresh_status()
     assert ctx.next_action_key == "start_print"
+    assert ctx.next_action_button.visible is True
     assert ctx.next_action_button.text == "START PRINT"
 
 

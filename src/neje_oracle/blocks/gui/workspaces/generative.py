@@ -135,13 +135,13 @@ def build(ctx: GuiContext) -> None:
 
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Send to plotter").classes("text-sm font-bold")
-            origin_label = ui.label("Origin X/Y: — / — mm (set on TESTS tab)").classes("text-xs text-[#8f4f2b]")
+            origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
 
             def update_origin_label() -> None:
                 origin_x = ctx.fields.get("direct_svg_origin_x_mm")
                 origin_y = ctx.fields.get("direct_svg_origin_y_mm")
                 if origin_x is not None and origin_y is not None:
-                    origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on TESTS tab)")
+                    origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on SETUP)")
 
             client_timer(1.0, update_origin_label)
 
