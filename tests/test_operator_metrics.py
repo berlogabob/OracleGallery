@@ -49,7 +49,7 @@ WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
 COST_BLOCKS = 1  # reached target: one estimator call site, behind ui.render_card
 ESTIMATOR_IN_VIEW = 0
 MODULE_STATE_DICTS = 5  # -1: LATEST deleted; the browser no longer pushes SVG at us
-DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 1, "create": 8, "setup": 2}
+DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 8, "setup": 2}
 FIXED_HEIGHT_IFRAMES = 2  # generative sketch + texture nodes, each an embedded_page(height_px=...)
 DEAD_TAB_STRINGS = 0  # reached target: no operator-facing text names a deleted tab  # "Connection tab" in context.py; the other five markers are already gone
 
