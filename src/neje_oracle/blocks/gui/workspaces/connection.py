@@ -9,7 +9,6 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..ui import client_timer, helper_text, mini_metric, primary_action_button, safe_action_button
-from .motion import render_motion_panel
 
 
 def build(ctx: GuiContext) -> None:
@@ -43,7 +42,6 @@ def build(ctx: GuiContext) -> None:
                 ui.button("RESET / ABORT", on_click=ctx.soft_reset).props("dense color=negative")
 
         # Manual motion (shared card)
-        render_motion_panel(ctx)
 
         # Notes
         with ui.card().classes("oracle-card compact-card w-full"):

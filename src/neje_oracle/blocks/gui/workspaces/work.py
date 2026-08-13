@@ -55,14 +55,10 @@ def build(ctx: GuiContext) -> None:
             ).classes("path-label text-xs")
 
         with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Work zero").classes("text-sm font-bold")
-            helper_text(
-                "Before Set Zero: fix paper, jog to upper-left work origin, lower Z manually, set pen pressure/contact, then confirm. Software cannot verify pen pressure."
-            )
-            with ui.row().classes("gap-2"):
-                ui.button("SET WORK ZERO", on_click=ctx.set_work_zero).props("dense color=warning")
-            ctx.ready_labels["message"] = ui.label("-").classes("path-label text-xs")
-            ui.separator()
+            # SET WORK ZERO and its readiness line moved to the machine rail, next to the
+            # jog controls used to reach the origin in the first place. Zeroing lived here,
+            # two tabs from homing and one from the test print that follows it.
+            ui.label("System check").classes("text-sm font-bold")
             ctx.system_check_label = ui.label("System check runs automatically when print starts.").classes(
                 "text-xs text-[#8f4f2b]"
             )

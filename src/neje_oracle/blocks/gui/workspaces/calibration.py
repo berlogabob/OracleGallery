@@ -24,7 +24,6 @@ from ....shared.pen_profiles import (
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
 from ..ui import helper_text, mini_metric, number_control, primary_action_button
-from .motion import render_motion_panel
 
 
 def build(ctx: GuiContext) -> None:
@@ -117,7 +116,6 @@ def build(ctx: GuiContext) -> None:
 
     with ui.column().classes("workspace-scroll gap-2"):
         # Manual motion (shared card)
-        render_motion_panel(ctx)
 
         # Motion speed
         with ui.card().classes("oracle-card compact-card w-full"):
