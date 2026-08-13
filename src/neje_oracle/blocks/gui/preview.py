@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import random
 from base64 import b64encode
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -178,7 +178,8 @@ def build_realtime_preview_svg(
             symbol_root=symbol_root,
             scale_path=scale_path,
         )
-    return _build_live_preview_svg(settings, items)
+    frozen = _manifest_layout_settings(Path(str(status.get("latest_manifest") or "")), settings)
+    return _build_live_preview_svg(frozen, items)
 
 
 def build_symbol_preview_svg(
@@ -375,6 +376,41 @@ def _live_preview_items(settings: GuiSettings, status: dict[str, Any], queue: di
         if ghost is not None:
             live_items.append(ghost)
     return live_items
+
+
+# The layout knobs the daemon writes into every manifest. A sheet mid-print is laid out
+# once; these keys are what "once" means.
+_MANIFEST_LAYOUT_KEYS = (
+    "layout_mode",
+    "cell_diameter_mm",
+    "gap_mm",
+    "organic_enabled",
+    "organic_cell_size_mm",
+    "organic_rotation_ramp",
+    "organic_scale_ramp",
+    "organic_seed",
+)
+
+
+def _manifest_layout_settings(manifest_path: Path, settings: GuiSettings) -> GuiSettings:
+    """Current settings with the printing sheet's own layout geometry frozen back in.
+
+    The live preview used to lay out ghost cells and fallback placements from the sliders
+    as they are NOW: an operator who moved Cell diameter 60->80 mid-print watched 60 mm
+    manifest circles overlaid with 80 mm invented ones -- 22 circles for 11 items. Display
+    preferences (rings, markers, origins) stay current; geometry belongs to the manifest.
+    """
+    if not manifest_path.exists() or not manifest_path.is_file():
+        return settings
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return settings
+    frozen = replace(settings)
+    for key in _MANIFEST_LAYOUT_KEYS:
+        if key in payload:
+            setattr(frozen, key, payload[key])
+    return frozen
 
 
 def _manifest_preview_items(manifest_path: Path) -> list[dict[str, Any]]:

@@ -295,6 +295,11 @@ def effective_randomness(settings: GuiSettings) -> float:
 _NEUTRAL_RANDOMNESS = GUI_DEFAULTS["randomness"] * 0.5 + GUI_DEFAULTS["randomness_fine"]
 
 
+def layout_jitter_scale(settings: GuiSettings) -> float:
+    """The Random sliders as a multiplier on the shipped layout jitter (1.0 at defaults)."""
+    return effective_randomness(settings) / _NEUTRAL_RANDOMNESS
+
+
 def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfig:
     settings.apply_system_mode()
     plotter_settings = PlotterSettings()
@@ -311,7 +316,7 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
             organic_rotation_ramp=settings.organic_rotation_ramp,
             organic_scale_ramp=settings.organic_scale_ramp,
             organic_seed=settings.organic_seed,
-            layout_jitter_scale=effective_randomness(settings) / _NEUTRAL_RANDOMNESS,
+            layout_jitter_scale=layout_jitter_scale(settings),
             global_scale=settings.global_scale,
             run_mode=settings.run_mode,
             dry_run=settings.dry_run,
