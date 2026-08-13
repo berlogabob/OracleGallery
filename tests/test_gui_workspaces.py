@@ -587,19 +587,22 @@ def test_next_action_button_tracks_the_readiness_state_machine(monkeypatch: pyte
     assert ctx.next_action_button.text == "START PRINT"
 
 
-def test_run_profile_selector_sets_the_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The explicit control that replaces the tab coupling."""
+def test_run_profile_switch_sets_the_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One switch, one difference: OFF drops the Firebase requirement, ON restores it."""
     ctx = _new_ctx(monkeypatch)
     changed: list[object] = []
     monkeypatch.setattr(ctx, "set_system_mode", lambda mode, **k: changed.append(mode))
 
-    ctx.run_profile_changed(SystemMode.TEST.value)
+    ctx.run_profile_changed(False)
     assert changed == [SystemMode.TEST]
 
-    # Selecting the mode already in force is not a state change.
+    # Switching to the mode already in force is not a state change.
     ctx.settings.system_mode = SystemMode.TEST.value
-    ctx.run_profile_changed(SystemMode.TEST.value)
+    ctx.run_profile_changed(False)
     assert changed == [SystemMode.TEST]
+
+    ctx.run_profile_changed(True)
+    assert changed == [SystemMode.TEST, SystemMode.EXHIBITION]
 
 
 def _line_art_png(size: int = 600) -> bytes:

@@ -4,9 +4,11 @@ from dataclasses import dataclass
 
 from .models import PlotterControlState, PlotterRuntimeConfig, SystemMode
 
+# The two modes differ in exactly one thing, so the labels say that thing instead of
+# implying a safety difference that does not exist (both draw real ink).
 MODE_LABELS = {
-    SystemMode.TEST: "TEST",
-    SystemMode.EXHIBITION: "EXHIBITION",
+    SystemMode.TEST: "Firebase not required (local-only)",
+    SystemMode.EXHIBITION: "Firebase required",
 }
 
 
@@ -16,7 +18,6 @@ class ModePolicy:
     label: str
     run_mode: str
     dry_run: bool
-    test_tools_enabled: bool
     real_output_required: bool
     firebase_required: bool
 
@@ -29,7 +30,6 @@ def mode_policy(mode: SystemMode | str) -> ModePolicy:
             label=MODE_LABELS[resolved],
             run_mode="test",
             dry_run=False,
-            test_tools_enabled=True,
             real_output_required=True,
             firebase_required=False,
         )
@@ -38,7 +38,6 @@ def mode_policy(mode: SystemMode | str) -> ModePolicy:
         label=MODE_LABELS[resolved],
         run_mode="exhibition",
         dry_run=False,
-        test_tools_enabled=False,
         real_output_required=True,
         firebase_required=True,
     )
