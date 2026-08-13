@@ -164,24 +164,27 @@ def build_create(ctx: GuiContext) -> None:
 
         image_canvas, image_panel = pane("image")
         sheet_canvas, sheet_panel = pane("sheet")
+        motif_canvas, motif_panel = pane("motif")
         sections, handles = image.build_sections(
-            ctx, preview_slots={"image": image_canvas, "sheet": sheet_canvas}, actions=False
+            ctx,
+            preview_slots={"image": image_canvas, "sheet": sheet_canvas, "motif": motif_canvas},
+            actions=False,
+            # USE IN SKETCH lands the operator in front of the sketch whose bank just
+            # gained the motif -- the loop closes on screen instead of off-stage.
+            on_use_in_sketch=lambda: switch.set_value("sketch"),
         )
         sections["image"].move(image_panel)
         sections["sheet"].move(sheet_panel)
+        sections["motif"].move(motif_panel)
         strip["image"] = {"refresh": handles["image"].refresh, "print": handles["image"].print, "label": "PRINT IMAGE"}
         strip["sheet"] = {"refresh": handles["sheet"].refresh, "print": handles["sheet"].print, "label": "PRINT SHEET"}
+        strip["motif"] = {"refresh": handles["motif_refresh"]}
 
         canvas, panel = pane("text")
         with panel:
             text_handle = generative.build_text(ctx, preview_slot=canvas, actions=False)
         if text_handle is not None:
             strip["text"] = {"refresh": text_handle.refresh, "print": text_handle.print, "label": "PRINT TEXT"}
-
-        # ponytail: motif keeps its stacked card in a scrolling pane; D4 splits it into
-        # picture-as-canvas + knobs like the others.
-        panes["motif"] = ui.column().classes("create-pane create-pane-scroll w-full gap-2")
-        sections["motif"].move(panes["motif"])
 
         # The one print strip: every source that prints, prints here, exactly one way.
         def _active() -> dict:

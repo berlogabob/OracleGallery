@@ -333,7 +333,11 @@ def build(ctx: GuiContext) -> None:
 
 
 def build_sections(
-    ctx: GuiContext, preview_slots: dict[str, Any] | None = None, *, actions: bool = True
+    ctx: GuiContext,
+    preview_slots: dict[str, Any] | None = None,
+    *,
+    actions: bool = True,
+    on_use_in_sketch: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """The three image sources as separate columns the CREATE screen can place as panes.
 
@@ -728,7 +732,9 @@ def build_sections(
 
     sections["motif"] = ui.column().classes("w-full gap-2")
     with sections["motif"]:
-        _build_motif_import_card(ctx)
+        motif_refresh = _build_motif_import_card(
+            ctx, preview_slot=slots.get("motif"), on_use_in_sketch=on_use_in_sketch
+        )
 
     def _sheet_files() -> list[Path]:
         folder = Path(SHEET_STATE["folder"]).expanduser()
@@ -779,7 +785,11 @@ def build_sections(
 
     refresh_preview()
     refresh_sheet_capacity()
-    return sections, {"image": card_handle["handle"], "sheet": sheet_card_handle["handle"]}
+    return sections, {
+        "image": card_handle["handle"],
+        "sheet": sheet_card_handle["handle"],
+        "motif_refresh": motif_refresh,
+    }
 
 
 def motif_crop() -> CropBox:
@@ -807,12 +817,19 @@ def build_motif_svg() -> tuple[str, int, int]:
     return motif_svg(polylines), len(polylines), sum(len(p) for p in polylines)
 
 
-def _build_motif_import_card(ctx: GuiContext) -> None:
+def _build_motif_import_card(ctx: GuiContext, preview_slot: Any = None, on_use_in_sketch: Any = None) -> Any:
     """Picture -> cropped, traced, optimised motif -> assets/patterns/.
 
     Takes `ctx` only so its sticky knobs can register into ctx.fields; the crop box and the
-    motif name stay per-picture and are deliberately not registered.
+    motif name stay per-picture and are deliberately not registered. `preview_slot` puts the
+    traced result on the CREATE canvas; `on_use_in_sketch` is the screen's mode switch, so
+    the motif->bank->sketch loop closes on screen instead of off-stage. Returns the refresh
+    closure for the screen's shared strip.
     """
+    preview: Any = None
+    if preview_slot is not None:
+        with preview_slot:
+            preview = ui.html().classes("preview-frame preview-fill w-full")
     with ui.card().classes("oracle-card compact-card w-full"):
         ui.label("Import motif from picture").classes("text-sm font-bold")
         helper_text(
@@ -822,7 +839,8 @@ def _build_motif_import_card(ctx: GuiContext) -> None:
         )
         selected_label = ui.label("No picture selected").classes("path-label text-xs")
         status_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
-        preview = ui.html().classes("preview-frame w-full")
+        if preview is None:
+            preview = ui.html().classes("preview-frame w-full")
 
         def refresh() -> None:
             # Cleared up front, never only inside the handler: whatever goes wrong
@@ -984,17 +1002,17 @@ def _build_motif_import_card(ctx: GuiContext) -> None:
                 .classes("w-56")
             )
 
-            def save_motif() -> None:
+            def save_motif() -> bool:
                 if not MOTIF_STATE["svg"]:
                     refresh()
                 if not MOTIF_STATE["svg"]:
                     ui.notify("Nothing to save — check the preview first", color="warning")
-                    return
+                    return False
                 try:
                     target = bank.save_motif(str(MOTIF_STATE["motif_name"] or "motif"), str(MOTIF_STATE["svg"]))
                 except (ValueError, OSError) as exc:
                     ui.notify(f"Save failed: {exc}", color="negative")
-                    return
+                    return False
                 # The sketch fetches the bank once in setup(), so without this nudge the
                 # motif just saved stays invisible until the iframe is reloaded. Same
                 # channel the stream toggle uses (workspaces/generative.py).
@@ -1002,8 +1020,21 @@ def _build_motif_import_card(ctx: GuiContext) -> None:
                     "document.getElementById('generative-frame')?.contentWindow?.postMessage({type: 'bank'}, '*');"
                 )
                 ui.notify(f"Saved {target.name} to the pattern bank", color="positive")
+                return True
+
+            def use_in_sketch() -> None:
+                # Save, then jump to the sketch whose bank just gained the motif. The loop
+                # motif -> bank -> sketch used to close entirely off-stage.
+                if save_motif() and on_use_in_sketch is not None:
+                    on_use_in_sketch()
 
             primary_action_button("SAVE TO BANK", lambda: save_motif())
-            safe_action_button("REFRESH", lambda: refresh())
+            if on_use_in_sketch is not None:
+                safe_action_button("USE IN SKETCH", use_in_sketch)
+            if preview_slot is None:
+                # On the CREATE screen the shared strip owns REFRESH; standalone builds
+                # (tests) keep their own button.
+                safe_action_button("REFRESH", lambda: refresh())
 
         refresh()
+        return refresh
