@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 
-from ...shared.gui_settings import GuiSettings
+from ...shared.gui_settings import GuiSettings, layout_jitter_scale
 from ...shared.models import SheetPlacement
 
 
@@ -261,6 +261,9 @@ def _build_layout_for_settings(settings: GuiSettings, count: int) -> list[SheetP
         organic_rotation_ramp=settings.organic_rotation_ramp,
         organic_scale_ramp=settings.organic_scale_ramp,
         organic_seed=settings.organic_seed,
+        # The same multiplier the daemon receives via PlotterRuntimeConfig: without it the
+        # preview would scatter at the shipped jitter while the paper follows the sliders.
+        organic_jitter_scale=layout_jitter_scale(settings),
     )
 
 

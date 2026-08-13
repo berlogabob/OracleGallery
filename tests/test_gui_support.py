@@ -407,6 +407,50 @@ def test_realtime_preview_frame_contains_oversized_manifest_geometry(tmp_path: P
     assert height >= (400.0 + 40.0) * PREVIEW_PX_PER_MM
 
 
+def test_live_preview_freezes_the_manifest_geometry(tmp_path: Path) -> None:
+    """A sheet mid-print keeps its own layout: moving Cell diameter 60->80 during a run must
+    not invent 80 mm ghost cells over the 60 mm circles the machine is actually drawing."""
+    root = _symbol_root(tmp_path)
+    manifest = tmp_path / "spool" / "sheet.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "layout_mode": "grid",
+                "cell_diameter_mm": 60.0,
+                "gap_mm": 5.0,
+                "organic_enabled": False,
+                "items": [
+                    {
+                        "session_id": "done",
+                        "source_kind": "user",
+                        "origin": "real_macmini",
+                        "svg_path": str(root / "symbol_0.svg"),
+                        "sheet_index": 0,
+                        # No frozen coordinates: the fallback placement must come from the
+                        # manifest's 60 mm grid, not the sliders' current 80 mm one.
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = GuiSettings(sheet_width_mm=300, sheet_height_mm=220, cell_diameter_mm=80.0, layout_mode="grid")
+    status = {
+        "latest_manifest": str(manifest),
+        "status": RuntimeStatus.PRINTING.value,
+        "cells_completed": 0,
+        "current_cell_in_row": 1,
+    }
+
+    preview = build_realtime_preview_svg(settings, status, {"pendingAfterBaseline": 0})
+
+    # The drawing cell renders at the manifest's 60 mm diameter (r = 30 mm * scale)...
+    assert f'r="{30.0 * PREVIEW_PX_PER_MM:.2f}"' in preview
+    # ...and no cell renders at the current sliders' 80 mm.
+    assert f'r="{40.0 * PREVIEW_PX_PER_MM:.2f}"' not in preview
+
+
 def test_realtime_preview_uses_queue_before_filler_for_unmaterialized_next(tmp_path: Path) -> None:
     root = _symbol_root(tmp_path)
     manifest = tmp_path / "spool" / "sheet.json"
