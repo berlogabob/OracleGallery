@@ -30,15 +30,20 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # -2 classes, -1 hex, -1 card: the generative workspace's hand-styled iframe became
 # ui.embedded_page, which the new texture workspace composes too rather than restyling.
 #
+# -6 classes, -1 hex, -1 card: the image workspace's Conversion card became one
+# ui.render_card call, and the generative workspace lost the capture readout with the buffer.
+# ui.py is a STYLE_OWNER, so what a workspace hands it leaves these counts entirely rather
+# than moving behind them -- which is the whole reason the helper lives there.
+#
 # -10 buttons: the machine rail routes jog, homing, pen and work zero through the three
 # action helpers, so the four bare-text controls the audit raised (F-007, F-023) now carry
 # the same chrome as the buttons beside them. +8 classes and +2 cards is new surface --
 # the rail, and the status bar's state chip / position readout / e-stop gap -- not
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
-MAX_RAW_CLASSES = 232
-MAX_RAW_HEX = 46
-MAX_RAW_CARDS = 29
+MAX_RAW_CLASSES = 226
+MAX_RAW_HEX = 45
+MAX_RAW_CARDS = 28
 MAX_RAW_BUTTONS = 9
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b")

@@ -32,11 +32,11 @@ WEB = REPO / "echodraw" / "generative-core" / "web"
 
 # --- the trackables -------------------------------------------------------------
 SCREENS = 7
-PRINT_ENTRY_POINTS = 7
+PRINT_ENTRY_POINTS = 5  # -2: print_generative_svg deleted, and image conversion now prints via render_card
 WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
-COST_BLOCKS = 3
+COST_BLOCKS = 2  # -1: image conversion costs through the shared helper now
 ESTIMATOR_IN_VIEW = 0
-MODULE_STATE_DICTS = 6
+MODULE_STATE_DICTS = 5  # -1: LATEST deleted; the browser no longer pushes SVG at us
 
 _TAB = re.compile(r"ui\.tab\(")
 _PRINT_CALL = re.compile(r"print_svg_payload|print_generative_svg|print_uploaded_svg|print_svg\(")

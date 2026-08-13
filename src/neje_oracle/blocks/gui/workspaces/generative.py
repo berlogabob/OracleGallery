@@ -17,35 +17,17 @@ from ..context import GuiContext
 from ..support import load_gui_settings
 from ..ui import client_timer, helper_text, primary_action_button
 
-LATEST: dict = {"name": "", "bytes": b""}
 STREAM: dict = {"enabled": False, "busy": False}
 _ROUTES_REGISTERED = False
 
 
-def should_send_frame(stream: dict, latest: dict) -> bool:
-    """Whether the stream tick should hand the current LATEST frame to the plotter."""
-    return stream["enabled"] and not stream["busy"] and bool(latest["bytes"])
+def should_send_frame(stream: dict) -> bool:
+    """Whether the stream tick should pull a frame and plot it.
 
-
-async def _handle_generative_svg(request: Request) -> JSONResponse:
-    """Handle SVG upload from generative sketch."""
-    body = await request.body()
-
-    if not body:
-        return JSONResponse({"ok": False, "error": "Empty request body"}, status_code=400)
-
-    if len(body) > 2_000_000:
-        return JSONResponse({"ok": False, "error": "File too large (max 2MB)"}, status_code=400)
-
-    # Check if it's a valid SVG
-    trimmed = body.lstrip()
-    if not trimmed.startswith(b"<svg") and not trimmed.startswith(b"<?xml"):
-        return JSONResponse({"ok": False, "error": "Not a valid SVG file"}, status_code=400)
-
-    LATEST["name"] = f"generative_{time.strftime('%Y%m%d_%H%M%S')}.svg"
-    LATEST["bytes"] = body
-
-    return JSONResponse({"ok": True, "name": LATEST["name"]})
+    It used to also require bytes in a shared capture buffer. That buffer is gone: the
+    browser no longer pushes SVG at us, so there is nothing to check but our own state.
+    """
+    return bool(stream["enabled"]) and not bool(stream["busy"])
 
 
 async def _handle_text_fonts(request: Request) -> JSONResponse:
@@ -120,11 +102,29 @@ def register_routes() -> None:
     if _ROUTES_REGISTERED:
         return
 
-    app.add_api_route("/api/generative/svg", _handle_generative_svg, methods=["POST"])
     app.add_api_route("/api/text/fonts", _handle_text_fonts, methods=["GET"])
     app.add_api_route("/api/text/paths", _handle_text_paths, methods=["GET"])
     app.add_api_route("/api/patterns/bank", _handle_pattern_bank, methods=["GET"])
     _ROUTES_REGISTERED = True
+
+
+async def current_sketch_svg() -> bytes:
+    """Read the frame the sketch has on screen, via the contract it exposes.
+
+    The sketch used to POST its SVG into a process-global slot that the node editor also
+    wrote to, so a texture could be plotted by the sketch's timer. Pulling on demand means
+    there is one producer and no slot to confuse.
+    """
+    try:
+        svg = await ui.run_javascript(
+            "document.getElementById('generative-frame')?.contentWindow?.currentSvg?.() ?? ''",
+            timeout=5.0,
+        )
+    except Exception as exc:  # noqa: BLE001 - no client, no iframe yet, or the call timed out
+        raise ValueError("Could not read the sketch. Open the generative screen and let it draw.") from exc
+    if not svg:
+        raise ValueError("The sketch has not drawn a frame yet.")
+    return str(svg).encode("utf-8")
 
 
 def build(ctx: GuiContext) -> None:
@@ -137,22 +137,28 @@ def build(ctx: GuiContext) -> None:
             ui.label("Send to plotter").classes("text-sm font-bold")
             origin_label = ui.label("Origin X/Y: — / — mm (set on TESTS tab)").classes("text-xs text-[#8f4f2b]")
 
-            captured_label = ui.label("No capture yet").classes("path-label text-xs")
-
-            def update_capture_label() -> None:
-                if LATEST["name"]:
-                    captured_label.set_text(f"Captured: {LATEST['name']}")
-                else:
-                    captured_label.set_text("No capture yet")
+            def update_origin_label() -> None:
                 origin_x = ctx.fields.get("direct_svg_origin_x_mm")
                 origin_y = ctx.fields.get("direct_svg_origin_y_mm")
                 if origin_x is not None and origin_y is not None:
                     origin_label.set_text(f"Origin X/Y: {origin_x.value} / {origin_y.value} mm (set on TESTS tab)")
 
-            client_timer(1.0, update_capture_label)
+            client_timer(1.0, update_origin_label)
+
+            async def print_sketch(quiet: bool = False) -> None:
+                # "Capture" is gone as a concept: there is nothing to capture into. The button
+                # reads the frame that is on screen right now, which is what an operator
+                # pressing PRINT expects it to mean.
+                try:
+                    svg_bytes = await current_sketch_svg()
+                except ValueError as exc:
+                    if not quiet:
+                        ui.notify(str(exc), color="warning")
+                    return
+                await ctx.print_svg_payload(svg_bytes, f"generative_{time.strftime('%Y%m%d_%H%M%S')}.svg")
 
             with ui.row().classes("items-center gap-2"):
-                primary_action_button("PRINT CAPTURED SVG", lambda: ctx.print_generative_svg())
+                primary_action_button("PRINT SKETCH", print_sketch)
 
             def push_stream_state() -> None:
                 seconds = max(5, float(stream_interval.value or GUI_DEFAULTS["stream_interval_seconds"]))
@@ -208,13 +214,14 @@ def build(ctx: GuiContext) -> None:
             client_timer(2.0, push_stream_state, once=True)
 
             async def _stream_tick() -> None:
-                if not should_send_frame(STREAM, LATEST):
+                if not should_send_frame(STREAM):
                     return
                 STREAM["busy"] = True
                 try:
-                    await ctx.print_generative_svg(
-                        quiet=True
-                    )  # pops LATEST on success; blocks (io_bound) while plotting
+                    # quiet=True matters here: with no browser attached the pull raises, and
+                    # this runs every 3 seconds forever on an unattended machine. A toast per
+                    # tick would bury the log the run is judged by.
+                    await print_sketch(quiet=True)  # blocks (io_bound) while plotting
                 finally:
                     STREAM["busy"] = False
 
