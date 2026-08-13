@@ -193,30 +193,35 @@ def test_texture_workspace_builds_and_renders_a_shipped_preset(monkeypatch: pyte
 
 def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypatch: pytest.MonkeyPatch) -> None:
     """build() unconditionally calls the module's refresh_preview() once at the end;
-    pre-seeding STATE with real image bytes before build() makes that call exercise
-    the actual image -> polylines -> svg pipeline, not just the empty-state branch.
+    pre-seeding the image bytes before build() makes that call exercise the actual
+    image -> polylines -> svg pipeline, not just the empty-state branch.
+
+    The conversion knobs are set on ctx.settings rather than on STATE, because build() now
+    seeds STATE from settings first -- which is the restore-after-restart path, exercised here
+    as a side effect: what lands in the preview is what the operator last chose.
     """
     buffer = io.BytesIO()
     Image.new("RGB", (40, 40), color=(120, 120, 120)).save(buffer, format="PNG")
-    image_workspace.STATE.update(
-        {
-            "name": "swatch.png",
-            "bytes": buffer.getvalue(),
-            "mode": "halftone",
-            "width_mm": 40.0,
-            "height_mm": 40.0,
-            "cell_mm": 5.0,
-            "gamma": 1.0,
-            "invert": False,
-            "detail": 1.0,
-        }
-    )
     ctx = _new_ctx(monkeypatch)
+    ctx.settings.image_mode = "halftone"
+    ctx.settings.image_width_mm = 40.0
+    ctx.settings.image_height_mm = 40.0
+    ctx.settings.image_cell_mm = 5.0
 
-    with ui.column():
-        image_workspace.build(ctx)
+    previous = dict(image_workspace.STATE)
+    try:
+        # Only the per-picture keys, which are exactly the ones build() must NOT overwrite.
+        image_workspace.STATE.update({"name": "swatch.png", "bytes": buffer.getvalue()})
+        with ui.column():
+            image_workspace.build(ctx)
 
-    assert "<svg" in image_workspace.STATE["svg"]
+        assert "<svg" in image_workspace.STATE["svg"]
+        assert image_workspace.STATE["mode"] == "halftone", "sticky knobs must restore from settings"
+    finally:
+        # Module-level state shared with every other test in this file: leaving 40 mm of
+        # halftone behind would silently change what the round-trip test renders.
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
 
 
 def test_motif_import_card_traces_a_real_preview(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -268,7 +273,11 @@ def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.Mo
     with ui.column():
         # The whole page: pull_settings_from_fields reads controls from several tabs at
         # once (the direct-SVG origin lives on TESTS, the feeds on CALIBRATION).
-        for workspace in (connection, calibration, tests_workspace, work, exhibition):
+        #
+        # IMAGE is in the list because it was not: its twenty-odd knobs lived in module
+        # dicts, reached no persistence layer, and this test never built the workspace, so
+        # the whole class of bug was invisible to the one test written to catch it.
+        for workspace in (connection, calibration, tests_workspace, work, exhibition, image_workspace):
             workspace.build(ctx)
 
     # Probe per declared type: an int field is pulled through int(), so a fractional

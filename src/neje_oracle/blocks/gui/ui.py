@@ -223,6 +223,9 @@ class RenderCard:
         # The preview element is exposed so a test can prove the screen-only travel overlay
         # never leaks into `svg`. That leak would put pen-up hairlines on the paper.
         self.preview: Any = None
+        # And the travel switch, so a workspace can persist the operator's choice. Without
+        # this the helper could restore the setting but never observe a change to it.
+        self.travel: Any = None
         self._refresh: Callable[[], None] = lambda: None
         self._print: Callable[[], Any] = lambda: None
 
@@ -337,6 +340,7 @@ def render_card(
             primary_action_button(button_label, do_print)
 
     handle.preview = preview
+    handle.travel = travel
     handle._refresh = refresh
     handle._print = do_print
     return handle
