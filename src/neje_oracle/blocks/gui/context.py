@@ -441,10 +441,11 @@ class GuiContext:
             blockers.append("FluidNC")
         if not print_enabled:
             blockers.append("print paused")
-        if self.run_profile_select is not None and self.run_profile_select.value != self.settings.system_mode:
-            # START TEST PRINT switches the profile on the operator's behalf; the selector
+        require_firebase = self.settings.system_mode == SystemMode.EXHIBITION.value
+        if self.run_profile_select is not None and self.run_profile_select.value != require_firebase:
+            # START TEST PRINT drops the requirement on the operator's behalf; the switch
             # is the only place that says so, so it has to follow.
-            self.run_profile_select.value = self.settings.system_mode
+            self.run_profile_select.value = require_firebase
         # Computed whether or not anything is rendered: the machine rail's primary button
         # reads it, and the rail exists independently of the live strip.
         if not readiness.work_zero_set:
@@ -549,12 +550,12 @@ class GuiContext:
         self._save_settings()
         self.supervisor.set_system_mode(self.settings.mode)
         if notify:
-            ui.notify(f"Mode set to {mode_policy(self.settings.mode).label}.", color="warning")
+            ui.notify(f"Run profile: {mode_policy(self.settings.mode).label}.", color="warning")
         self.refresh_status()
 
     def run_profile_changed(self, value: Any) -> None:
-        """The operator's explicit choice of run profile, replacing the tab-name coupling."""
-        mode = SystemMode(str(value))
+        """One switch, one difference: whether a run requires the Firebase queue."""
+        mode = SystemMode.EXHIBITION if bool(value) else SystemMode.TEST
         if mode != self.settings.mode:
             self.set_system_mode(mode)
 

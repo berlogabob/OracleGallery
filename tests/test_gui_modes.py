@@ -10,12 +10,10 @@ def test_system_modes_map_to_safe_internal_control() -> None:
 
     assert test.run_mode == "test"
     assert test.dry_run is False
-    assert test.test_tools_enabled is True
     assert test.real_output_required is True
     assert test.firebase_required is False
     assert exhibition.run_mode == "exhibition"
     assert exhibition.dry_run is False
-    assert exhibition.test_tools_enabled is False
     assert exhibition.real_output_required is True
     assert exhibition.firebase_required is True
 

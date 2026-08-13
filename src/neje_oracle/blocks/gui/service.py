@@ -9,7 +9,7 @@ from nicegui import ui
 from ...shared.models import SystemMode
 from . import screens, tokens
 from .context import GuiContext
-from .ui import client_timer, select
+from .ui import client_timer
 from .workspaces import generative, motion, texture
 
 PAGE_STYLE = """
@@ -227,13 +227,14 @@ def build_page() -> None:
             # rail's blockers line already names anything unmet, the sheet id lives on
             # PRINT where the sheet is, and context guards `if self.live_labels:` so the
             # unregistered keys are skipped, not broken.
-            # The run profile is an operator decision, not a side effect of navigation.
-            ctx.run_profile_select = select(
-                {SystemMode.TEST.value: "TEST", SystemMode.EXHIBITION.value: "EXHIBITION"},
-                value=ctx.settings.system_mode,
-                label="Run profile",
+            # TEST and EXHIBITION differed in exactly one thing: whether a run requires the
+            # Firebase queue. Both drew real ink, so a mode literally named TEST was the more
+            # dangerous one. The one difference is now the one control.
+            ctx.run_profile_select = ui.switch(
+                "Require Firebase",
+                value=ctx.settings.system_mode == SystemMode.EXHIBITION.value,
                 on_change=lambda event: ctx.run_profile_changed(event.value),
-            )
+            ).tooltip("ON: a run must have the Firebase queue (exhibition). OFF: local-only verification prints.")
             ui.element("div").classes("status-spacer")
             ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
             ui.element("div").classes("estop-gap")
