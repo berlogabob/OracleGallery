@@ -961,9 +961,9 @@ function regenerateAll() {
     const genFn = GENERATORS[layer.generator] || GENERATORS.circles;
     let layerShapes = genFn(rng, { density: layer.density, scale: layer.scale, mix: layer.mix });
 
-    // Synchronous by contract: applyField reads FIELD_CACHE and never awaits. startStreaming calls
-    // regenerateAll() then immediately prints currentSvgString, so one promise here would put a
-    // half-built frame on paper.
+    // Synchronous by contract: applyField reads FIELD_CACHE and never awaits. regenerateAll() must
+    // leave currentSvgString complete before it returns, because the operator GUI can read
+    // window.currentSvg() at any moment; one promise here would hand it a half-built frame.
     if (layer.field && layer.field.name) {
       layerShapes = applyField(layerShapes, layer.field, rng);
     }
@@ -1006,7 +1006,7 @@ function regenerateAll() {
 // Texture fields: a saved node graph (blocks/imaging/texture.py) sampled per shape.
 //
 // Same shape as the text cache below and for the same reason: regenerateAll() must stay
-// synchronous, because startStreaming calls it and immediately reads currentSvgString to print.
+// synchronous, so currentSvgString is always a whole frame when window.currentSvg() is read.
 // One noise implementation lives in Python; this is the second consumer of it.
 // ============================================================================
 const FIELD_CACHE = {};
@@ -1339,8 +1339,6 @@ function setup() {
     redraw();
   });
 
-  document.getElementById('send-btn').addEventListener('click', sendToPlotter);
-
   document.getElementById('add-layer-btn').addEventListener('click', () => {
     if (layers.length < MAX_LAYERS) {
       layers.push(newLayer());
@@ -1376,33 +1374,10 @@ function draw() {
 }
 
 // ============================================================================
-// Send to plotter
+// Stream mode: regenerate on a repeating interval
 // ============================================================================
-function sendToPlotter() {
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Sending...';
-
-  fetch('/api/generative/svg', {
-    method: 'POST',
-    headers: { 'Content-Type': 'image/svg+xml' },
-    body: currentSvgString
-  })
-    .then(r => r.json())
-    .then(d => {
-      if (d.ok) {
-        statusEl.textContent = `Sent: ${d.name}`;
-      } else {
-        statusEl.textContent = `Error: ${d.error}`;
-      }
-    })
-    .catch(e => {
-      statusEl.textContent = 'Send failed: ' + e.message;
-    });
-}
-
-// ============================================================================
-// Stream mode: regenerate + send on a repeating interval
-// ============================================================================
+// The sketch only draws. Printing is the operator GUI's job: it pulls the frame
+// it wants through window.currentSvg() below, so nothing is sent from here.
 function startStreaming(seconds) {
   stopStreaming(); // clear any existing interval first
 
@@ -1412,7 +1387,6 @@ function startStreaming(seconds) {
     currentSeed = Math.floor(Math.random() * 1000000);
     regenerateAll();
     redraw();
-    sendToPlotter();
   }, seconds * 1000);
 }
 
@@ -1448,8 +1422,11 @@ window.addEventListener('message', (event) => {
 });
 
 // ============================================================================
-// Debug: expose current SVG
+// The interface the operator GUI reads
 // ============================================================================
+// This is the contract, not a debug hook: the Python GUI evaluates
+// window.currentSvg() to pull the frame currently on screen when the operator
+// asks to print. Renaming or removing it breaks printing from the sketch.
 window.currentSvg = function() {
   return currentSvgString;
 };

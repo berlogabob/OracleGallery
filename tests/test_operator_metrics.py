@@ -33,7 +33,7 @@ WEB = REPO / "echodraw" / "generative-core" / "web"
 # --- the trackables -------------------------------------------------------------
 SCREENS = 7
 PRINT_ENTRY_POINTS = 7
-WEB_SEND_BUTTONS = 2
+WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
 COST_BLOCKS = 3
 ESTIMATOR_IN_VIEW = 0
 MODULE_STATE_DICTS = 6
