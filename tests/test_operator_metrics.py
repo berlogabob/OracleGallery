@@ -44,9 +44,9 @@ WEB = REPO / "echodraw" / "generative-core" / "web"
 
 # --- the trackables -------------------------------------------------------------
 SCREENS = 3  # reached target: PRINT / CREATE / SETUP
-PRINT_ENTRY_POINTS = 4  # -3: the capture buffer, image conversion and texture all print through render_card
+PRINT_ENTRY_POINTS = 2  # -2 more: line text and the frame sheet now print through render_card
 WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
-COST_BLOCKS = 1  # reached target: one estimator call site, behind ui.render_card
+COST_BLOCKS = 0  # target passed: every estimator lives inside ui.render_card, zero hand-rolled cost blocks
 ESTIMATOR_IN_VIEW = 0
 MODULE_STATE_DICTS = 5  # -1: LATEST deleted; the browser no longer pushes SVG at us
 DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 8, "setup": 2}

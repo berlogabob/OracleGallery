@@ -14,7 +14,6 @@ from ....blocks.imaging.modes import (
     PEN_WIDTH_MM_DEFAULT,
     image_to_polylines,
     polylines_to_svg,
-    travel_length_mm,
     travel_preview_svg,
 )
 from ....blocks.imaging.sheet import SHAPES, frame_grid_capacity, images_to_sheet_polylines
@@ -24,7 +23,7 @@ from ....blocks.patterns.ingest import CropBox, image_to_motif_polylines, motif_
 from ....shared.gui_settings import GuiSettings
 from .. import ui as oracle
 from ..context import GuiContext
-from ..support import plot_minutes_for, read_upload_event_payload
+from ..support import read_upload_event_payload
 from ..ui import helper_text, primary_action_button, safe_action_button
 
 # These dicts are still the workspace's working state, but the tune-once knobs are no longer
@@ -343,6 +342,13 @@ def build(ctx: GuiContext) -> None:
         if handle is not None:
             handle.refresh()
 
+    # Same shape for the frame sheet: sheet_controls() builds the knobs and the capacity
+    # label, render_sheet() builds the geometry, and render_card wires them together. The
+    # capacity label and the card handle live here because refresh_sheet_capacity (below,
+    # called by every knob) needs both before/after the card exists.
+    sheet_info: Any = None
+    sheet_card_handle: dict[str, Any] = {}
+
     with ui.column().classes("w-full gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Image to line art").classes("text-sm font-bold")
@@ -562,16 +568,12 @@ def build(ctx: GuiContext) -> None:
         # never recorded when the operator changed it.
         ctx.fields["image_show_travel"] = conversion.travel
 
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Frame sheet").classes("text-sm font-bold")
-            helper_text(
-                "Fill one sheet from a folder, using the mode and tone settings above. "
-                "Set the cell to your wooden frame's aperture; gap 0 butts the cells so one cut serves two prints."
-            )
+        def set_sheet(key: str, value: Any) -> None:
+            SHEET_STATE[key] = value
+            refresh_sheet_capacity()
 
-            def set_sheet(key: str, value: Any) -> None:
-                SHEET_STATE[key] = value
-                refresh_sheet_capacity()
+        def sheet_controls() -> None:
+            nonlocal sheet_info
 
             ui.input(
                 "Image folder",
@@ -648,12 +650,57 @@ def build(ctx: GuiContext) -> None:
                 ).props("dense outlined").classes("w-24").tooltip("0 = first sheet of the folder, 1 = next, ...")
 
             sheet_info = ui.label("-").classes("text-xs text-[#8f4f2b]")
-            sheet_cost = ui.label("").classes("text-xs text-[#8f4f2b]")
-            sheet_preview = ui.html().classes("preview-frame w-full")
 
-            with ui.row().classes("items-center gap-2"):
-                safe_action_button("BUILD SHEET", lambda: build_sheet())
-                primary_action_button("PRINT SHEET", lambda: print_sheet())
+        def render_sheet() -> oracle.Render:
+            capacity = _sheet_capacity()
+            files = _sheet_files()
+            if capacity <= 0 or not files:
+                raise ValueError("Set a folder and a cell size that fits the sheet first")
+            start = int(SHEET_STATE["sheet_index"]) * capacity
+            batch = files[start : start + capacity]
+            if not batch:
+                raise ValueError(f"Sheet {SHEET_STATE['sheet_index']} is past the end of the folder")
+            polylines, _placed = images_to_sheet_polylines(
+                [path.read_bytes() for path in batch],
+                sheet_width_mm=ctx.settings.sheet_width_mm,
+                sheet_height_mm=ctx.settings.sheet_height_mm,
+                margin_mm=ctx.settings.sheet_margin_mm,
+                cell_width_mm=float(SHEET_STATE["cell_w"]),
+                cell_height_mm=float(SHEET_STATE["cell_h"]),
+                gap_mm=float(SHEET_STATE["gap"]),
+                padding_mm=float(SHEET_STATE["padding"]),
+                shape=str(SHEET_STATE["shape"]),
+                mode=str(STATE["mode"]),
+                cell_mm=float(STATE["cell_mm"]),
+                **({"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}),
+                gamma=float(STATE["gamma"]),
+                invert=bool(STATE["invert"]),
+                max_segments=quality_max_segments(str(STATE["quality"])),
+                min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
+                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
+            )
+            stem = Path(SHEET_STATE["folder"]).name or "sheet"
+            return oracle.Render(
+                polylines=polylines,
+                width_mm=ctx.settings.sheet_width_mm,
+                height_mm=ctx.settings.sheet_height_mm,
+                name=f"{stem}_sheet{int(SHEET_STATE['sheet_index'])}",
+            )
+
+        sheet_card_handle["handle"] = oracle.render_card(
+            ctx,
+            title="Frame sheet",
+            helper=(
+                "Fill one sheet from a folder, using the mode and tone settings above. "
+                "Set the cell to your wooden frame's aperture; gap 0 butts the cells so one cut serves two prints."
+            ),
+            controls=sheet_controls,
+            render=render_sheet,
+            button_label="PRINT SHEET",
+            # tests/test_gui_workspaces.py and anything else that knows this module by its
+            # state dicts read the printable sheet back off SHEET_STATE.
+            on_render=lambda svg: SHEET_STATE.__setitem__("svg", svg),
+        )
 
         _build_motif_import_card(ctx)
 
@@ -674,9 +721,17 @@ def build(ctx: GuiContext) -> None:
         )
 
     def refresh_sheet_capacity() -> None:
+        # A knob change invalidates the built sheet, exactly as the old BUILD SHEET flow
+        # did: PRINT SHEET must re-render with the current knobs, never send the geometry
+        # of the previous ones.
         SHEET_STATE["svg"] = ""
-        sheet_preview.content = ""
-        sheet_cost.set_text("")
+        handle = sheet_card_handle.get("handle")
+        if handle is not None:
+            handle.svg = ""
+            handle.preview.content = ""
+            handle.preview.update()
+        if sheet_info is None:
+            return
         capacity = _sheet_capacity()
         sheet = ctx.settings
         if capacity <= 0:
@@ -694,85 +749,6 @@ def build(ctx: GuiContext) -> None:
         sheet_info.set_text(
             f"{len(files)} images, {capacity} per sheet -> {total_sheets} sheets. "
             f"Showing sheet {index + 1} of {total_sheets}."
-        )
-
-    def build_sheet() -> None:
-        capacity = _sheet_capacity()
-        files = _sheet_files()
-        if capacity <= 0 or not files:
-            refresh_sheet_capacity()
-            ui.notify("Set a folder and a cell size that fits the sheet first", color="warning")
-            return
-        start = int(SHEET_STATE["sheet_index"]) * capacity
-        batch = files[start : start + capacity]
-        if not batch:
-            ui.notify(f"Sheet {SHEET_STATE['sheet_index']} is past the end of the folder", color="warning")
-            return
-        try:
-            polylines, placed = images_to_sheet_polylines(
-                [path.read_bytes() for path in batch],
-                sheet_width_mm=ctx.settings.sheet_width_mm,
-                sheet_height_mm=ctx.settings.sheet_height_mm,
-                margin_mm=ctx.settings.sheet_margin_mm,
-                cell_width_mm=float(SHEET_STATE["cell_w"]),
-                cell_height_mm=float(SHEET_STATE["cell_h"]),
-                gap_mm=float(SHEET_STATE["gap"]),
-                padding_mm=float(SHEET_STATE["padding"]),
-                shape=str(SHEET_STATE["shape"]),
-                mode=str(STATE["mode"]),
-                cell_mm=float(STATE["cell_mm"]),
-                **({"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}),
-                gamma=float(STATE["gamma"]),
-                invert=bool(STATE["invert"]),
-                max_segments=quality_max_segments(str(STATE["quality"])),
-                min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
-                **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
-            )
-        except (ValueError, OSError) as exc:
-            SHEET_STATE["svg"] = ""
-            sheet_preview.content = ""
-            sheet_cost.set_text(str(exc))
-            ui.notify(str(exc), color="warning")
-            return
-        svg = polylines_to_svg(
-            polylines,
-            width_mm=ctx.settings.sheet_width_mm,
-            height_mm=ctx.settings.sheet_height_mm,
-            pen_width_mm=ctx.settings.pen_width_mm,
-        )
-        SHEET_STATE["svg"] = svg
-        # The plotter gets `svg`; the operator sees the travel overlay on top of it.
-        sheet_preview.content = preview_svg(
-            polylines,
-            width_mm=ctx.settings.sheet_width_mm,
-            height_mm=ctx.settings.sheet_height_mm,
-        )
-        sheet_preview.update()
-        draw_mm, travel_mm = travel_length_mm(polylines)
-        xy_minutes, pen_minutes = plot_minutes_for(
-            ctx.settings,
-            strokes=len(polylines),
-            draw_mm=draw_mm,
-            travel_mm=travel_mm,
-            use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
-        )
-        total = xy_minutes + pen_minutes
-        sheet_cost.set_text(
-            f"{placed} images, {len(polylines)} strokes, ~{total:.0f} min "
-            f"({xy_minutes:.0f} min moving + {pen_minutes:.0f} min pen lifts), "
-            f"~{total / max(placed, 1):.0f} min per image"
-        )
-
-    async def print_sheet() -> None:
-        if not SHEET_STATE["svg"]:
-            build_sheet()
-        if not SHEET_STATE["svg"]:
-            ui.notify("Build the sheet first", color="warning")
-            return
-        stem = Path(SHEET_STATE["folder"]).name or "sheet"
-        await ctx.print_svg_payload(
-            SHEET_STATE["svg"].encode("utf-8"),
-            f"{stem}_sheet{int(SHEET_STATE['sheet_index'])}.svg",
         )
 
     refresh_preview()
@@ -876,93 +852,99 @@ def _build_motif_import_card(ctx: GuiContext) -> None:
             "accept=.png,.jpg,.jpeg,.bmp,.webp,.gif max-files=1 auto-upload max-file-size=20971520"
         ).classes("w-full")
 
-        with ui.row().classes("gap-2 w-full items-center"):
-            for key, label in (
-                ("crop_left", "Crop L %"),
-                ("crop_top", "Crop T %"),
-                ("crop_width", "Crop W %"),
-                ("crop_height", "Crop H %"),
-            ):
-                ui.number(
-                    label,
-                    value=MOTIF_STATE[key],
-                    min=0,
-                    max=100,
-                    step=1,
-                    on_change=lambda e, k=key: set_motif(k, float(e.value or 0.0)),
-                ).props("dense outlined").classes("w-28")
+        # The knobs as one (controls, render)-shaped building block, same as the sheet and
+        # conversion cards. The uploader and the name/save strip stay outside: the uploader
+        # feeds the knobs, and the name belongs to the SAVE action, not the trace.
+        def motif_controls() -> None:
+            with ui.row().classes("gap-2 w-full items-center"):
+                for key, label in (
+                    ("crop_left", "Crop L %"),
+                    ("crop_top", "Crop T %"),
+                    ("crop_width", "Crop W %"),
+                    ("crop_height", "Crop H %"),
+                ):
+                    ui.number(
+                        label,
+                        value=MOTIF_STATE[key],
+                        min=0,
+                        max=100,
+                        step=1,
+                        on_change=lambda e, k=key: set_motif(k, float(e.value or 0.0)),
+                    ).props("dense outlined").classes("w-28")
 
-        with ui.row().classes("gap-2 w-full items-center"):
-            ctx.fields["motif_mode"] = (
-                ui.select(
-                    sorted(MODES),
-                    value=MOTIF_STATE["mode"],
-                    label="Mode",
-                    on_change=lambda e: set_motif("mode", str(e.value)),
+            with ui.row().classes("gap-2 w-full items-center"):
+                ctx.fields["motif_mode"] = (
+                    ui.select(
+                        sorted(MODES),
+                        value=MOTIF_STATE["mode"],
+                        label="Mode",
+                        on_change=lambda e: set_motif("mode", str(e.value)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-40")
                 )
-                .props("dense outlined")
-                .classes("w-40")
-            )
-            ctx.fields["motif_cell_mm"] = (
-                ui.number(
-                    "Cell mm",
-                    value=MOTIF_STATE["cell_mm"],
-                    min=0.1,
-                    step=0.1,
-                    on_change=lambda e: set_motif("cell_mm", float(e.value or 0.8)),
+                ctx.fields["motif_cell_mm"] = (
+                    ui.number(
+                        "Cell mm",
+                        value=MOTIF_STATE["cell_mm"],
+                        min=0.1,
+                        step=0.1,
+                        on_change=lambda e: set_motif("cell_mm", float(e.value or 0.8)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-28")
+                    .tooltip("Sampling pitch. Smaller = more detail and more points.")
                 )
-                .props("dense outlined")
-                .classes("w-28")
-                .tooltip("Sampling pitch. Smaller = more detail and more points.")
-            )
-            ctx.fields["motif_gamma"] = (
-                ui.number(
-                    "Gamma",
-                    value=MOTIF_STATE["gamma"],
-                    min=0.1,
-                    step=0.1,
-                    on_change=lambda e: set_motif("gamma", float(e.value or 1.0)),
+                ctx.fields["motif_gamma"] = (
+                    ui.number(
+                        "Gamma",
+                        value=MOTIF_STATE["gamma"],
+                        min=0.1,
+                        step=0.1,
+                        on_change=lambda e: set_motif("gamma", float(e.value or 1.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-28")
+                    .tooltip("Above 1 pushes midtones to white and drops texture.")
                 )
-                .props("dense outlined")
-                .classes("w-28")
-                .tooltip("Above 1 pushes midtones to white and drops texture.")
-            )
 
-        with ui.row().classes("gap-2 w-full items-center"):
-            ctx.fields["motif_despeckle_mm"] = (
-                ui.number(
-                    "Despeckle mm",
-                    value=MOTIF_STATE["despeckle_mm"],
-                    min=0,
-                    step=0.5,
-                    on_change=lambda e: set_motif("despeckle_mm", float(e.value or 0.0)),
+            with ui.row().classes("gap-2 w-full items-center"):
+                ctx.fields["motif_despeckle_mm"] = (
+                    ui.number(
+                        "Despeckle mm",
+                        value=MOTIF_STATE["despeckle_mm"],
+                        min=0,
+                        step=0.5,
+                        on_change=lambda e: set_motif("despeckle_mm", float(e.value or 0.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-32")
+                    .tooltip("Drops strokes whose bounding box is smaller than this.")
                 )
-                .props("dense outlined")
-                .classes("w-32")
-                .tooltip("Drops strokes whose bounding box is smaller than this.")
-            )
-            ctx.fields["motif_simplify_mm"] = (
-                ui.number(
-                    "Simplify mm",
-                    value=MOTIF_STATE["simplify_mm"],
-                    min=0,
-                    step=0.1,
-                    on_change=lambda e: set_motif("simplify_mm", float(e.value or 0.0)),
+                ctx.fields["motif_simplify_mm"] = (
+                    ui.number(
+                        "Simplify mm",
+                        value=MOTIF_STATE["simplify_mm"],
+                        min=0,
+                        step=0.1,
+                        on_change=lambda e: set_motif("simplify_mm", float(e.value or 0.0)),
+                    )
+                    .props("dense outlined")
+                    .classes("w-32")
+                    .tooltip("Douglas-Peucker tolerance on a 100 mm motif.")
                 )
-                .props("dense outlined")
-                .classes("w-32")
-                .tooltip("Douglas-Peucker tolerance on a 100 mm motif.")
-            )
-            ctx.fields["motif_autocontrast"] = ui.switch(
-                "Autocontrast",
-                value=MOTIF_STATE["autocontrast"],
-                on_change=lambda e: set_motif("autocontrast", bool(e.value)),
-            ).tooltip("Off for fabric photos: on, it stretches weave texture into ink.")
-            ctx.fields["motif_invert"] = ui.switch(
-                "Invert",
-                value=MOTIF_STATE["invert"],
-                on_change=lambda e: set_motif("invert", bool(e.value)),
-            ).tooltip("For light motifs on a dark garment.")
+                ctx.fields["motif_autocontrast"] = ui.switch(
+                    "Autocontrast",
+                    value=MOTIF_STATE["autocontrast"],
+                    on_change=lambda e: set_motif("autocontrast", bool(e.value)),
+                ).tooltip("Off for fabric photos: on, it stretches weave texture into ink.")
+                ctx.fields["motif_invert"] = ui.switch(
+                    "Invert",
+                    value=MOTIF_STATE["invert"],
+                    on_change=lambda e: set_motif("invert", bool(e.value)),
+                ).tooltip("For light motifs on a dark garment.")
+
+        motif_controls()
 
         with ui.row().classes("gap-2 w-full items-center"):
             name_input = (

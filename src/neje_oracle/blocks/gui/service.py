@@ -184,6 +184,7 @@ __TOKENS_PLACEHOLDER__
   .oracle-btn-safe:hover { border-color: var(--rust); color: var(--rust) !important; }
   .oracle-btn-danger { background: var(--danger) !important; color: var(--paper) !important; }
   .oracle-embed { width: 100%; border: 0; background: var(--paper); border-radius: var(--radius-md); }
+  .oracle-embed-fill { flex: 1 1 auto; min-height: 0; height: 100%; }
   .oracle-metric-line { font-size: 12px; color: var(--rust); }
 </style>
 """

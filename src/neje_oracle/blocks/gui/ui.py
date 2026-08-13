@@ -94,17 +94,19 @@ def mini_metric(label: str, *, extra_classes: str = "", style: str = "") -> Any:
         return ui.label("-").classes("value")
 
 
-def embedded_page(src: str, *, height_px: int, element_id: str = "") -> Any:
+def embedded_page(src: str, *, height_px: int = 0, element_id: str = "", fill: bool = False) -> Any:
     """An iframe onto one of the pages under the /generative static mount.
 
-    Both embeds (the p5 sketch and the texture node editor) hand-styled the same five properties;
-    only the height ever differed, so that is the only thing left as an argument.
+    fill=True is the canvas mode: the iframe takes its pane's full height, which is how the
+    editors stop being 62vh boxes with their own scrollbars inside a scrolling page --
+    scrollbars inside scroll was the measured shape of the old CREATE screen. The capped
+    height_px form remains for any embed that genuinely lives inside flowing content.
     """
     props = f'src="{src}"' + (f' id="{element_id}"' if element_id else "")
-    # Capped against the viewport: a flat 900px sketch iframe filled a 587px-tall scroll
-    # box on its own, pushing every control under it -- Regenerate, Send to plotter, the
-    # stream switch, and the whole texture workspace below -- off the bottom of the page.
-    return ui.element("iframe").props(props).classes("oracle-embed").style(f"height:min({height_px}px, 62vh);")
+    element = ui.element("iframe").props(props).classes("oracle-embed")
+    if fill:
+        return element.classes("oracle-embed-fill")
+    return element.style(f"height:min({height_px}px, 62vh);")
 
 
 def metric_line(text: str = "-") -> Any:
