@@ -456,14 +456,10 @@ class GuiContext:
             next_action, self.next_action_key = "Print queued sessions", "start_print"
         else:
             next_action, self.next_action_key = "Watch next sheet", "watch"
-        if self.live_labels:
-            self._set_state_chip(status_text)
-            self.live_labels["zero"].set_text("SET" if readiness.work_zero_set else "NOT SET")
-            # The firebase tile has one writer: refresh_component_status (called below)
-            # shows whether Firebase is UP; whether it is *required* lives in the
-            # run-profile select, not here.
-            self.live_labels["queue"].set_text("ONLINE" if queue_online else "OFFLINE")
-            self.live_labels["sheet"].set_text(current_sheet)
+        # The bar's fact tiles are gone; each fact now has one home. Work zero: the rail's
+        # readiness line and the blockers list. Queue online-ness: the blockers list, with
+        # detail on PRINT. Sheet id: PRINT's canvas readouts. State: the chip.
+        self._set_state_chip(status_text)
         if self.blockers_label is not None:
             self.blockers_label.set_text(f"blockers: {' · '.join(blockers)}" if blockers else "nothing blocking")
         if self.next_action_button is not None:
@@ -509,11 +505,13 @@ class GuiContext:
         self.refresh_component_status()
 
     def refresh_component_status(self) -> None:
-        states = self.supervisor.refresh_all_status()
-        if self.live_labels:
-            firebase_state = states.get("firebase")
-            if firebase_state is not None:
-                self.live_labels["firebase"].set_text(firebase_state.status.value.upper())
+        """Poll component health so the supervisor's stores stay current.
+
+        This used to also paint a Firebase tile in the status bar; the tile is gone --
+        Firebase health surfaces through the blockers line and the system check, and
+        whether it is *required* is the run profile's fact.
+        """
+        self.supervisor.refresh_all_status()
 
     def refresh_logs(self) -> None:
         from ...shared.logging import read_logs

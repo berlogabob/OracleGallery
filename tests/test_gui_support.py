@@ -854,8 +854,9 @@ def test_batch_generation_controls_are_not_operator_facing(monkeypatch: pytest.M
     """
     from nicegui import ui
 
+    from neje_oracle.blocks.gui import screens
     from neje_oracle.blocks.gui.context import GuiContext
-    from neje_oracle.blocks.gui.workspaces import exhibition, work
+    from neje_oracle.blocks.gui.workspaces import work
     from neje_oracle.shared.gui_settings import GuiSettings
 
     monkeypatch.setattr("neje_oracle.blocks.gui.context.load_gui_settings", lambda *a, **k: GuiSettings())
@@ -864,7 +865,7 @@ def test_batch_generation_controls_are_not_operator_facing(monkeypatch: pytest.M
     column = ui.column()
     with column:
         work.build(ctx)
-        exhibition.build(ctx)
+        screens.build_print(ctx)
 
     rendered = {
         str(text)
@@ -874,7 +875,7 @@ def test_batch_generation_controls_are_not_operator_facing(monkeypatch: pytest.M
     }
     for forbidden in ("Generate next filler", "START GENERATOR"):
         offenders = [text for text in rendered if forbidden in text]
-        assert not offenders, f"{forbidden!r} is operator-facing in WORK/EXHIBITION: {offenders}"
+        assert not offenders, f"{forbidden!r} is operator-facing on PRINT/diagnostics: {offenders}"
 
 
 def test_blocking_helper_returns_result_and_does_not_recurse() -> None:

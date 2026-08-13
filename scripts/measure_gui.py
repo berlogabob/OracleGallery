@@ -68,6 +68,7 @@ MEASURE_JS = """(() => {
   return {
     panel_h: Math.max(0, ...scrolls.map(s => s.h)),
     panel_vis: Math.max(0, ...scrolls.map(s => s.vis)),
+    panels: scrolls,
     page_h: page.scrollHeight, page_vis: page.clientHeight,
     cards, buttons: labels.length, dupes, iframes,
   };
@@ -193,16 +194,20 @@ def _report(results: dict[str, dict]) -> tuple[bool, bool]:
             print(f"{screen:8} MEASUREMENT FAILED")
             scrolls = True
             continue
-        height = max(r["panel_h"], r["page_h"])
-        visible = max(r["panel_vis"], 1)
-        depth = height / visible
+        # Compare like with like: each scroll container against its own visible height.
+        # Mixing the page's height with a panel's viewport reported phantom scroll.
+        ratios = [r["page_h"] / max(r["page_vis"], 1)] + [p["h"] / max(p["vis"], 1) for p in r.get("panels", [])]
+        depth = max(ratios)
+        height = max([r["page_h"]] + [p["h"] for p in r.get("panels", [])])
+        visible = r["page_vis"]
         if depth > 1.02:  # 2% slack for rounding, not for content
             scrolls = True
         if r["dupes"]:
             dupes = True
+        panel_detail = " ".join(f"{p['h']}/{p['vis']}" for p in r.get("panels", []))
         print(
             f"{screen:8} {height:>7}px {visible:>7}px {depth:>5.1f}x  {r['cards']:>5} {r['buttons']:>5}  "
-            f"{r['dupes'] or '-'} / {r['iframes'] or '-'}"
+            f"{r['dupes'] or '-'} / {r['iframes'] or '-'}  [page {r['page_h']}/{r['page_vis']} panels {panel_detail}]"
         )
     return scrolls, dupes
 

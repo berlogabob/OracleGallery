@@ -28,9 +28,10 @@ import pytest
 from nicegui import ui
 from PIL import Image, ImageDraw
 
+from neje_oracle.blocks.gui import screens
 from neje_oracle.blocks.gui.context import GuiContext
 from neje_oracle.blocks.gui.support import plot_minutes_for
-from neje_oracle.blocks.gui.workspaces import calibration, connection, exhibition, generative, work
+from neje_oracle.blocks.gui.workspaces import calibration, connection, generative, work
 from neje_oracle.blocks.gui.workspaces import image as image_workspace
 from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
 from neje_oracle.blocks.gui.workspaces import texture as texture_workspace
@@ -127,26 +128,29 @@ def test_work_workspace_builds_and_populates_thermal_queue_and_log_controls(monk
         work.build(ctx)
 
     assert {"thermal_printer_url", "thermal_session_dir", "log_filter"} <= ctx.fields.keys()
-    assert {"state", "pending", "active", "failed", "message"} <= ctx.queue_labels.keys()
     assert "message" in ctx.thermal_printer_labels
-    assert ctx.system_check_label is not None
     assert ctx.logs_view is not None
+    # Queue detail and the system-check line moved to the PRINT screen with the run half.
 
 
-def test_exhibition_workspace_is_readouts_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Live print state carries no start button any more.
+def test_print_screen_owns_the_run_readouts_and_no_start_twin(monkeypatch: pytest.MonkeyPatch) -> None:
+    """PRINT carries the sheet, the run controls and the queue detail -- and no START PRINT.
 
-    START PRINT used to exist twice -- here and on the rail's next-action button -- so the
-    single most consequential control had two homes and an operator had to know which one
-    was "real". The rail is the one home; this card only reports.
+    The old Exhibition card duplicated the rail's start button; the canvas and its readouts
+    absorbed the Exhibition, System run, System check and Queue cards. Starting a run has
+    exactly one home: the rail's next-action button.
     """
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
-        exhibition.build(ctx)
+        screens.build_print(ctx)
 
     assert {"sheet", "cells", "message"} <= ctx.plotter_labels.keys()
     assert ctx.progress is not None
+    assert ctx.preview is not None, "the sheet preview lives on PRINT now, not in a global column"
+    assert {"state", "pending", "active", "failed", "message"} <= ctx.queue_labels.keys()
+    assert ctx.system_check_label is not None
+
     rendered = {
         str(text)
         for element in ui.context.slot.parent.descendants()
@@ -289,7 +293,7 @@ def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.Mo
         # IMAGE is in the list because it was not: its twenty-odd knobs lived in module
         # dicts, reached no persistence layer, and this test never built the workspace, so
         # the whole class of bug was invisible to the one test written to catch it.
-        for workspace in (connection, calibration, tests_workspace, work, exhibition, image_workspace):
+        for workspace in (connection, calibration, tests_workspace, work, image_workspace):
             workspace.build(ctx)
 
     # Probe per declared type: an int field is pulled through int(), so a fractional
