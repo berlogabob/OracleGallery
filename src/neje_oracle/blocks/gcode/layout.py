@@ -122,6 +122,7 @@ def build_sheet_layout(
     organic_rotation_ramp: float = 0.0,
     organic_scale_ramp: float = 0.0,
     organic_seed: int = 1007,
+    organic_jitter_scale: float = 1.0,
 ) -> list[SheetPlacement]:
     normalized_mode = mode.strip().lower()
     if normalized_mode == "hex":
@@ -155,6 +156,7 @@ def build_sheet_layout(
         rotation_ramp=organic_rotation_ramp,
         scale_ramp=organic_scale_ramp,
         seed=organic_seed,
+        jitter_scale=organic_jitter_scale,
     )
 
 
@@ -168,11 +170,15 @@ def apply_organic_layout_modifier(
     rotation_ramp: float,
     scale_ramp: float,
     seed: int,
+    jitter_scale: float = 1.0,
 ) -> list[SheetPlacement]:
     if not placements:
         return []
 
-    jitter_limit = max(0.0, cell_size_mm)
+    # The Random sliders arrive here as a multiplier on the shipped jitter (1.0 at the
+    # slider defaults). The per-placement 0.42*diameter cap below still holds, so a slider
+    # at maximum scatters harder inside the cell but can never collide neighbours.
+    jitter_limit = max(0.0, cell_size_mm * jitter_scale)
     rotation_amount = _clamp(rotation_ramp, 0.0, 1.0)
     scale_amount = _clamp(scale_ramp, 0.0, 1.0)
     result: list[SheetPlacement] = []

@@ -284,6 +284,17 @@ def _repair_xy_acceleration(value: float) -> float:
     return value
 
 
+def effective_randomness(settings: GuiSettings) -> float:
+    """The two Random sliders folded into one 0..100 number: coarse pulls half-weight, fine trims."""
+    return max(0.0, min(settings.randomness * 0.5 + settings.randomness_fine, 100.0))
+
+
+# The slider defaults (35 / 0) fold to 17.5, and 17.5 must mean "the layout jitter exactly as
+# shipped" -- an operator who never touches Random gets byte-identical G-code to before the
+# sliders were wired.
+_NEUTRAL_RANDOMNESS = GUI_DEFAULTS["randomness"] * 0.5 + GUI_DEFAULTS["randomness_fine"]
+
+
 def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfig:
     settings.apply_system_mode()
     plotter_settings = PlotterSettings()
@@ -300,6 +311,7 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
             organic_rotation_ramp=settings.organic_rotation_ramp,
             organic_scale_ramp=settings.organic_scale_ramp,
             organic_seed=settings.organic_seed,
+            layout_jitter_scale=effective_randomness(settings) / _NEUTRAL_RANDOMNESS,
             global_scale=settings.global_scale,
             run_mode=settings.run_mode,
             dry_run=settings.dry_run,
