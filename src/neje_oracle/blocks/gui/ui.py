@@ -261,12 +261,16 @@ def render_card(
     button_label: str = "PRINT",
     travel_default: bool = True,
     cost_suffix: Callable[[Render], str] | None = None,
+    on_render: Callable[[str], None] | None = None,
 ) -> RenderCard:
     """A source, its knobs, an honest preview, a time estimate, and one print button.
 
     `render` raises ValueError to say something the operator should read -- a cap breached, no
     image chosen -- and it lands in the cost line rather than as a traceback. Every existing
     copy already treated a cap breach as a normal outcome; this keeps that.
+
+    `on_render` receives the printable bytes (and "" on failure) so a caller can mirror them
+    into state it already exposes, rather than every caller being rewritten to hold a handle.
 
     With travel lines off the preview *is* the bytes that will be sent, which is the property
     that makes it a proof rather than an illustration. travel_preview_svg draws pen-up moves
@@ -286,6 +290,8 @@ def render_card(
                 result = render()
             except (ValueError, OSError) as exc:
                 handle.svg = ""
+                if on_render is not None:
+                    on_render("")
                 preview.content = ""
                 preview.update()
                 cost.set_text(str(exc))
@@ -296,6 +302,10 @@ def render_card(
                 height_mm=result.height_mm,
                 pen_width_mm=ctx.settings.pen_width_mm,
             )
+            # Lets a workspace keep mirroring the printable bytes into its own state, which
+            # is what existing callers and their tests already read.
+            if on_render is not None:
+                on_render(handle.svg)
             preview.content = (
                 travel_preview_svg(result.polylines, width_mm=result.width_mm, height_mm=result.height_mm)
                 if travel.value

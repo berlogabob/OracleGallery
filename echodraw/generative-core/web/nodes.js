@@ -538,8 +538,9 @@ function adoptGraph(data) {
 }
 
 // ---------------------------------------------------------------------------
-// Render and print -- reuses /api/generative/svg, so the whole capture -> direct-SVG -> G-code
-// path already in the plotter serves textures with no new plumbing.
+// Render -- asks the texture API to turn the graph into plottable SVG and shows it.
+// Rendering is all this page does: the rendered SVG stays in renderedSvg for the
+// operator GUI to pick up, and the stroke/time cost is reported there too.
 // ---------------------------------------------------------------------------
 let renderedSvg = '';
 
@@ -560,28 +561,17 @@ function renderForPlot() {
   }).then(function(response) { return response.json(); }).then(function(result) {
     if (!result.ok) {
       renderedSvg = '';
-      document.getElementById('send-btn').disabled = true;
       document.getElementById('cost').textContent = result.error;
       return;
     }
     renderedSvg = result.svg;
-    document.getElementById('send-btn').disabled = false;
     document.getElementById('render-preview').innerHTML = result.svg;
-    document.getElementById('cost').textContent =
-      result.strokes + ' strokes, ' + result.segments + ' segments, ' +
-      (result.draw_mm / 1000).toFixed(1) + ' m drawn + ' +
-      (result.travel_mm / 1000).toFixed(1) + ' m travel';
+    // No cost string here: the operator GUI computes and words that readout, and two
+    // near-identical numbers that disagree are worse than one.
+    document.getElementById('cost').textContent = '';
   }).catch(function(error) {
     document.getElementById('cost').textContent = String(error);
   });
-}
-
-function sendToPlotter() {
-  if (!renderedSvg) return;
-  fetch('/api/generative/svg', { method: 'POST', headers: { 'Content-Type': 'image/svg+xml' }, body: renderedSvg })
-    .then(function(response) { return response.json(); })
-    .then(function(result) { setStatus(result.ok ? 'Captured ' + result.name : result.error); })
-    .catch(function(error) { setStatus(String(error)); });
 }
 
 // ---------------------------------------------------------------------------
@@ -675,6 +665,5 @@ document.getElementById('save-btn').addEventListener('click', function() {
   });
 });
 document.getElementById('render-btn').addEventListener('click', renderForPlot);
-document.getElementById('send-btn').addEventListener('click', sendToPlotter);
 
 redraw();
