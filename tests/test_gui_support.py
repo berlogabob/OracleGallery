@@ -472,11 +472,49 @@ def test_symbol_preview_draws_the_stored_geometry_untouched(tmp_path: Path) -> N
 
 
 def test_effective_randomness_combines_coarse_and_fine() -> None:
-    from neje_oracle.blocks.gui.support import effective_randomness
+    from neje_oracle.shared.gui_settings import effective_randomness
 
     assert effective_randomness(GuiSettings(randomness=20, randomness_fine=2.5)) == 12.5
     assert effective_randomness(GuiSettings(randomness=98, randomness_fine=10)) == 59
     assert effective_randomness(GuiSettings(randomness=2, randomness_fine=-10)) == 0
+
+
+def test_random_sliders_reach_the_plotter_config_and_are_neutral_at_defaults() -> None:
+    """The sliders persisted for months and fed nothing. Now they scale the layout jitter --
+    and an operator who never touches them gets exactly the shipped geometry (scale 1.0)."""
+    from neje_oracle.shared.gui_settings import gui_settings_to_plotter_config
+
+    assert gui_settings_to_plotter_config(GuiSettings()).layout_jitter_scale == 1.0
+    louder = gui_settings_to_plotter_config(GuiSettings(randomness=70.0))
+    assert louder.layout_jitter_scale == 2.0
+    silent = gui_settings_to_plotter_config(GuiSettings(randomness=0.0, randomness_fine=0.0))
+    assert silent.layout_jitter_scale == 0.0
+
+
+def test_layout_jitter_scale_moves_the_placements() -> None:
+    from neje_oracle.blocks.gcode.layout import apply_organic_layout_modifier, build_grid_layout
+
+    # Diameter 80: the collision cap (0.42 * diameter = 33.6) sits above the 18 mm base
+    # jitter, so the slider has room to act -- with small cells the cap wins and the slider
+    # deliberately saturates rather than letting neighbours collide.
+    base = build_grid_layout(6, sheet_width_mm=400, sheet_height_mm=300, margin_mm=10, diameter_mm=80, gap_mm=5)
+    kwargs: dict = {
+        "sheet_width_mm": 400.0,
+        "sheet_height_mm": 300.0,
+        "margin_mm": 10.0,
+        "cell_size_mm": 18.0,
+        "rotation_ramp": 0.0,
+        "scale_ramp": 0.0,
+        "seed": 7,
+    }
+    shipped = apply_organic_layout_modifier(base, jitter_scale=1.0, **kwargs)
+    louder = apply_organic_layout_modifier(base, jitter_scale=2.0, **kwargs)
+    frozen = apply_organic_layout_modifier(base, jitter_scale=0.0, **kwargs)
+    # scale 0 pins every centre to the un-jittered grid; scale 2 scatters harder than 1.
+    assert all(
+        f.center_x_mm == b.center_x_mm and f.center_y_mm == b.center_y_mm for f, b in zip(frozen, base, strict=True)
+    )
+    assert any(s.center_x_mm != c.center_x_mm for s, c in zip(shipped, louder, strict=True))
 
 
 def test_direct_svg_print_job_writes_svg_and_gcode(tmp_path: Path) -> None:

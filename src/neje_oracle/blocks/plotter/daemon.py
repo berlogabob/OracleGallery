@@ -171,6 +171,7 @@ class PlotterDaemon:
             organic_rotation_ramp=config.organic_rotation_ramp,
             organic_scale_ramp=config.organic_scale_ramp,
             organic_seed=config.organic_seed,
+            organic_jitter_scale=config.layout_jitter_scale,
         )
         layout_rows = group_layout_rows(placements)
         if not layout_rows:
@@ -198,6 +199,7 @@ class PlotterDaemon:
             "organic_rotation_ramp": config.organic_rotation_ramp,
             "organic_scale_ramp": config.organic_scale_ramp,
             "organic_seed": config.organic_seed,
+            "layout_jitter_scale": config.layout_jitter_scale,
             "symbol_fit_ratio": SYMBOL_FIT_RATIO,
             "dry_run": control.dry_run,
             "run_mode": control.run_mode,

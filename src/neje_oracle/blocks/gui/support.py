@@ -178,10 +178,6 @@ def latest_spool_manifest(spool_root: Path) -> Path | None:
     return manifests[0] if manifests else None
 
 
-def effective_randomness(settings: GuiSettings) -> float:
-    return max(0.0, min(settings.randomness * 0.5 + settings.randomness_fine, 100.0))
-
-
 def plot_minutes_for(
     settings: GuiSettings, *, strokes: int, draw_mm: float, travel_mm: float, use_z_servo: bool
 ) -> tuple[float, float]:

@@ -407,10 +407,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
 
             ui.label("Symbol scale correction").classes("text-sm font-bold")
             helper_text("Global scale multiplies every per-symbol scale, on screen and on paper.")
-            # ponytail: Random coarse/fine are read by nothing but this card -- the jitter that
-            # reaches paper is baked in by session_generator from its own defaults. Left in
-            # place and labelled rather than deleted; wire them to the generator or drop them.
-            helper_text("Random coarse/fine do not reach the plotter yet -- they change no output.")
+            helper_text("Random coarse/fine scale the organic layout scatter on paper. 35 / 0 = as shipped.")
             calibration_slider_row(
                 "Random coarse",
                 "randomness",

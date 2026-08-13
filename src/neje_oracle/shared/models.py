@@ -393,6 +393,9 @@ class PlotterRuntimeConfig:
     organic_rotation_ramp: float = 0.0
     organic_scale_ramp: float = 0.0
     organic_seed: int = 1007
+    # Scales the organic layout jitter. Same story as global_scale below: the Random
+    # sliders persisted to disk and fed nothing, so they moved no ink. 1.0 = as shipped.
+    layout_jitter_scale: float = 1.0
     # Multiplies every per-symbol scale from symbol_scales.json. The GUI preview always
     # applied this; the plotter never received it, so the Global scale slider moved the
     # picture on screen and nothing on the paper.
@@ -433,6 +436,7 @@ class PlotterRuntimeConfig:
             "organic_rotation_ramp": self.organic_rotation_ramp,
             "organic_scale_ramp": self.organic_scale_ramp,
             "organic_seed": self.organic_seed,
+            "layout_jitter_scale": self.layout_jitter_scale,
             "run_mode": self.run_mode,
             "dry_run": self.dry_run,
             "include_rings": self.include_rings,
@@ -470,6 +474,7 @@ class PlotterRuntimeConfig:
             organic_rotation_ramp=float(payload.get("organic_rotation_ramp", 0.0)),
             organic_scale_ramp=float(payload.get("organic_scale_ramp", 0.0)),
             organic_seed=int(payload.get("organic_seed", 1007)),
+            layout_jitter_scale=float(payload.get("layout_jitter_scale", 1.0)),
             run_mode=str(payload.get("run_mode", "exhibition")),
             dry_run=bool(payload.get("dry_run", True)),
             include_rings=bool(payload.get("include_rings", True)),
