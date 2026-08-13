@@ -9,7 +9,7 @@ from ..ui import helper_text, primary_action_button
 
 
 def build(ctx: GuiContext) -> None:
-    with ui.column().classes("workspace-scroll gap-2"):
+    with ui.column().classes("w-full gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Exhibition controls").classes("text-sm font-bold")
             helper_text("Minimal live-print controls. No layout, jog, scale or test generation here.")

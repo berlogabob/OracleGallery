@@ -13,20 +13,10 @@ from ...shared.origin_markers import (
     ORIGIN_MARKER_POSITIONS,
     ORIGIN_PREVIEW_COLORS,
 )
-from . import tokens
+from . import screens, tokens
 from .context import GuiContext
 from .ui import client_timer, helper_text, mini_metric, select
-from .workspaces import (
-    calibration,
-    connection,
-    exhibition,
-    generative,
-    image,
-    motion,
-    tests,
-    texture,
-    work,
-)
+from .workspaces import generative, motion, texture
 
 PAGE_STYLE = """
 <style>
@@ -235,13 +225,12 @@ def build_page() -> None:
             with ui.tabs(on_change=lambda event: ctx.workspace_changed(event.value)).classes(
                 "workspace-tabs"
             ) as workspace_tabs:
-                connection_tab = ui.tab("connection", label="1 CONNECTION")
-                calibration_tab = ui.tab("calibration", label="2 CALIBRATION")
-                tests_tab = ui.tab("tests", label="3 TESTS")
-                work_tab = ui.tab("work", label="4 WORK")
-                exhibition_tab = ui.tab("exhibition", label="5 EXHIBITION")
-                generative_tab = ui.tab("generative", label="6 GENERATIVE")
-                image_tab = ui.tab("image", label="7 IMAGE")
+                # Three phases of the job, not seven module names. Connecting, homing and
+                # zeroing are on none of them -- they are in the machine rail, reachable from
+                # all three, because bringing the machine up is one continuous task.
+                print_tab = ui.tab("print", label="PRINT")
+                create_tab = ui.tab("create", label="CREATE")
+                setup_tab = ui.tab("setup", label="SETUP")
             workspace_tabs.value = ctx.active_workspace["value"]
             ctx.workspace_tabs = workspace_tabs
             # The run profile is an operator decision. It used to be inferred from whichever
@@ -287,20 +276,12 @@ def build_page() -> None:
             with ui.column().classes("workspace-scroll"):
                 motion.render_machine_rail(ctx)
             with ui.tab_panels(workspace_tabs, value=ctx.active_workspace["value"]).classes("w-full h-full"):
-                with ui.tab_panel(connection_tab).classes("p-0"):
-                    connection.build(ctx)
-                with ui.tab_panel(calibration_tab).classes("p-0"):
-                    calibration.build(ctx)
-                with ui.tab_panel(tests_tab).classes("p-0"):
-                    tests.build(ctx)
-                with ui.tab_panel(work_tab).classes("p-0"):
-                    work.build(ctx)
-                with ui.tab_panel(exhibition_tab).classes("p-0"):
-                    exhibition.build(ctx)
-                with ui.tab_panel(generative_tab).classes("p-0"):
-                    generative.build(ctx)
-                with ui.tab_panel(image_tab).classes("p-0"):
-                    image.build(ctx)
+                with ui.tab_panel(print_tab).classes("p-0"):
+                    screens.build_print(ctx)
+                with ui.tab_panel(create_tab).classes("p-0"):
+                    screens.build_create(ctx)
+                with ui.tab_panel(setup_tab).classes("p-0"):
+                    screens.build_setup(ctx)
 
             with ui.card().classes("oracle-card compact-card w-full min-h-0 h-full"):
                 with ui.row().classes("w-full items-center justify-between"):

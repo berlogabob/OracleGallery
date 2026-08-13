@@ -343,7 +343,7 @@ def build(ctx: GuiContext) -> None:
         if handle is not None:
             handle.refresh()
 
-    with ui.column().classes("workspace-scroll gap-2"):
+    with ui.column().classes("w-full gap-2"):
         with ui.card().classes("oracle-card compact-card w-full"):
             ui.label("Image to line art").classes("text-sm font-bold")
             helper_text(

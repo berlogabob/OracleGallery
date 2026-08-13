@@ -12,7 +12,7 @@ be quietly loosened to make a red test green. When a step lands, lower the const
 commit and say why. A constant edited *upward* is a regression being written down as a fact.
 
 Targets, and the plan they come from:
-  M1 screens 7 -> 3          PRINT / CREATE / SETUP
+  M1 screens 7 -> 3          DONE -- PRINT / CREATE / SETUP
   M2 python print paths 7 -> 1   one button that says what it does
   M3 web send buttons 2 -> 0     the browser stops being a print client
   M4 cost blocks 3 -> 1          DONE -- one estimator call site behind one helper
@@ -31,7 +31,7 @@ WORKSPACES = GUI / "workspaces"
 WEB = REPO / "echodraw" / "generative-core" / "web"
 
 # --- the trackables -------------------------------------------------------------
-SCREENS = 7
+SCREENS = 3  # reached target: PRINT / CREATE / SETUP
 PRINT_ENTRY_POINTS = 4  # -3: the capture buffer, image conversion and texture all print through render_card
 WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
 COST_BLOCKS = 1  # reached target: one estimator call site, behind ui.render_card
