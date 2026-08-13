@@ -1312,6 +1312,39 @@ def travel_length_mm(polylines: Polylines) -> tuple[float, float]:
     return draw, travel
 
 
+def plot_minutes(
+    *,
+    strokes: int,
+    draw_mm: float,
+    travel_mm: float,
+    draw_rate: float,
+    travel_rate: float,
+    z_down_mm: float,
+    z_up_mm: float,
+    z_feed_mm_min: float,
+    use_z_servo: bool,
+) -> tuple[float, float]:
+    """Split the plot into (xy_minutes, pen_minutes).
+
+    Every stroke costs a Z round trip, and at the shipped -25 mm throw / 1000 mm/min that
+    is ~1.8 s of pen for ~0.2 s of ink. Counting only XY under-reported a 488-stroke
+    halftone as 1.7 min when the machine actually spent ~18. Legs are costed the way
+    svg_gcode emits them: down is a G1 at z_feed_mm_min, up is a G0 under the file's
+    G0 F<travel_rate>.
+
+    Lives here beside travel_length_mm rather than in the image workspace, where it used to
+    sit -- the texture workspace had to reach across and import it from a sibling view
+    module, and a script imports it too. Takes plain floats on purpose: this block has never
+    known the GUI settings shape and should not start now.
+    """
+    xy_minutes = draw_mm / max(draw_rate, 1.0) + travel_mm / max(travel_rate, 1.0)
+    if not use_z_servo:
+        return xy_minutes, 0.0
+    throw_mm = abs(z_down_mm - z_up_mm)
+    per_cycle = throw_mm / max(z_feed_mm_min, 1.0) + throw_mm / max(travel_rate, 1.0)
+    return xy_minutes, strokes * per_cycle
+
+
 def _validate_render_request(mode: str, min_stroke_mm: float) -> None:
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; valid modes: {', '.join(sorted(MODES))}")

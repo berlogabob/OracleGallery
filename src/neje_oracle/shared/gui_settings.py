@@ -45,6 +45,31 @@ class GuiDefaults(TypedDict):
     pen_down_dwell_ms: float
     direct_svg_origin_x_mm: float
     direct_svg_origin_y_mm: float
+    # image.py kept these in-module as "per-image choices, not machine calibration ...
+    # promote them if operators ask for sticky values" — the operator has now asked. Only the
+    # tune-once knobs move here; the per-picture ones (file bytes, crop, names) stay transient.
+    image_mode: str
+    image_quality: str
+    image_source: str
+    image_width_mm: float
+    image_height_mm: float
+    image_cell_mm: float
+    image_detail: float
+    image_gamma: float
+    image_invert: bool
+    image_show_travel: bool
+    sheet_cell_width_mm: float
+    sheet_cell_height_mm: float
+    sheet_gap_mm: float
+    sheet_padding_mm: float
+    sheet_shape: str
+    motif_mode: str
+    motif_cell_mm: float
+    motif_gamma: float
+    motif_autocontrast: bool
+    motif_invert: bool
+    motif_despeckle_mm: float
+    motif_simplify_mm: float
 
 
 type NumericGuiDefaultKey = Literal[
@@ -77,6 +102,19 @@ type NumericGuiDefaultKey = Literal[
     "direct_svg_origin_x_mm",
     "direct_svg_origin_y_mm",
     "stream_interval_seconds",
+    "image_width_mm",
+    "image_height_mm",
+    "image_cell_mm",
+    "image_detail",
+    "image_gamma",
+    "sheet_cell_width_mm",
+    "sheet_cell_height_mm",
+    "sheet_gap_mm",
+    "sheet_padding_mm",
+    "motif_cell_mm",
+    "motif_gamma",
+    "motif_despeckle_mm",
+    "motif_simplify_mm",
 ]
 
 
@@ -118,6 +156,31 @@ GUI_DEFAULTS: GuiDefaults = {
     "pen_down_dwell_ms": 0.0,
     "direct_svg_origin_x_mm": 25.0,
     "direct_svg_origin_y_mm": 25.0,
+    # Mirrors of image.py's STATE / SHEET_STATE / MOTIF_STATE defaults, promoted per the note
+    # there that they should move here once operators asked for sticky values. "contour" is
+    # patterns.ingest.DEFAULT_MODE, spelled out so shared/ keeps depending on nothing in blocks/.
+    "image_mode": "trace",
+    "image_quality": "fine",
+    "image_source": "scan",
+    "image_width_mm": 150.0,
+    "image_height_mm": 150.0,
+    "image_cell_mm": 0.10,
+    "image_detail": 1.0,
+    "image_gamma": 1.0,
+    "image_invert": False,
+    "image_show_travel": True,
+    "sheet_cell_width_mm": 40.0,
+    "sheet_cell_height_mm": 60.0,
+    "sheet_gap_mm": 5.0,
+    "sheet_padding_mm": 2.0,
+    "sheet_shape": "rect",
+    "motif_mode": "contour",
+    "motif_cell_mm": 0.8,
+    "motif_gamma": 1.0,
+    "motif_autocontrast": True,
+    "motif_invert": False,
+    "motif_despeckle_mm": 1.5,
+    "motif_simplify_mm": 0.4,
 }
 
 
@@ -178,6 +241,31 @@ class GuiSettings:
     idle_count: int = 8
     idle_variations_per_symbol: int = 2
     selected_symbol: str = "__cycle__"
+    # Image workspace knobs, sticky by operator request (see the note at image.py:29). The
+    # per-picture ones — uploaded bytes/names, the crop box, motif name, sheet folder and
+    # index — deliberately stay in-module: a stale crop on a fresh photo is a bug, not a preference.
+    image_mode: str = GUI_DEFAULTS["image_mode"]
+    image_quality: str = GUI_DEFAULTS["image_quality"]
+    image_source: str = GUI_DEFAULTS["image_source"]
+    image_width_mm: float = GUI_DEFAULTS["image_width_mm"]
+    image_height_mm: float = GUI_DEFAULTS["image_height_mm"]
+    image_cell_mm: float = GUI_DEFAULTS["image_cell_mm"]
+    image_detail: float = GUI_DEFAULTS["image_detail"]
+    image_gamma: float = GUI_DEFAULTS["image_gamma"]
+    image_invert: bool = GUI_DEFAULTS["image_invert"]
+    image_show_travel: bool = GUI_DEFAULTS["image_show_travel"]
+    sheet_cell_width_mm: float = GUI_DEFAULTS["sheet_cell_width_mm"]
+    sheet_cell_height_mm: float = GUI_DEFAULTS["sheet_cell_height_mm"]
+    sheet_gap_mm: float = GUI_DEFAULTS["sheet_gap_mm"]
+    sheet_padding_mm: float = GUI_DEFAULTS["sheet_padding_mm"]
+    sheet_shape: str = GUI_DEFAULTS["sheet_shape"]
+    motif_mode: str = GUI_DEFAULTS["motif_mode"]
+    motif_cell_mm: float = GUI_DEFAULTS["motif_cell_mm"]
+    motif_gamma: float = GUI_DEFAULTS["motif_gamma"]
+    motif_autocontrast: bool = GUI_DEFAULTS["motif_autocontrast"]
+    motif_invert: bool = GUI_DEFAULTS["motif_invert"]
+    motif_despeckle_mm: float = GUI_DEFAULTS["motif_despeckle_mm"]
+    motif_simplify_mm: float = GUI_DEFAULTS["motif_simplify_mm"]
 
     def apply_system_mode(self) -> None:
         policy = mode_policy(self.system_mode)
