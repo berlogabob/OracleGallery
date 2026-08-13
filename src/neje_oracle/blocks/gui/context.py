@@ -432,7 +432,6 @@ class GuiContext:
             self.queue_labels["message"].set_text(str(queue.get("message", "-") or "-"))
         readiness = self.supervisor.runtime_store.load_plotter_readiness()
         queue_online = bool(queue.get("online"))
-        current_sheet = str(status.get("current_sheet_id") or "no sheet yet")
         blockers: list[str] = []
         if not readiness.work_zero_set:
             blockers.append("work zero")
