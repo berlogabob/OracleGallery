@@ -626,3 +626,31 @@ def _gcode_draw_line_count(gcode: str) -> int:
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
+
+def test_lift_budget_metadata_caps_pen_downs(tmp_path: Path) -> None:
+    svg_path = tmp_path / "budget.svg"
+    paths = "".join(
+        f"<path d='M{10 + i * 15},{10 + (i % 3) * 30} L{20 + i * 15},{10 + (i % 3) * 30}' stroke='black' fill='none'/>"
+        for i in range(6)
+    )
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<g data-neje-lift-budget='2'>" + paths + "</g>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    gcode = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="b", title="B", svg_path=svg_path)],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)],
+        sample_step_mm=100,
+        cell_diameter_mm=40,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+    )
+
+    assert 1 <= gcode.count("M3 S15") <= 3

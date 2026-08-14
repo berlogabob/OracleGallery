@@ -10,6 +10,7 @@ from svgpathtools import svg2paths2
 from ...shared.config import SYMBOL_FIT_RATIO
 from ...shared.models import SheetItem, SheetPlacement
 from ...shared.origin_markers import DEFAULT_MARKER_DIAMETER_MM, marker_center_for_position, marker_position_for_origin
+from ...shared.pathops import join_with_budget
 from ..symbols.svg_normalizer import read_normalized_svg_metadata
 
 DEFAULT_IMPORTED_SVG_SIMPLIFY_MM = 0.05
@@ -315,8 +316,9 @@ def _svg_to_polylines(
                 path_points.append(_transform_local_point(placement, local_x, local_y, rotation_cos, rotation_sin))
         if len(path_points) >= 2:
             polylines.append(_dedupe_points(path_points))
-    if _single_stroke_requested(svg_path):
-        polylines = _join_polylines_single_stroke(polylines)
+    lift_budget = _pen_lift_budget(svg_path)
+    if lift_budget is not None:
+        polylines = join_with_budget(polylines, lift_budget)
     simplify_tolerance = _simplify_tolerance_mm(svg_path)
     return _postprocess_svg_polylines(polylines, simplify_tolerance=simplify_tolerance)
 
@@ -451,18 +453,25 @@ def _filter_short_segments(points: list[tuple[float, float]], min_segment_mm: fl
     return filtered
 
 
-def _single_stroke_requested(svg_path: Path) -> bool:
+def _pen_lift_budget(svg_path: Path) -> int | None:
     try:
         root = ET.parse(svg_path).getroot()
     except ET.ParseError:
-        return False
+        return None
     truthy = {"1", "true", "yes", "on", "single-stroke"}
+    lift_budget = None
     for element in root.iter():
         if str(element.get("data-neje-single-stroke", "")).strip().lower() in truthy:
-            return True
+            return 0
         if str(element.get("data-neje-pen-mode", "")).strip().lower() == "single-stroke":
-            return True
-    return False
+            return 0
+        raw_value = str(element.get("data-neje-lift-budget", "")).strip()
+        if raw_value and lift_budget is None:
+            try:
+                lift_budget = max(0, int(raw_value))
+            except ValueError:
+                continue
+    return lift_budget
 
 
 def _simplify_tolerance_mm(svg_path: Path) -> float:
@@ -479,37 +488,6 @@ def _simplify_tolerance_mm(svg_path: Path) -> float:
         except ValueError:
             return 0.0
     return 0.0
-
-
-def _join_polylines_single_stroke(polylines: list[list[tuple[float, float]]]) -> list[list[tuple[float, float]]]:
-    if not polylines:
-        return []
-    joined = list(polylines[0])
-    remaining = [list(polyline) for polyline in polylines[1:] if len(polyline) >= 2]
-    while remaining:
-        current = joined[-1]
-        best_index = 0
-        best_reverse = False
-        best_distance = math.inf
-        for index, polyline in enumerate(remaining):
-            start_distance = _distance(current, polyline[0])
-            end_distance = _distance(current, polyline[-1])
-            if start_distance < best_distance:
-                best_index = index
-                best_reverse = False
-                best_distance = start_distance
-            if end_distance < best_distance:
-                best_index = index
-                best_reverse = True
-                best_distance = end_distance
-        next_polyline = remaining.pop(best_index)
-        if best_reverse:
-            next_polyline.reverse()
-        if joined[-1] == next_polyline[0]:
-            joined.extend(next_polyline[1:])
-        else:
-            joined.extend(next_polyline)
-    return [_dedupe_points(joined)]
 
 
 def _simplify_polyline(points: list[tuple[float, float]], tolerance: float) -> list[tuple[float, float]]:
