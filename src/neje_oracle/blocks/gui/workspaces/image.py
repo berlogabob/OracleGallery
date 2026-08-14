@@ -563,8 +563,7 @@ def build_sections(
                     on_change=lambda e: set_field("invert", bool(e.value)),
                 )
 
-            wave_controls = ui.row().classes("gap-2 w-full items-center")
-            with wave_controls:
+            with oracle.toolbar(full_width=True) as wave_controls:
                 oracle.select(
                     ["horizontal", "vertical"],
                     value=STATE["wave_orientation"],
