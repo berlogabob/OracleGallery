@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import contextlib
+import re
 import time
 from typing import Any
+from xml.parsers import expat
 
 from nicegui import app, ui
 from starlette.requests import Request
@@ -132,7 +134,39 @@ def stamp_lift_budget(svg_bytes: bytes, budget: int) -> bytes:
     """Add a non-default pen-lift budget to the root SVG tag."""
     if budget >= 1024:
         return svg_bytes
-    return svg_bytes.replace(b"<svg", f'<svg data-neje-lift-budget="{budget}"'.encode(), 1)
+
+    root_start = None
+    parser = expat.ParserCreate()
+
+    def find_root(_name: str, _attributes: dict[str, str]) -> None:
+        nonlocal root_start
+        root_start = parser.CurrentByteIndex
+        raise StopIteration
+
+    parser.StartElementHandler = find_root
+    try:
+        parser.Parse(svg_bytes, True)
+    except StopIteration:
+        pass
+    except expat.ExpatError:
+        return svg_bytes
+
+    if root_start is None:
+        return svg_bytes
+    root_name = re.compile(rb"<(?:[A-Za-z][\w.-]*:)?svg(?=[\s/>])").match(svg_bytes, root_start)
+    if root_name is None:
+        return svg_bytes
+
+    attribute = f'data-neje-lift-budget="{budget}"'.encode()
+    existing_attribute = re.compile(
+        rb"(?:\s+[^\s=/>]+\s*=\s*(?:\"[^\"]*\"|'[^']*'))*?"
+        rb"(?P<space>\s+)data-neje-lift-budget\s*=\s*(?:\"[^\"]*\"|'[^']*')"
+    ).match(svg_bytes, root_name.end())
+    if existing_attribute:
+        start = existing_attribute.start("space")
+        return svg_bytes[:start] + existing_attribute.group("space") + attribute + svg_bytes[existing_attribute.end() :]
+
+    return svg_bytes[: root_name.end()] + b" " + attribute + svg_bytes[root_name.end() :]
 
 
 def build(ctx: GuiContext) -> None:
