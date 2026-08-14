@@ -128,6 +128,13 @@ async def current_sketch_svg() -> bytes:
     return str(svg).encode("utf-8")
 
 
+def stamp_lift_budget(svg_bytes: bytes, budget: int) -> bytes:
+    """Add a non-default pen-lift budget to the root SVG tag."""
+    if budget >= 1024:
+        return svg_bytes
+    return svg_bytes.replace(b"<svg", f'<svg data-neje-lift-budget="{budget}"'.encode(), 1)
+
+
 def build(ctx: GuiContext) -> None:
     """Legacy stacked form, kept for tests that build this workspace alone.
 
@@ -179,6 +186,7 @@ def build_sketch_controls(ctx: GuiContext) -> Any:
                 if not quiet:
                     ui.notify(str(exc), color="warning")
                 return
+            svg_bytes = stamp_lift_budget(svg_bytes, int(getattr(ctx.settings, "lift_budget", 1024)))
             await ctx.print_svg_payload(svg_bytes, f"generative_{time.strftime('%Y%m%d_%H%M%S')}.svg")
 
         def push_stream_state() -> None:

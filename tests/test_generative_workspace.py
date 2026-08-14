@@ -92,3 +92,13 @@ def test_the_capture_buffer_is_gone() -> None:
 
     assert not hasattr(generative, "LATEST")
     assert not hasattr(generative, "_handle_generative_svg")
+
+
+def test_stamp_lift_budget_marks_the_svg_root() -> None:
+    from neje_oracle.blocks.gui.workspaces.generative import stamp_lift_budget
+
+    svg = b"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0,0 L1,1'/></svg>"
+    assert stamp_lift_budget(svg, 1024) == svg
+    stamped = stamp_lift_budget(svg, 3)
+    assert b'data-neje-lift-budget="3"' in stamped
+    assert stamped.count(b"<svg") == 1
