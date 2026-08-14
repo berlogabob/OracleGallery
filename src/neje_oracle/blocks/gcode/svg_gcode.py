@@ -469,6 +469,9 @@ def _pen_lift_budget(svg_path: Path) -> int | None:
         if raw_value and lift_budget is None:
             try:
                 lift_budget = max(0, int(raw_value))
+                # 1024 is the shared off sentinel used by the GUI slider.
+                if lift_budget >= 1024:
+                    return None
             except ValueError:
                 continue
     return lift_budget

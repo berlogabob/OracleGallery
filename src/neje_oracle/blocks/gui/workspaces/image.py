@@ -501,11 +501,11 @@ def build_sections(
                 step=1,
                 value=int(STATE["lift_budget"]),
                 on_change=lambda e: set_field("lift_budget", int(e.value)),
-            ).props("label-always markers snap")
+            ).props("label-always markers snap :label-value=\"value >= 1024 ? 'off' : value\"")
             for fader in quality_fader, ctx.fields["lift_budget"]:
                 fader.classes("w-full tight-slider")
             helper_text(
-                "1024 means unlimited lifts; lower values join strokes into fewer pen-down runs "
+                "At max, the slider has no lift limit; lower values join strokes into fewer pen-down runs "
                 "with visible connector lines."
             )
 

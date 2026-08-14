@@ -654,3 +654,24 @@ def test_lift_budget_metadata_caps_pen_downs(tmp_path: Path) -> None:
     )
 
     assert 1 <= gcode.count("M3 S15") <= 3
+
+
+def test_lift_budget_1024_is_the_off_position(tmp_path: Path) -> None:
+    # A stamped 1024 must mean "no budget", matching the GUI slider where the
+    # max position means "no limit" — not a real budget of 1024 lifts.
+    from neje_oracle.blocks.gcode.svg_gcode import _pen_lift_budget
+
+    def _svg_with(budget: int) -> Path:
+        svg_path = tmp_path / f"b{budget}.svg"
+        svg_path.write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+            f"<g data-neje-lift-budget='{budget}'>"
+            "<path d='M10,10 L20,10' stroke='black' fill='none'/>"
+            "</g></svg>",
+            encoding="utf-8",
+        )
+        return svg_path
+
+    assert _pen_lift_budget(_svg_with(8)) == 8
+    assert _pen_lift_budget(_svg_with(1024)) is None
+    assert _pen_lift_budget(_svg_with(2048)) is None
