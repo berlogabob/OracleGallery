@@ -335,3 +335,43 @@ def test_lift_budget_default_changes_nothing() -> None:
         )
         == baseline
     )
+
+
+def test_wave_orientation_and_connect_rows() -> None:
+    from neje_oracle.blocks.imaging.modes import wave
+
+    gradient = np.tile(np.linspace(40, 215, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    tone = load_tone(data, width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+
+    def _extent(stroke, axis):
+        values = [point[axis] for point in stroke]
+        return max(values) - min(values)
+
+    horizontal_stroke = max(wave(tone), key=len)
+    vertical_stroke = max(wave(tone, orientation="vertical"), key=len)
+    assert _extent(horizontal_stroke, 0) > _extent(horizontal_stroke, 1)
+    assert _extent(vertical_stroke, 1) > _extent(vertical_stroke, 0)
+
+    assert len(wave(tone, connect_rows=True)) == 1
+    assert len(wave(tone, orientation="vertical", connect_rows=True)) == 1
+
+
+def test_flow_dash_mm_breaks_streamlines() -> None:
+    from neje_oracle.blocks.imaging.modes import flow
+
+    rng = np.random.default_rng(7)
+    blob = rng.integers(30, 220, size=(60, 60), dtype=np.uint8)
+    data = _png(Image.fromarray(blob, mode="L"))
+    tone = load_tone(data, width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+
+    continuous = flow(tone)
+    dashed = flow(tone, dash_mm=3.0)
+    assert len(dashed) > len(continuous)
+
+    def _path_length(stroke):
+        return sum(
+            math.dist(stroke[i - 1], stroke[i]) for i in range(1, len(stroke))
+        )
+
+    assert max(_path_length(stroke) for stroke in dashed) <= 3.0 * 1.5

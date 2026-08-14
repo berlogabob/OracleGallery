@@ -46,6 +46,8 @@ STATE: dict[str, Any] = {
     "invert": False,
     "show_travel": True,
     "detail": 1.0,
+    "wave_orientation": "horizontal",
+    "wave_connect": False,
 }
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif")
@@ -141,7 +143,7 @@ MODE_HELP = {
     "crosshatch": "Layered hatching at four angles. Graphic and even; good for flat tone.",
     "flow": "Hatching that follows the form, so shading wraps around shapes. Best for photographs.",
     "spiral": "One spiral out from the centre, wobbling harder where the image is dark. Fewest pen lifts of any mode.",
-    "wave": "Rows that ripple wider and faster with darkness. Graphic, continuous, no dropped lines.",
+    "wave": "Rows that ripple wider and faster with darkness. Choose horizontal/vertical and One line to connect rows.",
     "stipple": "Density-weighted dots, chained into rows to cut pen lifts. Grainy, organic tone.",
     "squiggle": "One continuous meandering line, packing tighter where the image is dark. Wandering, few pen lifts.",
 }
@@ -412,6 +414,8 @@ def build_sections(
                     )
                     cell_field.set_value(STATE["cell_mm"])
                     quality_label.set_text(_quality_text())
+                if key == "mode":
+                    wave_controls.set_visibility(value == "wave")
                 if key == "quality":
                     # The only sticky knob whose widget value is not the stored value: the
                     # fader holds a preset index, not "fine". Mirrored here rather than
@@ -559,6 +563,21 @@ def build_sections(
                     on_change=lambda e: set_field("invert", bool(e.value)),
                 )
 
+            wave_controls = ui.row().classes("gap-2 w-full items-center")
+            with wave_controls:
+                oracle.select(
+                    ["horizontal", "vertical"],
+                    value=STATE["wave_orientation"],
+                    label="Orientation",
+                    on_change=lambda e: set_field("wave_orientation", str(e.value)),
+                )
+                oracle.switch(
+                    "One line",
+                    value=bool(STATE["wave_connect"]),
+                    on_change=lambda e: set_field("wave_connect", bool(e.value)),
+                )
+            wave_controls.set_visibility(STATE["mode"] == "wave")
+
             quality_label.set_text(_quality_text())
 
         def render_conversion() -> oracle.Render:
@@ -569,6 +588,14 @@ def build_sections(
             # levels: int | None and autocontrast: bool.
             pen_param: dict[str, Any] = (
                 {"pen_width_mm": ctx.settings.pen_width_mm} if STATE["mode"] in _PEN_AWARE_MODES else {}
+            )
+            wave_param: dict[str, Any] = (
+                {
+                    "orientation": str(STATE["wave_orientation"]),
+                    "connect_rows": bool(STATE["wave_connect"]),
+                }
+                if STATE["mode"] == "wave"
+                else {}
             )
             polylines = image_to_polylines(
                 STATE["bytes"],
@@ -582,6 +609,7 @@ def build_sections(
                 lift_budget=int(STATE["lift_budget"]),
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
                 **pen_param,
+                **wave_param,
                 **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
             )
             stem = str(STATE["name"] or "image").rsplit(".", 1)[0]
