@@ -386,10 +386,12 @@ def flow(
             mark(point_x, point_y)
         if len(path) >= 2:
             if dash_mm > 0:
-                points_per_dash = max(2, math.floor(dash_mm / step_mm) + 1)
+                points_per_dash = math.ceil(dash_mm / step_mm) + 1
+                skipped_points = math.floor(dash_mm / (2 * step_mm))
+                stride = points_per_dash + skipped_points
                 polylines.extend(
                     path[start : start + points_per_dash]
-                    for start in range(0, len(path) - 1, points_per_dash - 1)
+                    for start in range(0, len(path) - 1, stride)
                 )
             else:
                 polylines.append(path)

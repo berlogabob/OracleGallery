@@ -375,3 +375,12 @@ def test_flow_dash_mm_breaks_streamlines() -> None:
         )
 
     assert max(_path_length(stroke) for stroke in dashed) <= 3.0 * 1.5
+
+    # Dashes must leave real gaps: no consecutive strokes may abut (a zero-length
+    # travel is an extra pen lift, not a dash), and skipped gap material means
+    # measurably less ink than the continuous version.
+    gaps = [math.dist(dashed[i - 1][-1], dashed[i][0]) for i in range(1, len(dashed))]
+    assert min(gaps) > 0.05
+    assert sum(_path_length(stroke) for stroke in dashed) <= 0.85 * sum(
+        _path_length(stroke) for stroke in continuous
+    )
