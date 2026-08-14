@@ -87,3 +87,17 @@ def test_thousand_strokes_under_two_seconds():
     joined = join_with_budget(strokes, 10)
     assert time.monotonic() - start < 2.0
     assert len(joined) <= 11
+
+
+def test_flat_anisotropic_cloud_joins_fast():
+    # A wide, flat hatch (200 x 2 mm) must not degrade the endpoint grid to a
+    # single row of overcrowded cells.
+    rng = random.Random(9)
+    strokes = []
+    for _ in range(2000):
+        x, y = rng.uniform(0, 200.0), rng.uniform(0, 2.0)
+        strokes.append([(x, y), (x + rng.uniform(0.5, 2.0), y)])
+    start = time.monotonic()
+    joined = join_with_budget(strokes, 10)
+    assert time.monotonic() - start < 2.0
+    assert len(joined) <= 11
