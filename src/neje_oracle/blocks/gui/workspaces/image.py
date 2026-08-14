@@ -37,6 +37,7 @@ STATE: dict[str, Any] = {
     "svg": "",
     "mode": "trace",
     "quality": "fine",
+    "lift_budget": 1024,
     "source": "scan",
     "width_mm": 150.0,
     "height_mm": 150.0,
@@ -88,6 +89,7 @@ MOTIF_STATE: dict[str, Any] = {
 _PERSISTED_IMAGE_KEYS = {
     "mode": "image_mode",
     "quality": "image_quality",
+    "lift_budget": "lift_budget",
     "source": "image_source",
     "width_mm": "image_width_mm",
     "height_mm": "image_height_mm",
@@ -416,6 +418,8 @@ def build_sections(
                     # registered in ctx.fields, because pull_settings_from_fields would
                     # otherwise persist the string "3".
                     ctx.settings.image_quality = str(value)
+                if key == "lift_budget":
+                    ctx.settings.lift_budget = int(value)
                 refresh_preview()
 
             def _quality_text() -> str:
@@ -476,7 +480,7 @@ def build_sections(
                 )
 
             quality_label = ui.label("").classes("text-xs text-[#8f4f2b]")
-            ui.slider(
+            quality_fader = ui.slider(
                 min=0,
                 max=len(QUALITY_PRESETS) - 1,
                 step=1,
@@ -484,7 +488,22 @@ def build_sections(
                 on_change=lambda e: set_field("quality", QUALITY_PRESETS[int(e.value)]),
             ).props(
                 "label-always markers snap :label-value=\"['draft','fast','balanced','fine','max'][value]\""
-            ).classes("w-full tight-slider")
+            )
+
+            oracle.section_title("Pen lifts")
+            ctx.fields["lift_budget"] = ui.slider(
+                min=0,
+                max=1024,
+                step=1,
+                value=int(STATE["lift_budget"]),
+                on_change=lambda e: set_field("lift_budget", int(e.value)),
+            ).props("label-always markers snap")
+            for fader in quality_fader, ctx.fields["lift_budget"]:
+                fader.classes("w-full tight-slider")
+            helper_text(
+                "1024 means unlimited lifts; lower values join strokes into fewer pen-down runs "
+                "with visible connector lines."
+            )
 
             with ui.row().classes("gap-2 w-full items-center"):
                 cell_field = (
@@ -560,6 +579,7 @@ def build_sections(
                 gamma=float(STATE["gamma"]),
                 invert=bool(STATE["invert"]),
                 max_segments=quality_max_segments(str(STATE["quality"])),
+                lift_budget=int(STATE["lift_budget"]),
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
                 **pen_param,
                 **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),

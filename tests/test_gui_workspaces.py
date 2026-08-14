@@ -650,3 +650,12 @@ def _to_png(image: Image.Image) -> bytes:
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def test_lift_budget_is_a_persisted_image_setting() -> None:
+    from neje_oracle.blocks.gui.workspaces import image as image_workspace
+    from neje_oracle.shared import gui_settings
+
+    assert gui_settings.GUI_DEFAULTS["lift_budget"] == 1024
+    assert image_workspace._PERSISTED_IMAGE_KEYS.get("lift_budget") == "lift_budget"
+    assert "lift_budget" in gui_settings.GuiSettings.__dataclass_fields__

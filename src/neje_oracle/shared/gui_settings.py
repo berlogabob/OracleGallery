@@ -50,6 +50,7 @@ class GuiDefaults(TypedDict):
     # tune-once knobs move here; the per-picture ones (file bytes, crop, names) stay transient.
     image_mode: str
     image_quality: str
+    lift_budget: int
     image_source: str
     image_width_mm: float
     image_height_mm: float
@@ -107,6 +108,7 @@ type NumericGuiDefaultKey = Literal[
     "image_cell_mm",
     "image_detail",
     "image_gamma",
+    "lift_budget",
     "sheet_cell_width_mm",
     "sheet_cell_height_mm",
     "sheet_gap_mm",
@@ -161,6 +163,7 @@ GUI_DEFAULTS: GuiDefaults = {
     # patterns.ingest.DEFAULT_MODE, spelled out so shared/ keeps depending on nothing in blocks/.
     "image_mode": "trace",
     "image_quality": "fine",
+    "lift_budget": 1024,
     "image_source": "scan",
     "image_width_mm": 150.0,
     "image_height_mm": 150.0,
@@ -246,6 +249,7 @@ class GuiSettings:
     # index — deliberately stay in-module: a stale crop on a fresh photo is a bug, not a preference.
     image_mode: str = GUI_DEFAULTS["image_mode"]
     image_quality: str = GUI_DEFAULTS["image_quality"]
+    lift_budget: int = GUI_DEFAULTS["lift_budget"]
     image_source: str = GUI_DEFAULTS["image_source"]
     image_width_mm: float = GUI_DEFAULTS["image_width_mm"]
     image_height_mm: float = GUI_DEFAULTS["image_height_mm"]
