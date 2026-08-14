@@ -560,6 +560,50 @@ const GENERATORS = {
     return shapes;
   },
 
+  // One continuous coil swept around a seeded, warped guide loop.
+  ribbon: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    const lobes = 2 + Math.floor(rng() * 3);
+    const a1 = 0.35 + rng() * 0.15;
+    const a2 = 0.15 + rng() * 0.15;
+    const p1 = rng() * Math.PI * 2;
+    const p2 = rng() * Math.PI * 2;
+    const tube = 0.3 + rng() * 0.1;
+    const coils = Math.round(250 + density * 200);
+    const steps = coils * 40;
+    const radius = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.3 + scale * 0.15);
+    const unit = radius / (1 + a1 + a2 + tube);
+    const cx = PLOTTER_WIDTH_MM / 2;
+    const cy = PLOTTER_HEIGHT_MM / 2;
+    const points = [];
+    const guide = function(t) {
+      const r = 1 + a1 * Math.sin(lobes * t + p1) + a2 * Math.sin((lobes + 1) * t + p2);
+      return { x: r * Math.cos(t), y: r * Math.sin(t) };
+    };
+
+    for (let i = 0; i <= steps; i++) {
+      const u = Math.PI * 2 * i / steps;
+      const w = Math.PI * 2 * coils * i / steps;
+      const g = guide(u);
+      const before = guide(u - 0.0001);
+      const after = guide(u + 0.0001);
+      const dx = after.x - before.x;
+      const dy = after.y - before.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const tx = dx / length;
+      const ty = dy / length;
+      const normal = tube * Math.cos(w);
+      const tangent = 0.55 * tube * Math.sin(w);
+      points.push({
+        x: cx + unit * (g.x - ty * normal + tx * tangent),
+        y: cy + unit * (g.y + tx * normal + ty * tangent)
+      });
+    }
+
+    return [{ type: 'polyline', points: points }];
+  },
+
   mondrian: function(rng, params) {
     const density = densityOf(params);
     const scale = scaleOf(params);

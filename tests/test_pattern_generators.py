@@ -22,6 +22,7 @@ EXPECTED_GENERATORS = {
     "isolines",
     "weave",
     "bank",
+    "ribbon",
 }
 # Server-backed: renders nothing without /api/text/paths, covered by test_shx_text.py.
 SERVER_BACKED_GENERATORS = {"text"}
