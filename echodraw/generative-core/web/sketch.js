@@ -604,6 +604,38 @@ const GENERATORS = {
     return [{ type: 'polyline', points: points }];
   },
 
+  // Concentric harmonograph rings drifting into a wavy star bloom.
+  bloom: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    const rings = Math.round(30 + density * 30);
+    const petals = 5 + Math.floor(rng() * 5);
+    const basePhase = 1.5 + rng();
+    const drift = 1.5 + rng();
+    const extent = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.3 + scale * 0.15);
+    const radiusScale = extent / 1.24;
+    const cx = PLOTTER_WIDTH_MM / 2;
+    const cy = PLOTTER_HEIGHT_MM / 2;
+    const shapes = [];
+
+    for (let ring = 1; ring <= rings; ring++) {
+      const f = ring / rings;
+      const radius = radiusScale * f;
+      const amplitude = 0.24 * f * (1 + 0.35 * Math.sin(3 * f * Math.PI)) * radiusScale;
+      const phase = basePhase + f * drift;
+      const points = [];
+      for (let degree = 0; degree < 360; degree++) {
+        const theta = degree * Math.PI / 180;
+        const r = radius + amplitude * Math.sin(petals * theta + phase);
+        points.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
+      }
+      points.push({ x: points[0].x, y: points[0].y });
+      shapes.push({ type: 'polyline', points: points });
+    }
+
+    return shapes;
+  },
+
   mondrian: function(rng, params) {
     const density = densityOf(params);
     const scale = scaleOf(params);
