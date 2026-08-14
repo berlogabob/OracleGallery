@@ -636,6 +636,83 @@ const GENERATORS = {
     return shapes;
   },
 
+  // Bouncing random-walk stems with leaves and spaced radial flowers.
+  vine: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    const walks = Math.round(6 + density * 4);
+    const unit = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.035 + scale * 0.035);
+    const step = unit * 0.22;
+    const shapes = [];
+    const flowers = [];
+    const leafPoints = function(cx, cy, angle, size) {
+      const points = [];
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      const addPoint = function(t, side) {
+        const lx = size * t;
+        const ly = side * size * 0.42 * Math.sin(Math.PI * t);
+        points.push({ x: cx + lx * cosine - ly * sine, y: cy + lx * sine + ly * cosine });
+      };
+      for (let i = 0; i <= 12; i++) addPoint(i / 12, 1);
+      for (let i = 12; i >= 0; i--) addPoint(i / 12, -1);
+      return points;
+    };
+    const inBounds = function(points) {
+      return points.every(function(point) {
+        return point.x >= 0 && point.x <= PLOTTER_WIDTH_MM && point.y >= 0 && point.y <= PLOTTER_HEIGHT_MM;
+      });
+    };
+
+    for (let walk = 0; walk < walks; walk++) {
+      let x = rng() * PLOTTER_WIDTH_MM;
+      let y = rng() * PLOTTER_HEIGHT_MM;
+      let heading = rng() * Math.PI * 2;
+      const stem = [{ x: x, y: y }];
+      shapes.push({ type: 'polyline', points: stem });
+
+      const steps = Math.round(80 + rng() * 40);
+      for (let i = 0; i < steps; i++) {
+        heading += (rng() - 0.5) * 1.1;
+        const nextX = x + Math.cos(heading) * step;
+        const nextY = y + Math.sin(heading) * step;
+        if (nextX < 0 || nextX > PLOTTER_WIDTH_MM) heading = Math.PI - heading;
+        if (nextY < 0 || nextY > PLOTTER_HEIGHT_MM) heading = -heading;
+        x += Math.cos(heading) * step;
+        y += Math.sin(heading) * step;
+        stem.push({ x: x, y: y });
+
+        if (rng() < 0.12) {
+          const size = unit * (0.35 + rng() * 0.35);
+          const angle = heading + (rng() < 0.5 ? -1.2 : 1.2);
+          const points = leafPoints(x, y, angle, size);
+          if (inBounds(points)) shapes.push({ type: 'polyline', points: points });
+        }
+
+        if (rng() < 0.03) {
+          const petals = 5 + Math.floor(rng() * 3);
+          const size = unit * (0.3 + rng() * 0.2);
+          const overlaps = flowers.some(function(flower) {
+            return Math.hypot(x - flower.x, y - flower.y) < Math.max(size, flower.size) * 1.5;
+          });
+          if (!overlaps) {
+            const phase = rng() * Math.PI * 2;
+            const flower = [];
+            for (let petal = 0; petal < petals; petal++) {
+              flower.push(leafPoints(x, y, phase + petal * Math.PI * 2 / petals, size));
+            }
+            if (flower.every(inBounds)) {
+              flowers.push({ x: x, y: y, size: size });
+              for (const points of flower) shapes.push({ type: 'polyline', points: points });
+            }
+          }
+        }
+      }
+    }
+
+    return shapes;
+  },
+
   mondrian: function(rng, params) {
     const density = densityOf(params);
     const scale = scaleOf(params);
