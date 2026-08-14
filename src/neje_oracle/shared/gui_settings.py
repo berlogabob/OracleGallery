@@ -59,6 +59,9 @@ class GuiDefaults(TypedDict):
     image_gamma: float
     image_invert: bool
     image_show_travel: bool
+    wave_orientation: str
+    wave_connect: bool
+    flow_dash_mm: float
     sheet_cell_width_mm: float
     sheet_cell_height_mm: float
     sheet_gap_mm: float
@@ -109,6 +112,7 @@ type NumericGuiDefaultKey = Literal[
     "image_detail",
     "image_gamma",
     "lift_budget",
+    "flow_dash_mm",
     "sheet_cell_width_mm",
     "sheet_cell_height_mm",
     "sheet_gap_mm",
@@ -172,6 +176,9 @@ GUI_DEFAULTS: GuiDefaults = {
     "image_gamma": 1.0,
     "image_invert": False,
     "image_show_travel": True,
+    "wave_orientation": "horizontal",
+    "wave_connect": False,
+    "flow_dash_mm": 0.0,
     "sheet_cell_width_mm": 40.0,
     "sheet_cell_height_mm": 60.0,
     "sheet_gap_mm": 5.0,
@@ -258,6 +265,9 @@ class GuiSettings:
     image_gamma: float = GUI_DEFAULTS["image_gamma"]
     image_invert: bool = GUI_DEFAULTS["image_invert"]
     image_show_travel: bool = GUI_DEFAULTS["image_show_travel"]
+    wave_orientation: str = GUI_DEFAULTS["wave_orientation"]
+    wave_connect: bool = GUI_DEFAULTS["wave_connect"]
+    flow_dash_mm: float = GUI_DEFAULTS["flow_dash_mm"]
     sheet_cell_width_mm: float = GUI_DEFAULTS["sheet_cell_width_mm"]
     sheet_cell_height_mm: float = GUI_DEFAULTS["sheet_cell_height_mm"]
     sheet_gap_mm: float = GUI_DEFAULTS["sheet_gap_mm"]

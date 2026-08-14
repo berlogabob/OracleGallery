@@ -48,6 +48,7 @@ STATE: dict[str, Any] = {
     "detail": 1.0,
     "wave_orientation": "horizontal",
     "wave_connect": False,
+    "flow_dash_mm": 0.0,
 }
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif")
@@ -100,6 +101,9 @@ _PERSISTED_IMAGE_KEYS = {
     "gamma": "image_gamma",
     "invert": "image_invert",
     "show_travel": "image_show_travel",
+    "wave_orientation": "wave_orientation",
+    "wave_connect": "wave_connect",
+    "flow_dash_mm": "flow_dash_mm",
 }
 _PERSISTED_SHEET_KEYS = {
     "cell_w": "sheet_cell_width_mm",
@@ -141,9 +145,9 @@ MODE_HELP = {
     "dither": "Floyd-Steinberg dots. Highest fidelity, longest plot.",
     "contour": "Threshold-band outlines. Detail = number of bands.",
     "crosshatch": "Layered hatching at four angles. Graphic and even; good for flat tone.",
-    "flow": "Hatching that follows the form, so shading wraps around shapes. Best for photographs.",
+    "flow": "Hatching that follows the form, so shading wraps around shapes. Dash mm breaks the flow into dashes. Best for photographs.",
     "spiral": "One spiral out from the centre, wobbling harder where the image is dark. Fewest pen lifts of any mode.",
-    "wave": "Rows that ripple wider and faster with darkness. Choose horizontal/vertical and One line to connect rows.",
+    "wave": 'Rows that ripple wider and faster with darkness. Choose horizontal/vertical and One line to connect rows. "One line" draws straight connector lines across light areas.',
     "stipple": "Density-weighted dots, chained into rows to cut pen lifts. Grainy, organic tone.",
     "squiggle": "One continuous meandering line, packing tighter where the image is dark. Wandering, few pen lifts.",
 }
@@ -404,26 +408,25 @@ def build_sections(
 
         def conversion_controls() -> None:
             mode_help = ui.label(MODE_HELP[STATE["mode"]]).classes("text-xs text-[#8f4f2b]")
+            built_controls: dict[str, Any] = {}
 
             def set_field(key: str, value: Any) -> None:
                 STATE[key] = value
+                if settings_field := _PERSISTED_IMAGE_KEYS.get(key):
+                    setattr(ctx.settings, settings_field, value)
                 if key in ("mode", "quality"):
                     mode_help.set_text(MODE_HELP.get(str(STATE["mode"]), ""))
                     STATE["cell_mm"] = quality_cell_mm(
                         str(STATE["mode"]), str(STATE["quality"]), ctx.settings.pen_width_mm
                     )
-                    cell_field.set_value(STATE["cell_mm"])
-                    quality_label.set_text(_quality_text())
+                    if (cell_field := built_controls.get("cell")) is not None:
+                        cell_field.set_value(STATE["cell_mm"])
+                    if (quality_label := built_controls.get("quality_label")) is not None:
+                        quality_label.set_text(_quality_text())
                 if key == "mode":
-                    wave_controls.set_visibility(value == "wave")
-                if key == "quality":
-                    # The only sticky knob whose widget value is not the stored value: the
-                    # fader holds a preset index, not "fine". Mirrored here rather than
-                    # registered in ctx.fields, because pull_settings_from_fields would
-                    # otherwise persist the string "3".
-                    ctx.settings.image_quality = str(value)
-                if key == "lift_budget":
-                    ctx.settings.lift_budget = int(value)
+                    for mode in ("wave", "flow"):
+                        if (controls := built_controls.get(mode)) is not None:
+                            controls.set_visibility(value == mode)
                 refresh_preview()
 
             def _quality_text() -> str:
@@ -484,6 +487,7 @@ def build_sections(
                 )
 
             quality_label = ui.label("").classes("text-xs text-[#8f4f2b]")
+            built_controls["quality_label"] = quality_label
             quality_fader = ui.slider(
                 min=0,
                 max=len(QUALITY_PRESETS) - 1,
@@ -532,6 +536,7 @@ def build_sections(
                     )
                 )
                 ctx.fields["image_cell_mm"] = cell_field
+                built_controls["cell"] = cell_field
                 ctx.fields["image_detail"] = (
                     ui.number(
                         "Detail",
@@ -564,18 +569,36 @@ def build_sections(
                 )
 
             with oracle.toolbar(full_width=True) as wave_controls:
-                oracle.select(
+                ctx.fields["wave_orientation"] = oracle.select(
                     ["horizontal", "vertical"],
                     value=STATE["wave_orientation"],
                     label="Orientation",
                     on_change=lambda e: set_field("wave_orientation", str(e.value)),
                 )
-                oracle.switch(
+                ctx.fields["wave_connect"] = oracle.switch(
                     "One line",
                     value=bool(STATE["wave_connect"]),
                     on_change=lambda e: set_field("wave_connect", bool(e.value)),
                 )
+            built_controls["wave"] = wave_controls
             wave_controls.set_visibility(STATE["mode"] == "wave")
+
+            with oracle.toolbar(full_width=True) as flow_controls:
+                oracle.number_control(
+                    ctx.fields,
+                    "flow_dash_mm",
+                    label="Dash mm",
+                    value=float(STATE["flow_dash_mm"]),
+                    default=0.0,
+                    min_value=0.0,
+                    step=0.5,
+                    tooltip="0 draws continuous flow lines; above 0 alternates dashes and gaps.",
+                    on_change=lambda: set_field(
+                        "flow_dash_mm", float(ctx.fields["flow_dash_mm"].value or 0.0)
+                    ),
+                ).props("max=10")
+            built_controls["flow"] = flow_controls
+            flow_controls.set_visibility(STATE["mode"] == "flow")
 
             quality_label.set_text(_quality_text())
 
@@ -596,6 +619,9 @@ def build_sections(
                 if STATE["mode"] == "wave"
                 else {}
             )
+            flow_param: dict[str, Any] = (
+                {"dash_mm": float(STATE["flow_dash_mm"])} if STATE["mode"] == "flow" else {}
+            )
             polylines = image_to_polylines(
                 STATE["bytes"],
                 mode=str(STATE["mode"]),
@@ -609,6 +635,7 @@ def build_sections(
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
                 **pen_param,
                 **wave_param,
+                **flow_param,
                 **_mode_params(str(STATE["mode"]), float(STATE["detail"]), str(STATE["quality"]), str(STATE["source"])),
             )
             stem = str(STATE["name"] or "image").rsplit(".", 1)[0]

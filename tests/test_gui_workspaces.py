@@ -659,3 +659,19 @@ def test_lift_budget_is_a_persisted_image_setting() -> None:
     assert gui_settings.GUI_DEFAULTS["lift_budget"] == 1024
     assert image_workspace._PERSISTED_IMAGE_KEYS.get("lift_budget") == "lift_budget"
     assert "lift_budget" in gui_settings.GuiSettings.__dataclass_fields__
+
+
+def test_wave_and_dash_knobs_are_persisted_image_settings() -> None:
+    from neje_oracle.blocks.gui.workspaces import image as image_workspace
+    from neje_oracle.shared import gui_settings
+
+    expected = {
+        "wave_orientation": ("wave_orientation", "horizontal"),
+        "wave_connect": ("wave_connect", False),
+        "flow_dash_mm": ("flow_dash_mm", 0.0),
+    }
+    for state_key, (settings_field, default) in expected.items():
+        assert state_key in image_workspace.STATE, state_key
+        assert image_workspace._PERSISTED_IMAGE_KEYS.get(state_key) == settings_field
+        assert gui_settings.GUI_DEFAULTS[settings_field] == default
+        assert settings_field in gui_settings.GuiSettings.__dataclass_fields__
