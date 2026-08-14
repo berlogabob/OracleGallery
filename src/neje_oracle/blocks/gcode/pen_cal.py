@@ -56,6 +56,9 @@ class PenCalRanges:
     draw_rates: tuple[float, ...] = (800.0, 1400.0, 2000.0, 2800.0, 3600.0, 4800.0)
     dwell_ms: tuple[float, ...] = (0.0, 60.0, 120.0, 250.0)
     z_steps: int = 5
+    # Half-width of the Z ladder around the current depth. The default matches the old
+    # hard-coded span; widen it after a mechanics change, when the profile value is a guess.
+    z_span_mm: float = Z_LADDER_SPAN_MM
 
 
 @dataclass
@@ -156,7 +159,7 @@ def _build_blocks(settings: GuiSettings, ranges: PenCalRanges) -> list[_Block]:
     base_z = float(settings.z_down_mm)
     steps = max(2, ranges.z_steps)
     for index in range(steps):
-        offset = -Z_LADDER_SPAN_MM + (2 * Z_LADDER_SPAN_MM) * index / (steps - 1)
+        offset = -ranges.z_span_mm + (2 * ranges.z_span_mm) * index / (steps - 1)
         depth = max(Z_ABSOLUTE_FLOOR_MM, base_z + offset)
         z_block.rows.append((f"{depth:.2f}", _solid_row(left, 0.0), {"z_down_mm": depth}))
     blocks.append(z_block)
@@ -301,6 +304,137 @@ def _emit(
         for x, y in polyline[1:]:
             lines.append(f"G1 X{x + origin_x:.3f} Y{y + origin_y:.3f}")
         lines.append(pen_up)
+
+
+def build_z_range_gcode(
+    settings: GuiSettings,
+    *,
+    depth_start_mm: float = 0.0,
+    depth_stop_mm: float = -12.0,
+    depth_step_mm: float = 0.5,
+    clearance_heights_mm: tuple[float, ...] = (-8.0, -6.0, -4.0, -2.0, 0.0),
+    origin_x_mm: float | None = None,
+    origin_y_mm: float | None = None,
+) -> tuple[str, dict[str, object]]:
+    """Full-range Z discovery sheet, for after a mechanics change.
+
+    Unlike the pen-cal ladder (a bounded sweep around a trusted profile depth), this
+    sweeps depth absolutely from depth_start_mm down to depth_stop_mm: the first rung
+    that marks is the touch depth, the rung where the line stops widening is full ink,
+    and anything deeper is the servo stalling against the physical stop. A second block
+    sweeps pen-UP heights, deepest first: the shallowest rung whose gap stays clean is
+    the new z_up_mm. Both are clamped to Z_ABSOLUTE_FLOOR_MM regardless of arguments.
+    """
+    if depth_step_mm <= 0:
+        raise ValueError("depth_step_mm must be positive")
+    plotter = PlotterSettings()
+    font = _label_font()
+    origin_x = settings.direct_svg_origin_x_mm if origin_x_mm is None else origin_x_mm
+    origin_y = settings.direct_svg_origin_y_mm if origin_y_mm is None else origin_y_mm
+    default_pen_up = _pen_up_command(plotter.pen_up_command, use_z_servo=plotter.use_z_servo, z_up_mm=settings.z_up_mm)
+
+    lines = [
+        "; Neje Oracle Z range calibration",
+        "; block 1: absolute pen-down depths -- first mark = touch, stable width = full ink",
+        "; block 2: pen-up heights, deepest first -- shallowest clean gap = new z_up",
+        _xy_acceleration_comment(settings.xy_acceleration_mm_s2),
+        "G21",
+        "G90",
+        f"G0 F{settings.travel_rate:.2f}",
+        default_pen_up,
+    ]
+    drawn: list[tuple[float, float]] = []
+    used: list[dict[str, object]] = []
+    cursor_y = 0.0
+    left = LABEL_COLUMN_MM
+    row_pitch = 6.0  # shallower rows than pen-cal: many rungs, each a short line
+    # Labels must not trust the profile's z_down: after a mechanics change it can sit far
+    # past the new physical stop (the reason this sheet exists). The deepest swept rung is
+    # the deepest Z this sheet ever commands, labels included.
+    label_overrides = {"z_down_mm": max(Z_ABSOLUTE_FLOOR_MM, depth_stop_mm)}
+
+    def _block_header(title: str) -> None:
+        nonlocal cursor_y
+        lines.append(f"; --- {title} ---")
+        header = _label(title, 0.0, cursor_y, font) if font else []
+        for polyline in header:
+            drawn.extend(polyline)
+        _emit(lines, header, settings, plotter, label_overrides, origin_x, origin_y, default_pen_up)
+        cursor_y += ROW_PITCH_MM * 0.8
+
+    _block_header("pen-down Z mm (absolute)")
+    depth = depth_start_mm
+    while depth >= depth_stop_mm - 1e-9:
+        clamped = max(Z_ABSOLUTE_FLOOR_MM, depth)
+        row = _offset(_solid_row(left, 0.0, length_mm=40.0), cursor_y)
+        tag = _label(f"{clamped:.1f}", 0.0, cursor_y, font) if font else []
+        lines.append(f"; depth = {clamped:.1f}")
+        _emit(lines, tag, settings, plotter, label_overrides, origin_x, origin_y, default_pen_up)
+        _emit(lines, row, settings, plotter, {"z_down_mm": clamped}, origin_x, origin_y, default_pen_up)
+        for polyline in row + tag:
+            drawn.extend(polyline)
+        used.append({"block": "depth", "z_down_mm": clamped})
+        cursor_y += row_pitch
+        depth -= depth_step_mm
+    cursor_y += BLOCK_GAP_MM
+
+    _block_header("pen-up clearance Z mm")
+    # z_down for this block: the deepest depth that was swept above, so drag (if any)
+    # happens against real ink pressure, not a barely-touching nib.
+    clearance_down = max(Z_ABSOLUTE_FLOOR_MM, depth_stop_mm)
+    for height in sorted(clearance_heights_mm):  # deepest first
+        clamped_up = max(Z_ABSOLUTE_FLOOR_MM, min(0.0, height))
+        row_pen_up = _pen_up_command(plotter.pen_up_command, use_z_servo=plotter.use_z_servo, z_up_mm=clamped_up)
+        # Two strokes with a 20 mm travel between them at this pen-up height: a drag
+        # mark in the gap disqualifies the rung.
+        strokes = _offset(
+            [[(left, 0.0), (left + 25.0, 0.0)], [(left + 45.0, 0.0), (left + 70.0, 0.0)]],
+            cursor_y,
+        )
+        tag = _label(f"{clamped_up:.1f}", 0.0, cursor_y, font) if font else []
+        lines.append(f"; clearance = {clamped_up:.1f}")
+        _emit(lines, tag, settings, plotter, label_overrides, origin_x, origin_y, default_pen_up)
+        _emit(lines, strokes, settings, plotter, {"z_down_mm": clearance_down}, origin_x, origin_y, row_pen_up)
+        for polyline in strokes + tag:
+            drawn.extend(polyline)
+        used.append({"block": "clearance", "z_up_mm": clamped_up})
+        cursor_y += row_pitch
+    lines.append(default_pen_up)
+    lines.append("G0 X0 Y0")
+
+    max_x = max(x for x, _ in drawn) + origin_x
+    max_y = max(y for _, y in drawn) + origin_y
+    if max_x > settings.sheet_width_mm or max_y > settings.sheet_height_mm:
+        raise ValueError(
+            f"z range sheet needs {max_x:.0f}x{max_y:.0f}mm which exceeds the "
+            f"{settings.sheet_width_mm:.0f}x{settings.sheet_height_mm:.0f}mm sheet"
+        )
+
+    manifest: dict[str, object] = {
+        "profile": settings.pen_profile,
+        "rows": used,
+        "extent_mm": [round(max_x, 2), round(max_y, 2)],
+        "origin_mm": [origin_x, origin_y],
+        "z_floor_mm": Z_ABSOLUTE_FLOOR_MM,
+    }
+    return "\n".join(lines) + "\n", manifest
+
+
+def generate_z_range_sheet(
+    settings: GuiSettings,
+    *,
+    spool_root: Path | None = None,
+    **kwargs: float,
+) -> dict[str, Path]:
+    """Write the Z range sheet into the spool, next to the pen-cal sheets."""
+    gcode, manifest = build_z_range_gcode(settings, **kwargs)
+    output_root = spool_root or PlotterSettings().spool_root
+    ensure_dir(output_root)
+    gcode_path = output_root / "z_range_cal.gcode"
+    manifest_path = output_root / "z_range_cal.json"
+    gcode_path.write_text(gcode, encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return {"gcode": gcode_path, "manifest": manifest_path}
 
 
 def generate_pen_cal_sheet(

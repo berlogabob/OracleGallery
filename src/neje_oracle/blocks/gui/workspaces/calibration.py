@@ -13,6 +13,7 @@ from nicegui import ui
 
 from ....shared.gui_settings import NumericGuiDefaultKey
 from ....shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS
+from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ....shared.pen_profiles import (
     PEN_PROFILE_FIELDS,
     apply_pen_profile,
@@ -170,7 +171,9 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     label="Pen-up Z (mm)",
                     value=settings.z_up_mm,
                     default=0,
-                    min_value=-25,
+                    # The same floor the G-code generators clamp at, so the box can
+                    # accept anything a calibration sheet can legally print.
+                    min_value=Z_ABSOLUTE_FLOOR_MM,
                     width_class="w-full",
                     tooltip="Height the pen lifts to between strokes. Emitted as G0 Z when the Z servo is in use.",
                     on_change=persist_and_refresh,
@@ -181,7 +184,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     label="Pen-down Z (mm)",
                     value=settings.z_down_mm,
                     default=-25,
-                    min_value=-25,
+                    min_value=Z_ABSOLUTE_FLOOR_MM,
                     width_class="w-full",
                     tooltip="Pen pressure: how far the pen presses into the paper. Too shallow leaves gaps, too deep splays the nib.",
                     on_change=persist_and_refresh,
