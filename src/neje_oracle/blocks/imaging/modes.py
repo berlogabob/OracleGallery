@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 
+from neje_oracle.shared.pathops import join_with_budget
+
 Polylines = list[list[tuple[float, float]]]
 
 MAX_SEGMENTS_DEFAULT = 40_000
@@ -1358,6 +1360,7 @@ def tone_to_polylines(
     mode: str,
     max_segments: int = MAX_SEGMENTS_DEFAULT,
     min_stroke_mm: float = 0.0,
+    lift_budget: int = 1024,
     **params: Any,
 ) -> Polylines:
     """Render an already-built ToneGrid.
@@ -1376,6 +1379,9 @@ def tone_to_polylines(
     polylines = [polyline for polyline in strokes if len(polyline) >= 2]
     if min_stroke_mm > 0:
         polylines = [polyline for polyline in polylines if _stroke_extent_mm(polyline) >= min_stroke_mm]
+    # 1024 is the off position.
+    if lift_budget < 1024 and polylines:
+        polylines = join_with_budget(polylines, lift_budget)
     segment_count = sum(len(polyline) - 1 for polyline in polylines)
     if segment_count > max_segments:
         raise ValueError(
@@ -1398,6 +1404,7 @@ def image_to_polylines(
     autocontrast: bool = True,
     max_segments: int = MAX_SEGMENTS_DEFAULT,
     min_stroke_mm: float = 0.0,
+    lift_budget: int = 1024,
     **params: Any,
 ) -> Polylines:
     # Validated here as well as in tone_to_polylines on purpose: these guards must fire BEFORE
@@ -1416,7 +1423,14 @@ def image_to_polylines(
         # which lifts fabric texture and JPEG noise into ink (tests/test_imaging_speckle.py).
         autocontrast=autocontrast,
     )
-    return tone_to_polylines(tone, mode=mode, max_segments=max_segments, min_stroke_mm=min_stroke_mm, **params)
+    return tone_to_polylines(
+        tone,
+        mode=mode,
+        max_segments=max_segments,
+        min_stroke_mm=min_stroke_mm,
+        lift_budget=lift_budget,
+        **params,
+    )
 
 
 def polylines_to_svg(

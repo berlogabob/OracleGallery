@@ -313,3 +313,25 @@ def test_hatch_midtone_is_not_solid() -> None:
     assert black > 0
     assert mid < black * 0.8, f"midtone {mid:.0f}mm vs black {black:.0f}mm — no shading"
     assert light < mid, f"light {light:.0f}mm not lighter than mid {mid:.0f}mm"
+
+
+def test_lift_budget_zero_collapses_any_mode_to_one_stroke() -> None:
+    gradient = np.tile(np.linspace(0, 255, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    for mode in ("hatch", "contour"):
+        polylines = image_to_polylines(
+            data, mode=mode, width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=0
+        )
+        assert len(polylines) == 1, mode
+
+
+def test_lift_budget_default_changes_nothing() -> None:
+    gradient = np.tile(np.linspace(0, 255, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    baseline = image_to_polylines(data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+    assert (
+        image_to_polylines(
+            data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=1024
+        )
+        == baseline
+    )
