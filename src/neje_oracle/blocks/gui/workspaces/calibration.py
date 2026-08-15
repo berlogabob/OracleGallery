@@ -29,6 +29,7 @@ from ..ui import (
     card,
     helper_text,
     mini_metric,
+    nudge_button,
     number_control,
     primary_action_button,
     safe_action_button,
@@ -105,8 +106,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
             control.on("dblclick", lambda _: reset())
             number.on_value_change(sync_from_number)
             number.on("dblclick", lambda _: reset())
-            ui.button("-", on_click=lambda: nudge(-step)).props("dense flat").classes("w-full")
-            ui.button("+", on_click=lambda: nudge(step)).props("dense flat").classes("w-full")
+            nudge_button("-", lambda: nudge(-step))
+            nudge_button("+", lambda: nudge(step))
             fields[key] = control
             return control
 

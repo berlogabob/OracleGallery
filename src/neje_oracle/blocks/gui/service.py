@@ -9,7 +9,7 @@ from nicegui import ui
 from ...shared.models import SystemMode
 from . import screens, tokens
 from .context import GuiContext
-from .ui import client_timer
+from .ui import client_timer, estop_button, stop_button
 from .workspaces import generative, motion, texture
 
 PAGE_STYLE = """
@@ -190,6 +190,13 @@ __TOKENS_PLACEHOLDER__
   }
   .oracle-btn-safe:hover { border-color: var(--rust); color: var(--rust) !important; }
   .oracle-btn-danger { background: var(--danger) !important; color: var(--paper) !important; }
+  .oracle-btn-stop {
+    color: var(--danger) !important;
+    border: 1px solid var(--danger);
+    background: var(--paper) !important;
+  }
+  .oracle-btn-estop { background: var(--danger) !important; color: var(--paper) !important; font-weight: 800; }
+  .oracle-btn-nudge { color: var(--ink-mid) !important; min-width: 0; }
   .oracle-embed { width: 100%; border: 0; background: var(--paper); border-radius: var(--radius-md); }
   .oracle-embed-fill { flex: 1 1 auto; min-height: 0; height: 100%; }
   .oracle-metric-line { font-size: 12px; color: var(--rust); }
@@ -236,9 +243,9 @@ def build_page() -> None:
                 on_change=lambda event: ctx.run_profile_changed(event.value),
             ).tooltip("ON: a run must have the Firebase queue (exhibition). OFF: local-only verification prints.")
             ui.element("div").classes("status-spacer")
-            ui.button("STOP PRINT", on_click=ctx.stop_print).props("dense color=warning")
+            stop_button("STOP PRINT", ctx.stop_print)
             ui.element("div").classes("estop-gap")
-            ui.button("EMERGENCY STOP", on_click=ctx.emergency_stop).props("dense color=negative")
+            estop_button("EMERGENCY STOP", ctx.emergency_stop)
         ui.label(
             "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
         ).classes("mobile-operator-warning")

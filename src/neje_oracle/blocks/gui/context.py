@@ -46,7 +46,7 @@ from .support import (
     save_oracle_plotter_config,
     save_symbol_scales,
 )
-from .ui import helper_text, notify_if_connected
+from .ui import danger_action_button, helper_text, notify_if_connected, safe_action_button
 
 # The three screens. Anything else -- including the seven module-named tabs these replaced --
 # falls back to PRINT, which is where an operator should land anyway.
@@ -791,8 +791,8 @@ class GuiContext:
                     self.refresh_logs()
 
             with ui.row().classes("gap-2"):
-                ui.button("Cancel", on_click=dialog.close).props("dense flat")
-                ui.button("Confirm", on_click=confirmed).props("dense color=warning")
+                safe_action_button("Cancel", dialog.close)
+                danger_action_button("Confirm", confirmed)
         dialog.open()
 
     def _notify_fluidnc_offline(self, detail: str) -> None:

@@ -10,7 +10,7 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import helper_text, log_viewer, primary_action_button, safe_action_button
+from ..ui import danger_action_button, helper_text, log_viewer, primary_action_button, safe_action_button
 
 
 def build_diagnostics(ctx: GuiContext) -> None:
@@ -21,7 +21,7 @@ def build_diagnostics(ctx: GuiContext) -> None:
         ui.label("Mac mini uploader").classes("text-sm font-bold")
         with ui.row().classes("gap-2"):
             safe_action_button("START", ctx.start_macmini)
-            ui.button("STOP", on_click=ctx.stop_macmini).props("dense color=warning")
+            danger_action_button("STOP", ctx.stop_macmini)
             safe_action_button("SCAN", ctx.scan_macmini)
             safe_action_button("RESTART", ctx.restart_macmini)
         helper_text("Controlled through NEJE_MACMINI_AGENT_URL")

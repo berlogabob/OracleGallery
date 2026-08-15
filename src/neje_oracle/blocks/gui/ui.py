@@ -46,6 +46,26 @@ def danger_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-danger")
 
 
+def stop_button(label: str, on_click: Callable[..., Any]) -> Any:
+    """Halts the current print: danger-outlined -- loud, but subordinate to the e-stop.
+
+    The audit's one sev-4 (F-001): the two most consequential controls were the only raw
+    Quasar buttons in the app, STOP PRINT white-on-gold at 1.7:1. Both now carry the
+    danger hue the operator has already learned, at two distinct weights.
+    """
+    return ui.button(label, on_click=on_click).props("dense flat").classes("oracle-btn oracle-btn-stop")
+
+
+def estop_button(label: str, on_click: Callable[..., Any]) -> Any:
+    """THE emergency stop. One per app: filled danger, heaviest button on screen."""
+    return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-estop")
+
+
+def nudge_button(label: str, on_click: Callable[..., Any]) -> Any:
+    """Slider fine-trim (- / +): quiet, sized by its narrow grid track."""
+    return ui.button(label, on_click=on_click).props("dense flat").classes("oracle-btn oracle-btn-nudge w-full")
+
+
 # --- structure ------------------------------------------------------------------
 
 
