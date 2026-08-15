@@ -13,7 +13,7 @@ commit and say why. A constant edited *upward* is a regression being written dow
 
 Targets, and the plan they come from:
   M1 screens 7 -> 3          DONE -- PRINT / CREATE / SETUP
-  M2 python print paths 7 -> 1   one button that says what it does
+  M2 python print paths 7 -> 2   DONE -- one home per artifact class (strip + uploaded SVG)
   M3 web send buttons 2 -> 0     the browser stops being a print client
   M4 cost blocks 3 -> 1          DONE -- one estimator call site behind one helper
   M5 estimator in a view 1 -> 0  DONE -- it moved to blocks/imaging/modes.py
@@ -44,15 +44,18 @@ WEB = REPO / "echodraw" / "generative-core" / "web"
 
 # --- the trackables -------------------------------------------------------------
 SCREENS = 3  # reached target: PRINT / CREATE / SETUP
-PRINT_ENTRY_POINTS = 2  # -2 more: line text and the frame sheet now print through render_card
+# M2 done at 2, not 1: the two calls left are different artifacts, not duplicate homes.
+# The CREATE strip prints every generative source through Section.print, and VERIFY's
+# START SVG PRINT is the uploaded-file path. Folding one into ui.py would only move the
+# call out of the counted glob -- gaming the metric, not simplifying the UI.
+PRINT_ENTRY_POINTS = 2
 WEB_SEND_BUTTONS = 0  # reached target: the browser is no longer a print client
 COST_BLOCKS = 0  # target passed: every estimator lives inside ui.render_card, zero hand-rolled cost blocks
 ESTIMATOR_IN_VIEW = 0
 MODULE_STATE_DICTS = 5  # -1: LATEST deleted; the browser no longer pushes SVG at us
-# CREATE's 7 are knob labels (Mode, Cell mm, Travel lines...) repeated across panes that are
-# mutually exclusive on screen -- the CDP gate proves 0 visible duplicates in every mode. The
-# headless walk cannot see visibility; action buttons measure 0 duplicated everywhere.
-DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 7, "setup": 2}
+# M7 target reached: the walk is visibility-aware now, so mutually exclusive panes' knob
+# labels no longer count as duplicates -- which is what the CDP gate always showed on screen.
+DUPLICATE_ACTION_LABELS_PER_SCREEN = {"print": 0, "create": 0, "setup": 0}
 FIXED_HEIGHT_IFRAMES = 0  # reached target: embedded_page no longer takes a height; both editors fill their pane
 DEAD_TAB_STRINGS = 0  # reached target: no operator-facing text names a deleted tab  # "Connection tab" in context.py; the other five markers are already gone
 
@@ -113,9 +116,20 @@ def _duplicate_label_count(monkeypatch: pytest.MonkeyPatch, build: Callable[[Gui
     with ui.column() as root:
         build(ctx)
     labels: list[str] = []
-    for element in root.descendants():
-        texts = {str(text) for text in (getattr(element, "text", None), element._props.get("label")) if text}
-        labels.extend(text for text in texts if len(text) > 1)
+
+    # Walk only what the operator can see: set_visibility(False) hides a whole subtree,
+    # and CREATE/SETUP show one pane at a time. Counting hidden panes' knob labels as
+    # duplicates measured the DOM, not the screen -- the CDP gate proves 0 visible dupes.
+    def visit(element: object) -> None:
+        for slot in getattr(element, "slots", {}).values():
+            for child in slot.children:
+                if not getattr(child, "visible", True):
+                    continue
+                texts = {str(text) for text in (getattr(child, "text", None), child._props.get("label")) if text}
+                labels.extend(text for text in texts if len(text) > 1)
+                visit(child)
+
+    visit(root)
     return sum(1 for occurrences in Counter(labels).values() if occurrences > 1)
 
 
@@ -132,9 +146,9 @@ def test_screen_count() -> None:
 
 
 def test_python_print_entry_points() -> None:
-    """Seven ways to start a plot, none of which say how they differ from the others."""
+    """Seven ways to start a plot became two: the strip, and the uploaded-SVG verify print."""
     assert _count(_PRINT_CALL, _workspace_files()) == PRINT_ENTRY_POINTS, (
-        "print entry points changed; set PRINT_ENTRY_POINTS to the measured value. Target is 1."
+        "print entry points changed; set PRINT_ENTRY_POINTS to the measured value. Target met at 2."
     )
 
 

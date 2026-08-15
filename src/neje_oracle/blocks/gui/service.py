@@ -112,8 +112,9 @@ __TOKENS_PLACEHOLDER__
     font-size: 12px;
     font-weight: 700;
   }
-  .workspace-tabs { min-height: 36px; flex: 0 1 auto; }
-  .workspace-tabs .q-tab { min-height: 42px; padding: 0 12px; letter-spacing: 0.08em; font-weight: 700; }
+  /* One definition. A second, unscoped block used to set .q-tab to 42px, beating the
+     .top-bar rule at equal specificity and overflowing the 40px bar by 2px (audit F-tabs). */
+  .workspace-tabs .q-tab { padding: 0 12px; letter-spacing: 0.08em; font-weight: 700; }
   .workspace-tabs .q-tab--active { color: var(--rust); }
   /* These were three hand-counted constants and all three were wrong: 104px was reserved
      against 235px of real chrome, so 131px fell off the bottom -- clipped rather than
