@@ -145,6 +145,13 @@ GUI layout:
     Every source prints through the single strip at the bottom: one `REFRESH PREVIEW`,
     one `PRINT`, one time estimate before any ink. `MOTIF` saves to the pattern bank
     instead; its `USE IN SKETCH` jumps to `SKETCH` with the bank already refreshed.
+    `IMAGE` knobs beyond the shared ones: **Pen lifts** (always visible) caps the
+    plot's pen-lift budget — slider at max = no limit; **Orientation** and **One line**
+    appear for `wave` (row direction, and joining all rows into a single stroke —
+    One line draws connectors across light areas by design); **Dash mm** appears for
+    `flow` (breaks streamlines into directional dashes). Note the lift budget also
+    governs `SKETCH` prints: the sketch panel stamps the same budget into its SVG,
+    so a low value set for an image carries over to a printed sketch.
   - `SETUP` — the machine, one section at a time behind a segmented switch:
     `MACHINE` (connection and recovery), `PEN` (calibration and pen profiles),
     `SHEET` (layout), `VERIFY` (test prints, uploaded-SVG prints), and `ADVANCED`
@@ -516,6 +523,16 @@ to an absolute floor of −30 mm on every block, not just the ladder, so a mis-s
 cannot drive the pen into the bed. The sheet is bounds-checked against the bed and raises
 rather than clipping if the ladders are widened past what fits.
 
+### The lift budget as a plot-time lever
+
+Every stroke costs a Z round-trip — pen down, pen up — measured at roughly **1.8 s** on
+this machine. On stroke-heavy plots (dither, halftone, stipple) the lifts, not the ink,
+dominate the plot time. Lowering the **Pen lifts** budget (`CREATE` → `IMAGE`, also
+stamped into `SKETCH` prints) is the fastest way to shrink such a plot: strokes beyond
+the budget are joined end-to-end with short connector lines. The price is those
+connectors — visible pen-down travel across areas that should stay blank. Slider at max
+= no limit; `0` = one continuous stroke.
+
 ## 9a. Pattern Bank Paper Test
 
 The pattern bank is covered by tests, but the defects that matter show up only on paper.
@@ -573,6 +590,20 @@ In the order things actually go wrong:
    means the canvas arithmetic is off.
 7. **Plot time against the script's estimate.** Much longer points at stroke ordering:
    pen-up moves leave no ink, so wasted travel is only measurable as time.
+
+## 9b. Pen and Mode Campaign
+
+The RAW-artifacts branch added modes (`stipple`, `squiggle`), mode knobs (wave
+Orientation/One line, flow Dash mm, the Pen lifts budget) and generators (`ribbon`,
+`bloom`, `vine`) that have never touched paper, and three new pens (fineliner 0.3–0.5,
+gel/rollerball, textile ball-tip) that have never been calibrated. The campaign crosses
+them: calibrate each pen with the §9 loop, then plot three regenerable sheets per pen —
+`10_modes_<pen>.svg`, `11_generators_<pen>.svg`, `12_liftbudget_<pen>.svg`, built by
+`scripts/build_campaign_sheets.py --pen <profile>` into `runtime/physical_tests/` — and
+fill in the result matrix using the §9a defect vocabulary.
+
+The full session protocol, per-pen loop and result matrix live in
+`reports/CAMPAIGN_10_PENS_AND_MODES.md`.
 
 ## 10. Smoke Tests
 
