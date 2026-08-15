@@ -95,6 +95,7 @@ def test_calibration_workspace_builds_and_populates_layout_and_scale_fields(monk
         "z_up_mm",
         "z_down_mm",
         "z_feed_mm_min",
+        "z_step",
     }
     assert expected_fields <= ctx.fields.keys()
 
@@ -675,3 +676,97 @@ def test_wave_and_dash_knobs_are_persisted_image_settings() -> None:
         assert image_workspace._PERSISTED_IMAGE_KEYS.get(state_key) == settings_field
         assert gui_settings.GUI_DEFAULTS[settings_field] == default
         assert settings_field in gui_settings.GuiSettings.__dataclass_fields__
+
+
+# --- Z tune card ---------------------------------------------------------------
+
+
+def test_z_tune_card_builds_with_step_jog_and_capture_controls(monkeypatch: pytest.MonkeyPatch) -> None:
+    ctx = _new_ctx(monkeypatch)
+
+    with ui.column():
+        calibration.build(ctx)
+
+    assert "z_step" in ctx.fields
+    assert ctx.machine_z_label is not None
+    rendered = {
+        str(text)
+        for element in ui.context.slot.parent.descendants()
+        for text in (getattr(element, "text", None), element._props.get("label"))
+        if text
+    }
+    for control in ("Z+", "Z−", "SET AS PEN-DOWN", "SET AS PEN-UP"):
+        assert any(control in text for text in rendered), control
+
+
+def test_z_tune_card_explains_itself_without_a_z_servo(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dataclasses import replace
+
+    ctx = _new_ctx(monkeypatch)
+    monkeypatch.setattr(ctx.supervisor, "plotter_settings", replace(ctx.supervisor.plotter_settings, use_z_servo=False))
+
+    with ui.column():
+        calibration.build(ctx)
+
+    assert "z_step" not in ctx.fields
+    assert ctx.machine_z_label is None
+
+
+def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    ctx = _new_ctx(monkeypatch)
+    with ui.column():
+        calibration.build(ctx)
+
+    notices: list[str] = []
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.ui.notify", lambda msg, **kw: notices.append(str(msg)))
+    sent: list[tuple[str, float, float]] = []
+
+    async def fake_action(label, action, **kwargs):
+        action()
+
+    monkeypatch.setattr(ctx, "fluidnc_action", fake_action)
+    monkeypatch.setattr(ctx.supervisor, "jog_fluidnc", lambda axis, dist, feed: sent.append((axis, dist, feed)))
+
+    # Unknown Z refuses without sending (check_fluidnc is stubbed to learn nothing).
+    async def fake_check(**kwargs):
+        return None
+
+    monkeypatch.setattr(ctx, "check_fluidnc", fake_check)
+    asyncio.run(ctx.jog_z_down())
+    assert sent == [] and any("unknown" in n.lower() for n in notices)
+
+    # Known Z jogs by the selected step, downward.
+    ctx._machine_z = -10.0
+    ctx.fields["z_step"].value = 1.0
+    asyncio.run(ctx.jog_z_down())
+    assert sent == [("Z", -1.0, ctx.settings.z_feed_mm_min)]
+
+    # A jog that would pass the -30 floor is refused, and the ceiling holds at 0.
+    ctx._machine_z = -29.5
+    asyncio.run(ctx.jog_z_down())
+    ctx._machine_z = -0.5
+    asyncio.run(ctx.jog_z_up())
+    assert len(sent) == 1
+    assert sum("refused" in n for n in notices) == 2
+
+
+def test_capture_z_lands_in_the_profile_field_and_survives_the_pull(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    ctx = _new_ctx(monkeypatch)
+    with ui.column():
+        # The whole page, like the round-trip test: persist_and_refresh pulls controls
+        # from several tabs at once, and the widget's own on_change fires the real thing.
+        for workspace in (connection, calibration, tests_workspace, work, image_workspace):
+            workspace.build(ctx)
+
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.ui.notify", lambda *a, **kw: None)
+    monkeypatch.setattr(ctx, "persist_and_refresh", ctx.pull_settings_from_fields)
+    ctx._machine_z = -27.35
+
+    asyncio.run(ctx.capture_z("z_down_mm"))
+
+    assert ctx.fields["z_down_mm"].value == -27.35
+    assert ctx.settings.z_down_mm == -27.35

@@ -20,6 +20,7 @@ from nicegui import run, ui
 
 from ...app.supervisor import SupervisorService
 from ...shared.models import ComponentStatus, SystemCheckLevel, SystemMode
+from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ...shared.origin_markers import ALL_ORIGINS
 from .modes import mode_policy
 from .support import (
@@ -95,6 +96,11 @@ class GuiContext:
         self.next_action_hint: Any = None
         self.blockers_label: Any = None
         self.position_label: Any = None
+        # Z-tune card: live machine Z readout and its backing value. The value is only
+        # ever taken from a FluidNC MPos report, never from commanded moves, so the
+        # capture buttons write what the machine says, not what we asked for.
+        self.machine_z_label: Any = None
+        self._machine_z: float | None = None
 
         store = self.supervisor.runtime_store
         saved_workspace = str(store.load_json("gui_workspace", {"tab": "print"}).get("tab", "print"))
@@ -717,6 +723,11 @@ class GuiContext:
                 if isinstance(position, (list, tuple)) and len(position) >= 2
                 else "X — · Y —"
             )
+        z_position = result.get("machine_position")
+        if isinstance(z_position, (list, tuple)) and len(z_position) >= 3:
+            self._machine_z = float(z_position[2])
+        if self.machine_z_label is not None:
+            self.machine_z_label.set_text(f"{self._machine_z:.2f} mm" if self._machine_z is not None else "-")
         if "pins" in labels:
             labels["pins"].set_text(str(result.get("pins") or "none"))
         if "modal" in labels:
@@ -869,6 +880,61 @@ class GuiContext:
 
     async def jog_y_positive(self) -> None:
         await self.jog("Y", 1)
+
+    async def jog_z(self, sign: float) -> None:
+        """One Z-tune step. Refuses to leave [floor, 0] instead of clamping silently:
+
+        a jog that lands somewhere other than where the operator asked is worse than
+        one that says why it will not move.
+        """
+        step = abs(float(self.fields["z_step"].value or 0.5))
+        if self._machine_z is None:
+            await self.check_fluidnc(scan=False)
+        if self._machine_z is None:
+            ui.notify("Machine Z unknown - connect FluidNC first (CONNECT on SETUP).", color="warning")
+            return
+        target = self._machine_z + sign * step
+        if target < Z_ABSOLUTE_FLOOR_MM or target > 0.0:
+            ui.notify(
+                f"Z jog refused: {target:.2f} mm is outside {Z_ABSOLUTE_FLOOR_MM:g}..0 mm.",
+                color="warning",
+            )
+            return
+        feed = float(self.settings.z_feed_mm_min or 1000.0)
+        # refresh_probe=True, unlike XY jogs: the whole point of a Z step is reading
+        # the new machine Z back off the status report.
+        await self.fluidnc_action(
+            "jog Z",
+            lambda: self.supervisor.jog_fluidnc("Z", sign * step, feed),
+            refresh_probe=True,
+            success_message=f"Jogged Z {sign * step:+g}mm",
+        )
+
+    async def jog_z_up(self) -> None:
+        await self.jog_z(1)
+
+    async def jog_z_down(self) -> None:
+        await self.jog_z(-1)
+
+    async def capture_z(self, field_key: str) -> None:
+        """Write the machine's reported Z into z_down_mm / z_up_mm, via the widget.
+
+        Through ctx.fields, not ctx.settings: persist_and_refresh re-reads every widget
+        and would clobber a value set on settings directly (the footgun the profile row
+        documents).
+        """
+        if self._machine_z is None:
+            await self.check_fluidnc(scan=False)
+        if self._machine_z is None:
+            ui.notify("Machine Z unknown - connect FluidNC first (CONNECT on SETUP).", color="warning")
+            return
+        control = self.fields.get(field_key)
+        if control is None:
+            ui.notify(f"No {field_key} control on this screen.", color="warning")
+            return
+        control.value = round(self._machine_z, 3)
+        self.persist_and_refresh()
+        ui.notify(f"{field_key} = {float(control.value):g} mm - SAVE AS PROFILE to keep it.", color="positive")
 
     async def pen_up(self) -> None:
         await self.fluidnc_action(
