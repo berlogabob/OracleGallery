@@ -1,0 +1,110 @@
+[
+ {
+  "criterion": "ST-ERROR",
+  "screen": "Machine rail 'Next action' card (persistent, all views)",
+  "severity": 3,
+  "evidence": "While the plotter is offline (red banner: 'Plotter offline â check power and WiFi, then press CONNECT on SETUP'), the Next action card still instructs 'Jog to the paper origin, then SET WORK ZERO below.' and its blockers line reads 'blockers: work zero · print paused' â the connection, the one blocker that makes jogging impossible, is missing. The operator gets two conflicting next-step instructions, and the dedicated guidance card gives the wrong one. Identical copy on all 12 view dumps in dump.json.",
+  "screenshot": "screens/print.png",
+  "measurement": "Blockers line = 'work zero · print paused'; banner remedy = 'press CONNECT on SETUP'; 0 of 12 views list connection as a blocker",
+  "recommendation": "Make 'plotter offline' the first-ranked blocker and switch the Next action copy to 'Connect the plotter (SETUP → MACHINE → CONNECT)' whenever FluidNC is unreachable; only advance to jog/work-zero guidance once connected."
+ },
+ {
+  "criterion": "ST-ERROR",
+  "screen": "Offline error banner (persistent, all views)",
+  "severity": 2,
+  "evidence": "The 'Plotter offline' notification is pinned bottom-center on every view (DISMISS button at (846,746) in all 12 dumps) and physically overlaps interactive content: on CREATE views it covers the right half of the REFRESH PREVIEW button (button x=238-378, banner starts ~x=340), and on PRINT it covers the sheet filename, progress bar, and the 'Uploaded SVG finished' status line.",
+  "screenshot": "screens/create_image.png",
+  "measurement": "Banner occludes ~38px of the 140px REFRESH PREVIEW button and the entire PRINT status strip",
+  "recommendation": "Move the persistent offline state into a reserved slot (e.g. the top-bar chip area or a docked strip that reflows content) instead of a floating toast that occludes controls; keep the toast only for the moment of transition."
+ },
+ {
+  "criterion": "ST-IDLE",
+  "screen": "Machine rail 'Manual motion' card (persistent, all views)",
+  "severity": 2,
+  "evidence": "The card's only caption is the static text 'Blocked while G-code streams.' shown even when nothing is streaming and the plotter is disconnected â it states a reason for unavailability that is not the current one. The jog/PEN/HOME buttons render as enabled while offline, and the only truthful status is a bare 12px 'Not ready' under SET WORK ZERO with no cause.",
+  "screenshot": "screens/print.png",
+  "measurement": "Caption identical across all 12 view dumps regardless of state; 'Not ready' fs=12px",
+  "recommendation": "Make the caption state-driven ('Offline â connect on SETUP first' / 'Blocked: G-code streaming' / 'Ready') and visually disable jog controls when they cannot act; expand 'Not ready' to name its cause."
+ },
+ {
+  "criterion": "ST-IDLE",
+  "screen": "CREATE/IMAGE â Pen lifts slider",
+  "severity": 3,
+  "evidence": "The Pen lifts slider's value bubble shows the raw code expression \"value >= 1024 ? 'off' : value\" instead of the evaluated value â a leaked label template. The operator cannot read the current pen-lift limit at all, on a control whose helper text ('At max, the slider has no lift limit...') makes the value safety/quality-relevant.",
+  "screenshot": "screens/create_image.png",
+  "measurement": "Tooltip literal: value >= 1024 ? 'off' : value",
+  "recommendation": "Fix the slider label binding so it renders the computed value ('off' at max, otherwise the number); add a render test that fails on '?' / '>=' appearing in visible slider labels."
+ },
+ {
+  "criterion": "NAV-5",
+  "screen": "Top bar chip + PRINT view (paused-state vocabulary)",
+  "severity": 2,
+  "evidence": "The same state is named three ways with no visible mapping to the control that clears it: top-bar chip says 'OPERATOR PAUSED', the blockers line says 'print paused', and the available controls are 'START SYSTEM' / 'NEW RUN' (PRINT rail) and 'RESUME' (SETUP/MACHINE, scoped 'alarm or hold only'). Nothing on screen says which action un-pauses; the Next action card never mentions it.",
+  "screenshot": "screens/print.png",
+  "measurement": "3 terms (OPERATOR PAUSED / print paused / START SYSTEM-RESUME) for one state; 0 controls labeled with the chip's wording",
+  "recommendation": "Pick one term (e.g. 'Paused') for chip, blockers, and the resuming control, and make the chip itself clickable or captioned with the clearing action ('Paused â press START SYSTEM')."
+ },
+ {
+  "criterion": "ST-EMPTY",
+  "screen": "CREATE/SHEET â preview status",
+  "severity": 2,
+  "evidence": "With no image folder chosen, the sheet preview status renders as a bare hyphen ('-', 3px-wide text element at (945,430)) â no explanation or next step. Sibling tabs do this correctly: IMAGE shows 'No image selected' + 'Drop a PNG/JPG here, or click + to choose', TEXTURE shows 'Save a texture in the editor, then pick it here.'",
+  "screenshot": "screens/create_sheet.png",
+  "measurement": "Empty-state text = '-' (1 character) vs designed empty states on 2 sibling tabs",
+  "recommendation": "Replace the hyphen with the same pattern as siblings: 'Choose an image folder above to fill the sheet preview.'"
+ },
+ {
+  "criterion": "ST-EMPTY",
+  "screen": "SETUP/VERIFY â SVG test draw upload widget",
+  "severity": 2,
+  "evidence": "The SVG picker shows only a black bar reading '0.0B / 0.00%' with a '+' icon â no instruction of what to add, and the zeroed byte/percent counter reads like a stalled upload rather than an empty picker. The equivalent widget on CREATE/IMAGE has the label 'Drop a PNG/JPG here, or click + to choose'; this one has none.",
+  "screenshot": "screens/flow_verify_gcode.png",
+  "measurement": "0 instruction text elements in the widget; header shows only '0.0B / 0.00%'",
+  "recommendation": "Add the same drop-zone label ('Drop an Inkscape SVG here, or click + to choose') and hide the byte/percent counter until an upload is actually in progress."
+ },
+ {
+  "criterion": "ST-SUCCESS",
+  "screen": "CREATE/TEXT â preview render after REFRESH PREVIEW",
+  "severity": 2,
+  "evidence": "After the text-preview flow, the rendered 'NEJE ORACLE' preview is a small box anchored at the canvas's top-left with the leftmost glyphs clipped at the panel edge; the preview is not fitted or centered in the large empty canvas, so the operator cannot verify the full text they are about to plot.",
+  "screenshot": "screens/flow_text_preview.png",
+  "measurement": "Preview box ~227x98px at canvas origin inside a ~686x670px canvas; left glyph stems cut off",
+  "recommendation": "Fit-and-center the generated preview in the canvas (scale to fit with margin), matching what the operator will see on paper."
+ },
+ {
+  "criterion": "ST-SUCCESS",
+  "screen": "SETUP/VERIFY â GENERATE G-CODE confirmation",
+  "severity": 1,
+  "evidence": "The success toast confirms generation (good) but its content is a raw temp filesystem path: 'G-code file: /var/folders/m0/.../spool/gui_sheet_20260815_230416.gcode', with no operator-meaningful next step even though the intended follow-up (START TEST PRINT) is on the same card.",
+  "screenshot": "screens/flow_verify_gcode.png",
+  "measurement": "Toast text = 2-line absolute /var/folders path; 0 next-step hint",
+  "recommendation": "Show the filename only ('gui_sheet_….gcode written to spool') plus 'Press START TEST PRINT to plot it'; keep the full path in logs/Diagnostics."
+ },
+ {
+  "criterion": "ST-IDLE",
+  "screen": "PRINT â Queue card",
+  "severity": 1,
+  "evidence": "The queue stat 'FAIL/SKIP 0 / 177' merges two different outcomes into one tile and surfaces 177 skips with no explanation, breakdown, or drill-down; a fresh operator cannot tell whether 177 skipped jobs is normal or a problem. The adjacent 'Queue counts loaded' caption confirms data freshness but not meaning.",
+  "screenshot": "screens/print.png",
+  "measurement": "FAIL/SKIP = 0 / 177 with 0 explanatory affordances",
+  "recommendation": "Split FAIL and SKIP into separate tiles and add a hover/click detail (why skipped, e.g. 'already printed / filtered'), or a caption like '177 skipped: outside current filters'."
+ },
+ {
+  "criterion": "NAV-5",
+  "screen": "SETUP/MACHINE â connection status pills",
+  "severity": 1,
+  "evidence": "The screen the offline banner sends operators to ('press CONNECT on SETUP') reports status in engineer vocabulary: 'WEBUI offline', 'TELNET offline', 'INPUTS none', 'MODAL -'. The banner speaks operator language ('check power and WiFi') but the destination page does not, so the operator cannot confirm what improved after pressing CONNECT.",
+  "screenshot": "screens/setup_machine.png",
+  "measurement": "4 status pills, all protocol-jargon labels (WEBUI/TELNET/INPUTS/MODAL)",
+  "recommendation": "Lead with one operator-level status line ('Plotter: not reachable â check power and WiFi') and keep the protocol pills as secondary detail or inside Diagnostics."
+ },
+ {
+  "criterion": "FLOW-2",
+  "screen": "CREATE tabs (TEXTURE/IMAGE/TEXT/SHEET/MOTIF)",
+  "severity": 1,
+  "evidence": "Every parameter iteration in the creative loop requires an explicit REFRESH PREVIEW press (the text-preview flow needed it as a dedicated step); previews do not update on parameter change, adding one detour step per tweak in the app's highest-frequency loop â while SETUP/ADVANCED states 'Display filters affect preview immediately', an inconsistent update model.",
+  "screenshot": "screens/flow_text_preview.png",
+  "measurement": "text-preview flow: 3 steps, 7.6s, of which 1 step is the manual refresh",
+  "recommendation": "Debounce-auto-refresh previews on parameter change (keep the button as a manual fallback for heavy renders), or at least mark the preview stale ('settings changed â refresh') so the operator knows the shown preview no longer matches the inputs."
+ }
+]

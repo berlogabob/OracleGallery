@@ -1,0 +1,137 @@
+[
+ {
+  "criterion": "DS-BTN-1",
+  "screen": "PRINT (top bar, all screens)",
+  "severity": 4,
+  "evidence": "EMERGENCY STOP and STOP PRINT are raw ui.button() calls (src/neje_oracle/blocks/gui/service.py:239,241) using Quasar 'color=negative' (#C10015) and 'color=warning' (#F2C037) instead of danger_action_button()/.oracle-btn-danger (DANGER token #8C2F1D). The two most safety-critical controls in the app are the only buttons rendered outside the 3-intent button system, so the operator's learned 'danger = deep red fill' mapping does not cover the actual stops. STOP PRINT renders white text on bright gold and is the hardest-to-read button on screen.",
+  "screenshot": "screens/print.png",
+  "measurement": "STOP PRINT: white 14px on #F2C037 = 1.7:1 contrast; EMERGENCY STOP fill #C10015 vs system DANGER token #8C2F1D; 9 raw ui.button() sites bypass the intent system",
+  "recommendation": "Replace both with danger_action_button() (service.py:239,241). If EMERGENCY STOP needs extra weight, add a modifier class on top of .oracle-btn-danger rather than a fourth color."
+ },
+ {
+  "criterion": "DS-BTN-1",
+  "screen": "SETUP/MACHINE recovery row",
+  "severity": 3,
+  "evidence": "UNLOCK (color=warning) and RESET / ABORT (color=negative) in workspaces/connection.py:52,54, STOP in workspaces/work.py:24, and Confirm in context.py:758 also bypass the intent system. RESET / ABORT renders Quasar red #C10015 while .oracle-btn-danger elsewhere renders #8C2F1D â two different 'danger reds' for the same intent in one app; UNLOCK repeats the illegible white-on-gold treatment.",
+  "screenshot": "screens/setup.png",
+  "measurement": "Danger intent rendered in 2 fills: #C10015 (Quasar negative) vs #8C2F1D (DANGER token); UNLOCK white on #F2C037 = 1.7:1",
+  "recommendation": "Route all four sites through danger_action_button()/safe_action_button(); optionally remap Quasar 'warning'/'negative' brand colors to WARN/DANGER tokens in ui.colors() so any future raw button still lands on-palette."
+ },
+ {
+  "criterion": "DS-A11Y-1",
+  "screen": "PRINT / SETUP (top bar + recovery row)",
+  "severity": 3,
+  "evidence": "White button labels on Quasar warning gold (#F2C037) fail WCAG at every size: STOP PRINT (visible on all 14 screenshots) and UNLOCK. A stop control whose label washes out is an accessibility failure on the exact element an operator reads under time pressure.",
+  "screenshot": "screens/print.png",
+  "measurement": "white on #F2C037 = 1.7:1 (AA requires 4.5:1 normal / 3:1 large)",
+  "recommendation": "Same fix as the DS-BTN-1 findings: DANGER token fill with CREAM text measures 7.54:1 (token_contrast 'CREAM on DANGER')."
+ },
+ {
+  "criterion": "DS-COL-1",
+  "screen": "CREATE/IMAGE, CREATE/SKETCH, SETUP/ADVANCED, SETUP/PEN",
+  "severity": 2,
+  "evidence": "Two rusts render adjacently: token RUST #8B4513 via .oracle-helper vs legacy #8f4f2b via raw Tailwind text-[#8f4f2b] (17 uses across screens.py, generative.py, calibration.py, image.py, plus preview.py:561 SVG error fill). On create_image.png the card helper 'A single pen cannot print greyâ¦' (#8B4513) sits in the same panel as 'Quality: FINE â about 61 minâ¦' (#8f4f2b); on create_sketch.png 'Origin X/Y: 25.0 / 25.0 mm' is legacy rust beside token-rust helpers; on setup_advanced.png the MAIN DETAIL / AUTO-ADJUST / CLAMP micro-labels are legacy rust under token-rust helper lines.",
+  "screenshot": "screens/create_image.png",
+  "measurement": "17 uses of #8f4f2b in view files vs token RUST #8B4513; the hues differ by 1.12:1 relative luminance â close enough to look like an accident, far enough to read as inconsistency on adjacent lines",
+  "recommendation": "Replace every text-[#8f4f2b] with helper_text()/.oracle-helper (or a new micro-label component); change preview.py:561 fill to tokens.RUST. The ratchet in tests/test_gui_design_system.py should count these to zero."
+ },
+ {
+  "criterion": "DS-TYPE-1",
+  "screen": "SETUP/ADVANCED (visible against left rail on same viewport)",
+  "severity": 2,
+  "evidence": "Two section-title treatments coexist on one screen: left-rail cards use section_title()/.oracle-card-title (13px, weight 700, INK) â 'Next action', 'Manual motion' â while workspace cards use raw ui.label().classes('text-sm font-bold') (14px Tailwind) â 'Drawing detail', 'Filters / markers', 'Symbol scale correction', 'FluidNC Connection', 'Image to line art' (15 raw sites across connection.py, work.py, generative.py, tests.py, calibration.py, image.py, context.py:778).",
+  "screenshot": "screens/setup_advanced.png",
+  "measurement": "dump.json: 36 .oracle-card-title elements at fs=13px vs raw bold titles at fs=14px; 15 'text-sm font-bold' title sites in code; 18 raw ui.card() sites bypass the card() helper",
+  "recommendation": "Convert the 18 raw ui.card() sites to the card(title=â¦, helper=â¦) context manager from ui.py so every section title goes through section_title()."
+ },
+ {
+  "criterion": "DS-TYPE-1",
+  "screen": "SETUP/ADVANCED",
+  "severity": 2,
+  "evidence": "The same semantic role â explanatory helper line under a control â renders three ways: (1) .oracle-helper, 12px token rust; (2) text-xs text-[#8f4f2b], 12px legacy rust (image.py:410, calibration.py:367, generative.py:203); (3) text-[10px] font-bold uppercase text-[#8f4f2b], 10px micro-caps (calibration.py:347,356,366,407-409 â MAIN DETAIL, AUTO-ADJUST FOR CELL SIZE, CLAMP, Origin/Preview/Print). All three appear together on setup_advanced.png.",
+  "screenshot": "screens/setup_advanced.png",
+  "measurement": "3 distinct treatments (12px #8B4513 / 12px #8f4f2b / 10px bold uppercase #8f4f2b) for one semantic role",
+  "recommendation": "Keep helper_text() as the single helper; if the 10px uppercase micro-label is genuinely a different role, add one micro_label() component styled once in PAGE_STYLE from tokens."
+ },
+ {
+  "criterion": "DS-TYPE-1",
+  "screen": "all screens",
+  "severity": 3,
+  "evidence": "tokens.py declares FONT_BODY ('EB Garamond', serif), FONT_DISPLAY ('Cinzel'), FONT_LOGO ('Cinzel Decorative') and exports them as --font-body/--font-display/--font-logo, but no CSS rule in PAGE_STYLE references them and no @font-face/webfont is loaded â every screenshot renders the Quasar default sans-serif. The design system's entire typographic identity (the thing that makes it 'Oracle' rather than stock Quasar) is silently absent, and the tokens give a false sense that it is applied.",
+  "screenshot": "screens/print.png",
+  "measurement": "grep of service.py PAGE_STYLE: 0 references to var(--font-*); 0 font-family rules except monospace overrides for .position-readout and .log-viewer",
+  "recommendation": "Either wire the tokens (self-hosted @font-face + body { font-family: var(--font-body) } and display faces on titles/logo) or delete the three font tokens so tokens.py stops declaring an identity the app does not render."
+ },
+ {
+  "criterion": "DS-MOTION-1",
+  "screen": "all screens",
+  "severity": 1,
+  "evidence": "Five duration tokens (0msâ4000ms) and three easing tokens are declared in tokens.py and injected as CSS variables, but PAGE_STYLE contains zero transition/animation rules referencing them â all motion is whatever each Quasar component defaults to, so hover/press/expand timing is per-component accident rather than system. (Not visible in static screenshots; verified in code.)",
+  "screenshot": "screens/print.png",
+  "measurement": "0 occurrences of 'transition', var(--dur-*), or var(--ease-*) in PAGE_STYLE (service.py:15-197)",
+  "recommendation": "Add a small set of shared rules (e.g. .oracle-btn { transition: background var(--dur-fast) var(--ease-oracle); }) or remove the dead motion tokens."
+ },
+ {
+  "criterion": "DS-NAV-1",
+  "screen": "PRINT / CREATE / SETUP top bar",
+  "severity": 2,
+  "evidence": ".workspace-tabs is styled twice in PAGE_STYLE with conflicting tab heights: '.top-bar .q-tab { min-height: 34px }' (service.py line 50) vs '.workspace-tabs .q-tab { min-height: 42px }' (line 116). Equal specificity means the later 42px rule wins, so the nav tabs are 42px tall inside the 40px .top-bar â dump.json shows every top tab at y=-1, h=42, overflowing the bar by 2px top and bottom, and the active-tab underline sits flush against the bar's bottom border.",
+  "screenshot": "screens/print.png",
+  "measurement": "dump.json (all 3 screens): q-tab elements y=-1 h=42 inside .top-bar height:40px; duplicate .workspace-tabs blocks at service.py lines 49-50 and 115-116",
+  "recommendation": "Collapse to one .workspace-tabs definition; size tabs to fit the 40px bar (34px) or grow the bar â one rule, one number."
+ },
+ {
+  "criterion": "DS-A11Y-1",
+  "screen": "PRINT / top bar state chip",
+  "severity": 2,
+  "evidence": "The WARN token (GOLD_DIM #8A6F2E) is used for 12px text â the 'OPERATOR PAUSED' state chip (.state-warn) and warning banners â and fails AA for normal-size text on cream. tokens.py's own comment says GOLD_DIM exists 'where GOLD fails contrast', but it also fails at the size it is used at (12px bold is below the 18.66px-bold large-text threshold).",
+  "screenshot": "screens/print.png",
+  "measurement": "measurements.json token_contrast: GOLD_DIM on CREAM = 4.36:1, AA_normal false (needs 4.5:1); GOLD on CREAM = 2.08:1 (used as border of .mobile-operator-warning and .warning-banner)",
+  "recommendation": "Darken GOLD_DIM slightly (~#82682B reaches 4.5:1) or render warn-state chips at large-text size; keep GOLD strictly non-text."
+ },
+ {
+  "criterion": "DS-A11Y-1",
+  "screen": "PRINT",
+  "severity": 1,
+  "evidence": "The '?' help button next to the canvas is 17px wide, below the 24px minimum target size, and it is the discoverability affordance for the legend/help.",
+  "screenshot": "screens/print.png",
+  "measurement": "measurements.json PRINT small_targets: label '?', w=17, h=34, min=24",
+  "recommendation": "Give it min-width: 24px (it already meets height); the .q-btn { min-height: 30px } rule shows the pattern â add a min-width companion."
+ },
+ {
+  "criterion": "DS-FDBK-1",
+  "screen": "CREATE/IMAGE",
+  "severity": 2,
+  "evidence": "The 'Pen lifts' slider tooltip renders a raw code expression to the operator: \"value >= 1024 ? 'off' : value\" â an unevaluated Quasar label prop leaking as literal text, where every other tooltip in the app shows plain prose.",
+  "screenshot": "screens/create_image.png",
+  "measurement": null,
+  "recommendation": "Fix the slider's label prop to an evaluated function (props(':label-value=\"â¦\"') in NiceGUI) so it reads 'off' or the number."
+ },
+ {
+  "criterion": "DS-SPACE-1",
+  "screen": "all screens",
+  "severity": 1,
+  "evidence": "PAGE_STYLE itself bypasses the spacing/shape tokens it defines: .oracle-card padding 'var(--space-md) 12px' (12px is no token) and border-radius 14px (tokens are 6/10/999px), .state-chip padding 5px 10px, .mini-metric padding 5px 7px, .top-bar padding 2px 10px, .compact-card 10px 12px. The token scale exists precisely to replace these ad-hoc 5/7/12/14px values (tokens.py's own comment) yet they persist inside the system's stylesheet.",
+  "screenshot": "screens/print.png",
+  "measurement": "raw off-scale values in service.py PAGE_STYLE: 12px, 14px radius, 5px 7px, 5px 10px, 2px 10px vs declared scale 4/6/10/16px and radii 6/10/999px",
+  "recommendation": "Sweep PAGE_STYLE onto the tokens (14px radius -> var(--radius-md); 12px paddings -> var(--space-md)); extend the hex-literal ratchet in tests/test_gui_design_system.py to cover px literals in PAGE_STYLE."
+ },
+ {
+  "criterion": "DS-COL-1",
+  "screen": "all screens",
+  "severity": 1,
+  "evidence": "Surface colors are one-off rgba values instead of the PAPER token: .oracle-card background rgba(255,252,245,0.94), .top-bar rgba(255,252,245,0.84), .live-strip .mini-metric rgba(255,252,245,0.9), .mini-metric rgba(255,255,255,0.45) â four near-PAPER whites for 'raised surface' where the system defines exactly one (PAPER #FBF8F1).",
+  "screenshot": "screens/print.png",
+  "measurement": "4 distinct rgba surface values in PAGE_STYLE vs 1 PAPER token; rgb(255,252,245) equals neither PAPER #FBF8F1 nor CREAM #F7F4EF",
+  "recommendation": "Use var(--paper) (add a --paper-translucent token if translucency over the canvas is intentional)."
+ },
+ {
+  "criterion": "DS-FORM-1",
+  "screen": "SETUP/PEN, SETUP/ADVANCED, CREATE/IMAGE",
+  "severity": 1,
+  "evidence": "Number fields display locale-comma decimals ('0,3' pen width, '0,25' finest spacing, '0,1' cell mm) while adjacent read-only metrics use dots ('1.00 mm', '100 pts / 100 mm', 'Origin X/Y: 25.0 / 25.0 mm') â the same quantity notation rendered two ways within one card, on a machine-control panel where a misread decimal moves hardware.",
+  "screenshot": "screens/setup_pen.png",
+  "measurement": "comma decimals in ui.number inputs vs dot decimals in all computed readouts, visible simultaneously on setup_pen.png and setup_advanced.png",
+  "recommendation": "Pin input formatting to dot-decimal (format prop / locale) so entry and readout notation match."
+ }
+]

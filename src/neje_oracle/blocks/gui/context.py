@@ -11,7 +11,9 @@ state+supervisor bundle, not a DI framework.
 
 from __future__ import annotations
 
+import functools
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -19,6 +21,7 @@ from typing import Any, TypeVar
 from nicegui import run, ui
 
 from ...app.supervisor import SupervisorService
+from ...shared import telemetry
 from ...shared.models import ComponentStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
@@ -51,6 +54,36 @@ VALID_WORKSPACES = {"print", "create", "setup"}
 
 
 _T = TypeVar("_T")
+
+
+def _instrumented(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Wrap an async task handler with task_start/task_ok/task_fail telemetry.
+
+    A handler that returns bool reports that bool as the outcome (print_svg_payload
+    returns False on a refused print without raising).
+    """
+
+    def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+            started = time.monotonic()
+            telemetry.log_event("task_start", task=name)
+            try:
+                result = await fn(self, *args, **kwargs)
+            except Exception as exc:
+                telemetry.log_event(
+                    "task_fail", task=name, duration_s=round(time.monotonic() - started, 2), error=str(exc)[:200]
+                )
+                raise
+            ok = result if isinstance(result, bool) else True
+            telemetry.log_event(
+                "task_ok" if ok else "task_fail", task=name, duration_s=round(time.monotonic() - started, 2)
+            )
+            return result
+
+        return wrapper
+
+    return decorate
 
 
 class GuiContext:
@@ -333,6 +366,7 @@ class GuiContext:
         self.refresh_status()
         self.refresh_logs()
 
+    @_instrumented("print_svg")
     async def print_svg_payload(self, svg_bytes: bytes, name: str) -> bool:
         """Print an SVG built in-process (line text, image conversion). Returns success."""
         if not svg_bytes:
@@ -533,6 +567,7 @@ class GuiContext:
 
     # ---- system lifecycle -----------------------------------------------------
 
+    @_instrumented("start_system")
     async def start_system(self) -> None:
         self.pull_settings_from_fields()
         self._save_settings()
@@ -540,6 +575,7 @@ class GuiContext:
         ui.notify("System supervisor started in safe mode", color="positive")
         self.refresh_status()
 
+    @_instrumented("stop_system")
     async def stop_system(self) -> None:
         await run.io_bound(self.supervisor.stop_system)
         ui.notify("System stopped safely", color="warning")
@@ -578,6 +614,7 @@ class GuiContext:
         if workspace in VALID_WORKSPACES:
             self.active_workspace["value"] = workspace
             self.supervisor.runtime_store.save_json("gui_workspace", {"tab": workspace})
+            telemetry.log_event("screen_switch", screen=workspace)
 
     def preview_mode_changed(self, value: Any) -> None:
         mode = str(value or "preview")
@@ -782,14 +819,20 @@ class GuiContext:
         self, label: str, action: Any, *, refresh_probe: bool = True, success_message: str | None = None
     ) -> None:
         ui.notify(f"Sending {label}...", color="info")
+        telemetry.log_event("task_start", task=f"fluidnc:{label}")
         try:
             state = await self._blocking(action)
         except Exception as exc:  # noqa: BLE001
+            telemetry.log_event("task_fail", task=f"fluidnc:{label}", error=str(exc)[:200])
             ui.notify(f"{label} failed: {exc}", color="negative")
             self.refresh_status()
             self.refresh_logs()
             self.restore_workspace()
             return
+        telemetry.log_event(
+            "task_ok" if state.status == ComponentStatus.RUNNING else "task_fail",
+            task=f"fluidnc:{label}",
+        )
         if state.status == ComponentStatus.RUNNING and success_message:
             ui.notify(success_message, color="positive")
         else:
@@ -953,12 +996,14 @@ class GuiContext:
             lambda: self.fluidnc_action("unlock", self.supervisor.unlock_fluidnc_alarm),
         )
 
+    @_instrumented("stop_print")
     async def stop_print(self) -> None:
         state = await self._blocking(self.supervisor.stop_print)
         ui.notify(state.message, color="warning")
         self.refresh_status()
         self.refresh_logs()
 
+    @_instrumented("emergency_stop")
     async def emergency_stop(self) -> None:
         state = await self._blocking(self.supervisor.emergency_stop_fluidnc)
         ui.notify(state.message, color="negative")
