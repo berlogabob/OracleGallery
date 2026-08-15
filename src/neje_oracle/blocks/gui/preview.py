@@ -27,6 +27,7 @@ from ...shared.origin_markers import (
 from ..gcode.svg_gcode import ring_radii_mm, symbol_diameter_for_cell
 from ..symbols.session_generator import build_variant_svg
 from ..symbols.svg_normalizer import CANONICAL_BASE_DIAMETER, CANONICAL_CANVAS_SIZE, read_normalized_svg_metadata
+from . import tokens
 from .support import (
     GuiSettings,
     _build_layout_for_settings,
@@ -558,5 +559,5 @@ def _empty_preview_svg(settings: GuiSettings, message: str) -> str:
         f'width="{width:.0f}" height="{height:.0f}">'
         '<rect width="100%" height="100%" fill="#fbf7ef"/>'
         f'<text x="{width / 2:.2f}" y="{height / 2:.2f}" text-anchor="middle" '
-        f'font-size="18" fill="#8f4f2b">{message}</text></svg>'
+        f'font-size="18" fill="{tokens.RUST}">{message}</text></svg>'
     )

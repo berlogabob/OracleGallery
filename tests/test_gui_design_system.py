@@ -47,8 +47,8 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # the rail, and the status bar's state chip / position readout / e-stop gap -- not
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
-MAX_RAW_CLASSES = 182  # -28: the raw cards' hand-styled bold title labels went with the cards
-MAX_RAW_HEX = 42
+MAX_RAW_CLASSES = 167  # -15: the legacy-rust helper lines became helper_text()/micro_label()
+MAX_RAW_HEX = 26  # -16: the last #8f4f2b uses are gone; what remains is preview.py's SVG sheet palette
 MAX_RAW_CARDS = 0  # target reached: every card composes ui.card()
 MAX_RAW_BUTTONS = 0  # target reached: every button is an intent helper (stop/estop/nudge included)
 

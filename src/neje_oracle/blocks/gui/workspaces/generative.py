@@ -180,7 +180,7 @@ def build_sketch_controls(ctx: GuiContext) -> oracle.Section:
     it; the card itself carries no print button there.
     """
     with card("Send to plotter", compact=True):
-        origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
+        origin_label = helper_text("Origin X/Y: — / — mm (set on SETUP)")
 
         def update_origin_label() -> None:
             origin_x = ctx.fields.get("direct_svg_origin_x_mm")

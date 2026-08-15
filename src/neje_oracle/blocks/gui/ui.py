@@ -94,6 +94,12 @@ def helper_text(text: str) -> Any:
     return ui.label(text).classes("oracle-helper")
 
 
+def micro_label(text: str) -> Any:
+    """Tiny uppercase column/group label. The third helper-text treatment the audit found
+    (10px bold uppercase in a near-token rust), made one component in the real token."""
+    return ui.label(text).classes("oracle-micro-label")
+
+
 @contextmanager
 def toolbar(full_width: bool = False) -> Any:
     """A row of actions or controls. Covers the `items-center gap-2` row, 25 of them."""

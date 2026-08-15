@@ -93,7 +93,7 @@ def build_print(ctx: GuiContext) -> None:
             # The live readouts sit under the sheet they describe, one line each.
             with ui.row().classes("w-full items-center gap-3"):
                 ctx.plotter_labels["sheet"] = ui.label("no sheet yet").classes("path-label text-xs font-bold")
-                ctx.plotter_labels["cells"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                ctx.plotter_labels["cells"] = helper_text("-")
             ctx.progress = ui.linear_progress(value=0).classes("w-full")
             ctx.plotter_labels["message"] = ui.label("-").classes("path-label text-xs")
 
@@ -105,9 +105,7 @@ def build_print(ctx: GuiContext) -> None:
             safe_action_button("NEW RUN", ctx.reset_baseline).classes("w-full")
             danger_action_button("STOP SYSTEM", ctx.stop_system).classes("w-full")
             ui.separator()
-            ctx.system_check_label = ui.label("System check runs automatically when print starts.").classes(
-                "text-xs text-[#8f4f2b]"
-            )
+            ctx.system_check_label = helper_text("System check runs automatically when print starts.")
             ui.separator()
             section_title("Queue")
             with ui.grid(columns=3).classes("w-full gap-1"):

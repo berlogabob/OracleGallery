@@ -400,7 +400,7 @@ def build_sections(
             ).classes("w-full")
 
         def conversion_controls() -> None:
-            mode_help = ui.label(MODE_HELP[STATE["mode"]]).classes("text-xs text-[#8f4f2b]")
+            mode_help = helper_text(MODE_HELP[STATE["mode"]])
             built_controls: dict[str, Any] = {}
 
             def set_field(key: str, value: Any) -> None:
@@ -479,7 +479,7 @@ def build_sections(
                     .classes("w-28")
                 )
 
-            quality_label = ui.label("").classes("text-xs text-[#8f4f2b]")
+            quality_label = helper_text("")
             built_controls["quality_label"] = quality_label
             quality_fader = ui.slider(
                 min=0,
@@ -742,7 +742,7 @@ def build_sections(
                     on_change=lambda e: set_sheet("sheet_index", int(e.value or 0)),
                 ).props("dense outlined").classes("w-24").tooltip("0 = first sheet of the folder, 1 = next, ...")
 
-            sheet_info = ui.label("-").classes("text-xs text-[#8f4f2b]")
+            sheet_info = helper_text("-")
 
         def render_sheet() -> oracle.Render:
             capacity = _sheet_capacity()
@@ -911,7 +911,7 @@ def _build_motif_import_card(ctx: GuiContext, preview_slot: Any = None, on_use_i
             "Autocontrast off is usually better for fabric photos — it lifts weave texture into ink."
         )
         selected_label = ui.label("No picture selected").classes("path-label text-xs")
-        status_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
+        status_label = helper_text("-")
         if preview is None:
             preview = ui.html().classes("preview-frame w-full")
 

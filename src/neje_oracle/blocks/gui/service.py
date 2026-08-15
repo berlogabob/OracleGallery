@@ -200,6 +200,13 @@ __TOKENS_PLACEHOLDER__
   .oracle-embed { width: 100%; border: 0; background: var(--paper); border-radius: var(--radius-md); }
   .oracle-embed-fill { flex: 1 1 auto; min-height: 0; height: 100%; }
   .oracle-metric-line { font-size: 12px; color: var(--rust); }
+  .oracle-micro-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--rust);
+  }
 </style>
 """
 

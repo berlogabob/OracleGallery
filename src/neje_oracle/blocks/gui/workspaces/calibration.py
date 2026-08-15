@@ -28,6 +28,7 @@ from ..ui import (
     Section,
     card,
     helper_text,
+    micro_label,
     mini_metric,
     nudge_button,
     number_control,
@@ -345,7 +346,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                     ("load", "G-code load"),
                 ):
                     gcode_labels[key] = mini_metric(label)
-            ui.label("Main detail").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+            micro_label("Main detail")
             num(
                 "sample_step_mm",
                 "Spacing at normal cell size (mm)",
@@ -354,7 +355,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                 "Distance between sampled points for an 80 mm reference cell.",
                 step=0.05,
             )
-            ui.label("Auto-adjust for cell size").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+            micro_label("Auto-adjust for cell size")
             num(
                 "sample_density_exponent",
                 "Auto density strength",
@@ -364,8 +365,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                 step=0.1,
             )
             with ui.row().classes("items-center gap-2"):
-                ui.label("Clamp").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
-                gcode_labels["limits"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                micro_label("Clamp")
+                gcode_labels["limits"] = helper_text("-")
             with ui.grid(columns=2).classes("w-full gap-2"):
                 num(
                     "sample_min_step_mm",
@@ -405,9 +406,9 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
             # unchecking its Print box does not stop it reaching paper.
             helper_text("Preview hides cells on screen only. Print selects claimable job origins; filler always fills.")
             with ui.grid(columns=3).classes("w-full gap-1"):
-                ui.label("Origin").classes("text-[10px] font-bold text-[#8f4f2b]")
-                ui.label("Preview").classes("text-[10px] font-bold text-[#8f4f2b]")
-                ui.label("Print").classes("text-[10px] font-bold text-[#8f4f2b]")
+                micro_label("Origin")
+                micro_label("Preview")
+                micro_label("Print")
                 for origin in ALL_ORIGINS:
                     ui.label(ORIGIN_LABELS[origin]).classes("text-xs")
                     fields[f"show_origin:{origin}"] = (
@@ -545,7 +546,7 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
     # with no scrollbar -- so SAVE AS PROFILE was simply invisible below ~1360px.
     with ui.row().classes("w-full items-center gap-2 mt-2 flex-wrap"):
         helper_text("Pen profile")
-        modified_label = ui.label("").classes("text-xs text-[#8f4f2b]")
+        modified_label = helper_text("")
 
         def refresh_modified() -> None:
             current = ctx.settings.pen_profile
