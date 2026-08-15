@@ -137,8 +137,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
     with ui.column().classes("w-full gap-2"):
         # -- PEN: feeds, Z, pen geometry, profiles -----------------------------------
         sections["pen"] = ui.column().classes("w-full gap-2")
-        with sections["pen"], ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Motion speed").classes("text-sm font-bold")
+        with sections["pen"], card("Motion speed", compact=True):
             helper_text(
                 "XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings."
             )
@@ -243,7 +242,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
 
         # -- SHEET: layout geometry + organic ----------------------------------------
         sections["sheet"] = ui.column().classes("w-full gap-2")
-        with sections["sheet"], ui.card().classes("oracle-card compact-card w-full"):
+        with sections["sheet"], card(compact=True):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("Layout").classes("text-sm font-bold")
                 ctx.capacity_label = ui.label("-").classes("status-pill text-xs font-bold")
@@ -284,7 +283,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                 num("sheet_margin_mm", "Margin", settings.sheet_margin_mm, 0, "Safe border inside printable field.")
                 num("marker_diameter_mm", "Dot mm", settings.marker_diameter_mm, 0.5, "Printed origin-dot diameter.")
 
-        with sections["sheet"], ui.card().classes("oracle-card compact-card w-full"):
+        with sections["sheet"], card(compact=True):
             with ui.row().classes("items-center gap-2"):
                 fields["organic_enabled"] = ui.switch(
                     "Organic / Voronoi", value=settings.organic_enabled
@@ -331,7 +330,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
         # A plain section now; it used to be an expansion, but inside a segmented switch a
         # second layer of fold-away is exactly the accordion-inside-tabs anti-pattern.
         sections["advanced"] = ui.column().classes("w-full gap-2")
-        with sections["advanced"], ui.card().classes("oracle-card compact-card w-full"):
+        with sections["advanced"], card(compact=True):
             helper_text(
                 "Use these controls for curve sampling, origin filters, and symbol correction after the physical layout is stable."
             )

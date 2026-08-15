@@ -47,9 +47,9 @@ STYLE_OWNERS = {"ui.py", "tokens.py"}
 # the rail, and the status bar's state chip / position readout / e-stop gap -- not
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
-MAX_RAW_CLASSES = 210  # -3 dead build() shims; -1 the nudge buttons' w-full moved into nudge_button()
+MAX_RAW_CLASSES = 182  # -28: the raw cards' hand-styled bold title labels went with the cards
 MAX_RAW_HEX = 42
-MAX_RAW_CARDS = 18  # +1: the stream arm dialog card
+MAX_RAW_CARDS = 0  # target reached: every card composes ui.card()
 MAX_RAW_BUTTONS = 0  # target reached: every button is an intent helper (stop/estop/nudge included)
 
 HEX = re.compile(r"#[0-9a-fA-F]{6}\b")

@@ -46,7 +46,7 @@ from .support import (
     save_oracle_plotter_config,
     save_symbol_scales,
 )
-from .ui import danger_action_button, helper_text, notify_if_connected, safe_action_button
+from .ui import card, danger_action_button, helper_text, notify_if_connected, safe_action_button
 
 # The three screens. Anything else -- including the seven module-named tabs these replaced --
 # falls back to PRINT, which is where an operator should land anyway.
@@ -775,7 +775,7 @@ class GuiContext:
             labels["message"].set_text(str(result.get("message") or result.get("last_error") or "-"))
 
     def confirm_action(self, title: str, message: str, action: Any) -> None:
-        with ui.dialog() as dialog, ui.card().classes("oracle-card"):
+        with ui.dialog() as dialog, card():
             ui.label(title).classes("text-sm font-bold")
             helper_text(message)
 

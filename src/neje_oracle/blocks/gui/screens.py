@@ -31,6 +31,7 @@ from . import tokens
 from .context import GuiContext
 from .ui import (
     Section,
+    card,
     danger_action_button,
     helper_text,
     mini_metric,
@@ -48,7 +49,7 @@ def _legend_dialog() -> ui.dialog:
     on decoding knowledge an operator internalises in a day. A ? next to the sheet keeps it
     one click away without charging every glance for it.
     """
-    with ui.dialog() as dialog, ui.card().classes("oracle-card"):
+    with ui.dialog() as dialog, card():
         section_title("Reading the sheet")
         with ui.row().classes("items-center gap-3 flex-wrap"):
             with ui.element("div").classes("legend-chip"):

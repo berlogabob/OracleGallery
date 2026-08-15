@@ -17,7 +17,7 @@ from ....shared.gui_settings import GUI_DEFAULTS
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import load_gui_settings
-from ..ui import client_timer, helper_text
+from ..ui import card, client_timer, helper_text
 
 STREAM: dict = {"enabled": False, "busy": False}
 _ROUTES_REGISTERED = False
@@ -179,8 +179,7 @@ def build_sketch_controls(ctx: GuiContext) -> oracle.Section:
     Returns the print coroutine so the CREATE screen's shared print strip can dispatch to
     it; the card itself carries no print button there.
     """
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Send to plotter").classes("text-sm font-bold")
+    with card("Send to plotter", compact=True):
         origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
 
         def update_origin_label() -> None:
@@ -223,7 +222,7 @@ def build_sketch_controls(ctx: GuiContext) -> oracle.Section:
         # The arm gate: streaming prints real ink unattended, every interval, forever.
         # Arming shows what one frame costs and waits for an explicit ARM -- flicking a
         # switch is how an hour-per-frame stream gets started by accident.
-        with ui.dialog().props("persistent") as arm_dialog, ui.card().classes("oracle-card"):
+        with ui.dialog().props("persistent") as arm_dialog, card():
             oracle.section_title("Arm streaming?")
             helper_text("Every interval, the frame on screen is printed with real ink, unattended.")
             arm_estimate = ui.label("-").classes("text-xs font-bold")

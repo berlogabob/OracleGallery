@@ -9,6 +9,7 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..ui import (
+    card,
     client_timer,
     danger_action_button,
     helper_text,
@@ -21,8 +22,7 @@ from ..ui import (
 def build(ctx: GuiContext) -> None:
     with ui.column().classes("w-full gap-2"):
         # FluidNC connection
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("FluidNC Connection").classes("text-sm font-bold")
+        with card("FluidNC Connection", compact=True):
             helper_text("Connect and recover the controller. Jog and homing are in the left rail.")
             with ui.row().classes("gap-2"):
                 primary_action_button("CONNECT", lambda: ctx.check_fluidnc(scan=False))

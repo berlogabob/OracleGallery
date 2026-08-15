@@ -19,11 +19,11 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..ui import (
+    card,
     danger_action_button,
     helper_text,
     primary_action_button,
     safe_action_button,
-    section_title,
 )
 
 
@@ -47,16 +47,14 @@ def _next_action(ctx: GuiContext) -> None:
         if ctx.next_action_key == "start_print":
             await ctx.start_print()
 
-    with ui.card().classes("oracle-card compact-card w-full"):
-        section_title("Next action")
+    with card("Next action", compact=True):
         ctx.next_action_button = primary_action_button("—", run).classes("w-full")
         ctx.next_action_hint = helper_text("—")
         ctx.blockers_label = ui.label("blockers: —").classes("oracle-helper")
 
 
 def _jog_and_zero(ctx: GuiContext) -> None:
-    with ui.card().classes("oracle-card compact-card w-full"):
-        section_title("Manual motion")
+    with card("Manual motion", compact=True):
         helper_text("Blocked while G-code streams.")
         with ui.row().classes("gap-2 items-end"):
             ctx.fields["jog_step"] = (

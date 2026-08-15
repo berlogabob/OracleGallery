@@ -70,12 +70,14 @@ def nudge_button(label: str, on_click: Callable[..., Any]) -> Any:
 
 
 @contextmanager
-def card(title: str | None = None, helper: str | None = None) -> Any:
+def card(title: str | None = None, helper: str | None = None, *, compact: bool = False) -> Any:
     """The workspace building block: a panel with an optional title and helper line.
 
-    Replaces 23 hand-written copies of card + bold label + helper_text.
+    Replaces 23 hand-written copies of card + bold label + helper_text. `compact=True`
+    is the workspace card (tight padding, full width); the default is the dialog card.
     """
-    with ui.card().classes("oracle-card") as element:
+    classes = "oracle-card compact-card w-full" if compact else "oracle-card"
+    with ui.card().classes(classes) as element:
         if title:
             section_title(title)
         if helper:

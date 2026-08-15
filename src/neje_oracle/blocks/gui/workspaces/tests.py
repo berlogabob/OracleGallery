@@ -6,7 +6,7 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import helper_text, number_control, primary_action_button, safe_action_button
+from ..ui import card, helper_text, number_control, primary_action_button, safe_action_button
 
 
 def build(ctx: GuiContext) -> None:
@@ -14,8 +14,7 @@ def build(ctx: GuiContext) -> None:
     fields = ctx.fields
 
     with ui.column().classes("w-full gap-2"):
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Test prints").classes("text-sm font-bold")
+        with card("Test prints", compact=True):
             helper_text(
                 "Generates a local sheet from bundled symbols or starts a test print from the current queue/settings."
             )
@@ -34,8 +33,7 @@ def build(ctx: GuiContext) -> None:
             with ui.row().classes("items-center gap-2"):
                 safe_action_button("GENERATE PEN CAL G-CODE", ctx.generate_pen_cal)
 
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("SVG test draw").classes("text-sm font-bold")
+        with card("SVG test draw", compact=True):
             helper_text(
                 "Prints the selected Inkscape SVG directly to FluidNC. Requires passing system checks, work zero, CONNECT and Idle."
             )

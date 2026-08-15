@@ -24,7 +24,7 @@ from ....shared.gui_settings import GuiSettings
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import read_upload_event_payload
-from ..ui import helper_text, primary_action_button, safe_action_button
+from ..ui import card, helper_text, primary_action_button, safe_action_button
 
 # These dicts are still the workspace's working state, but the tune-once knobs are no longer
 # only here: operators asked for sticky values, so they are mirrored to GuiSettings (see
@@ -373,8 +373,7 @@ def build_sections(
 
     sections["image"] = ui.column().classes("w-full gap-2")
     with sections["image"]:
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Image to line art").classes("text-sm font-bold")
+        with card("Image to line art", compact=True):
             helper_text(
                 "A single pen cannot print grey. Each mode turns tone into geometry the plotter can actually draw."
             )
@@ -905,8 +904,7 @@ def _build_motif_import_card(ctx: GuiContext, preview_slot: Any = None, on_use_i
     if preview_slot is not None:
         with preview_slot:
             preview = ui.html().classes("preview-frame preview-fill w-full")
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Import motif from picture").classes("text-sm font-bold")
+    with card("Import motif from picture", compact=True):
         helper_text(
             "Crop to ONE motif, then save it into the pattern bank. "
             "Contour at 1 band gives a single outline; more bands double every stroke. "
