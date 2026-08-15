@@ -1,0 +1,33 @@
+[
+ {
+  "name": "navigate-all",
+  "passed": true,
+  "duration_s": 17.1,
+  "steps": 14,
+  "errors": []
+ },
+ {
+  "name": "legend-dialog",
+  "passed": true,
+  "duration_s": 4.1,
+  "steps": 3,
+  "errors": []
+ },
+ {
+  "name": "text-preview",
+  "passed": true,
+  "duration_s": 7.6,
+  "steps": 3,
+  "errors": []
+ },
+ {
+  "name": "verify-gcode",
+  "passed": true,
+  "duration_s": 9.6,
+  "steps": 3,
+  "errors": [],
+  "artifacts": [
+   "gui_sheet_20260815_230416.gcode"
+  ]
+ }
+]
