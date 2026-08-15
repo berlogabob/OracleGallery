@@ -334,24 +334,18 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced", source: st
     return {}
 
 
-def build(ctx: GuiContext) -> None:
-    """Legacy stacked form, kept for tests that build this workspace alone."""
-    with ui.column().classes("w-full gap-2"):
-        build_sections(ctx)
-
-
 def build_sections(
     ctx: GuiContext,
     preview_slots: dict[str, Any] | None = None,
     *,
     actions: bool = True,
     on_use_in_sketch: Any = None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The three image sources as separate columns the CREATE screen can place as panes.
+) -> dict[str, oracle.Section]:
+    """The three image sources as Sections the CREATE screen can place as panes.
 
     `preview_slots` maps a section name to a container its render preview should land in --
     the canvas column of that mode -- so knobs and picture live in different grid tracks.
-    Returns (sections, render-card handles) so the screen's print strip can dispatch.
+    Each Section carries its container (`root`) and what the print strip can do there.
     """
     slots = preview_slots or {}
     sections: dict[str, Any] = {}
@@ -859,10 +853,17 @@ def build_sections(
 
     refresh_preview()
     refresh_sheet_capacity()
-    return sections, {
-        "image": card_handle["handle"],
-        "sheet": sheet_card_handle["handle"],
-        "motif_refresh": motif_refresh,
+    image_handle = card_handle["handle"]
+    sheet_handle = sheet_card_handle["handle"]
+    return {
+        "image": oracle.Section(
+            root=sections["image"], refresh=image_handle.refresh, print=image_handle.print, print_label="PRINT IMAGE"
+        ),
+        "sheet": oracle.Section(
+            root=sections["sheet"], refresh=sheet_handle.refresh, print=sheet_handle.print, print_label="PRINT SHEET"
+        ),
+        # Motif saves to the bank instead of printing, so the strip only offers refresh.
+        "motif": oracle.Section(root=sections["motif"], refresh=motif_refresh),
     }
 
 

@@ -946,7 +946,7 @@ def test_batch_generation_controls_are_not_operator_facing(monkeypatch: pytest.M
 
     column = ui.column()
     with column:
-        work.build(ctx)
+        work.build_diagnostics(ctx)
         screens.build_print(ctx)
 
     rendered = {

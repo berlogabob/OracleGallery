@@ -25,6 +25,7 @@ from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
 from ..ui import (
+    Section,
     card,
     helper_text,
     mini_metric,
@@ -36,7 +37,7 @@ from ..ui import (
 )
 
 
-def build_sections(ctx: GuiContext) -> dict[str, Any]:
+def build_sections(ctx: GuiContext) -> dict[str, Section]:
     """Build the calibration content as three sections and hand back their containers.
 
     The SETUP screen shows one section at a time behind a segmented switch, which is how
@@ -489,7 +490,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                 picker.on_value_change(lambda e: show_symbol(e.value))
                 show_symbol(picker.value)
 
-    return sections
+    return {name: Section(root=container) for name, container in sections.items()}
 
 
 def _build_z_tune_card(ctx: GuiContext) -> None:
@@ -632,6 +633,3 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
     )
 
 
-def build(ctx: GuiContext) -> None:
-    """All sections, stacked and visible -- the pre-segmentation whole, kept for tests."""
-    build_sections(ctx)

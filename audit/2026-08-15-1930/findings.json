@@ -1,0 +1,425 @@
+{
+ "app": "Oracle Operator GUI",
+ "platform": "web",
+ "device": "headless Chromium 1280x800 via CDP (sandbox :8799)",
+ "date": "2026-08-15",
+ "screens_audited": 12,
+ "flows": [
+  {"name": "navigate-all", "passed": true, "duration_s": 17.1, "steps": 14, "errors": []},
+  {"name": "legend-dialog", "passed": true, "duration_s": 4.1, "steps": 3, "errors": []},
+  {"name": "text-preview", "passed": true, "duration_s": 7.6, "steps": 3, "errors": []},
+  {"name": "verify-gcode", "passed": true, "duration_s": 9.6, "steps": 3, "errors": [], "artifacts": ["gui_sheet_20260815_230416.gcode"]}
+ ],
+ "findings": [
+  {
+   "id": "F-001",
+   "criterion": "DS-BTN-1",
+   "screen": "PRINT top bar (all views) + SETUP/MACHINE recovery row + PRINT run card",
+   "severity": 4,
+   "evidence": "The safety-critical stop/recovery controls are the only buttons rendered outside the app's 3-intent button system. EMERGENCY STOP and STOP PRINT are raw ui.button() calls (src/neje_oracle/blocks/gui/service.py:239,241) using Quasar defaults color=negative (#C10015) and color=warning (#F2C037) instead of danger_action_button()/.oracle-btn-danger (DANGER token #8C2F1D); UNLOCK (warning) and RESET / ABORT (negative) in workspaces/connection.py:52,54, STOP in workspaces/work.py:24, and Confirm in context.py:758 bypass the system the same way. Result: two different 'danger reds' for one intent in one app, and STOP PRINT/UNLOCK render white 14px labels on bright gold — the hardest-to-read buttons on screen, on exactly the controls an operator reads under time pressure. [Merged duplicates: DS-BTN-1 (recovery row), DS-A11Y-1 white-on-gold contrast, VD-TYPE-3 label legibility, VD-COL-3 off-palette semantic colors — same root cause: ui.colors() (service.py:205) never maps warning/negative to theme tokens.]",
+   "screenshot": "screens/print.png",
+   "measurement": "white on #F2C037 = 1.7:1 (AA needs 4.5:1); GOLD on CREAM = 2.08:1 AA fail (token_contrast); Quasar negative #C10015 vs DANGER token #8C2F1D; CREAM on DANGER = 7.54:1 passes; 9 raw ui.button() sites bypass the intent system",
+   "recommendation": "Route all six sites through danger_action_button()/safe_action_button() (an EMERGENCY STOP weight modifier can sit on top of .oracle-btn-danger), and map Quasar warning/negative/positive to WARN/DANGER/OK in ui.colors() so no future raw button can leak off-palette into safety controls."
+  },
+  {
+   "id": "F-002",
+   "criterion": "LAW-HICK-1",
+   "screen": "PRINT + SETUP/MACHINE (stop family, persistent chrome)",
+   "severity": 3,
+   "evidence": "Four stop-family actions with overlapping names compete for one emergency decision: EMERGENCY STOP and STOP PRINT (top bar, every view), STOP SYSTEM (PRINT run card), RESET / ABORT (SETUP/MACHINE) — nothing on screen explains the scope difference. The emphasis system gives no help: STOP SYSTEM is styled identically to START SYSTEM (both filled black 263x32, stacked 40px apart at x=1009), with NEW RUN between them and SET WORK ZERO a third identical solid-ink primary on the same screen, so the destructive action has no distinct look and no action reads as 'the' next one. [Merged duplicates: H4 stop-hierarchy finding, VD-HIER-1 identical solid primaries.]",
+   "screenshot": "screens/print.png",
+   "measurement": "dump.json: 3 stop-labelled buttons visible simultaneously on PRINT, 4th on SETUP/MACHINE; START SYSTEM y=116 / STOP SYSTEM y=197, same 263x32 solid-ink style",
+   "recommendation": "One always-visible emergency action; rename the others to outcome-based labels with one-line consequence text ('pauses current sheet' / 'kills services' / 'halts motion now'); demote STOP SYSTEM to an outlined destructive variant and keep one solid primary per screen (the action the Next-action card names)."
+  },
+  {
+   "id": "F-003",
+   "criterion": "LAW-FITTS-2",
+   "screen": "SETUP/MACHINE recovery row",
+   "severity": 3,
+   "evidence": "The recovery row places destructive RESET / ABORT (danger-red filled, the widest and only filled button in the row) 8px from RESUME and 7px from UNLOCK: UNLOCK 62x32 @(418,260), RESUME 68x34 @(487,259), RESET / ABORT 106x32 @(563,260). An operator recovering from an alarm under time pressure reaching for RESUME can land on RESET / ABORT.",
+   "screenshot": "screens/setup_machine.png",
+   "measurement": "dump.json SETUP: gaps 7px and 8px; destructive button widest (106px) and only filled one in row",
+   "recommendation": "Separate RESET / ABORT from the recovery pair with >=24px gap and a confirm or press-and-hold; keep RESUME visually dominant."
+  },
+  {
+   "id": "F-004",
+   "criterion": "H1",
+   "screen": "Persistent top bar + left rail (all views)",
+   "severity": 3,
+   "evidence": "The machine's disconnected state is communicated by four conflicting signals: the top-bar chip reads 'OPERATOR PAUSED' (implying a resumable pause) while the plotter is actually offline; the rail shows a bare 'Not ready' under SET WORK ZERO with no reason; the position readout shows 'X – · Y –'; the real state lives only in a dismissable toast. The Manual motion card permanently captions 'Blocked while G-code streams.' when nothing is streaming (identical across all 12 view dumps) while its jog/PEN/HOME buttons render enabled offline. On top of that, the paused state is named three ways with no mapping to the control that clears it: chip 'OPERATOR PAUSED', blockers line 'print paused', controls 'START SYSTEM'/'RESUME'. [Merged duplicates: NAV-5 paused-state vocabulary, ST-IDLE static manual-motion caption.]",
+   "screenshot": "screens/print.png",
+   "measurement": "Caption identical across all 12 view dumps regardless of state; 3 terms for one state; 0 controls labeled with the chip's wording",
+   "recommendation": "Make the chip reflect connection state first (OFFLINE / CONNECTING / IDLE / RUN / PAUSED) with one term reused everywhere; make the Manual motion caption state-driven ('Offline — connect on SETUP first' / 'Blocked: G-code streaming' / 'Ready') and disable jog controls when they cannot act; caption the chip with the clearing action ('Paused — press START SYSTEM')."
+  },
+  {
+   "id": "F-005",
+   "criterion": "ST-ERROR",
+   "screen": "Machine rail 'Next action' card (persistent, all views)",
+   "severity": 3,
+   "evidence": "While the plotter is offline (banner: 'Plotter offline — check power and WiFi, then press CONNECT on SETUP'), the Next action card still instructs 'Jog to the paper origin, then SET WORK ZERO below.' and its blockers line reads 'blockers: work zero · print paused' — the connection, the one blocker that makes jogging impossible, is missing. The dedicated guidance card gives the wrong next step on all 12 view dumps.",
+   "screenshot": "screens/print.png",
+   "measurement": "Blockers line = 'work zero · print paused'; banner remedy = 'press CONNECT on SETUP'; 0 of 12 views list connection as a blocker",
+   "recommendation": "Rank 'plotter offline' as the first blocker and switch Next-action copy to 'Connect the plotter (SETUP → MACHINE → CONNECT)' whenever FluidNC is unreachable; only advance to jog/work-zero guidance once connected."
+  },
+  {
+   "id": "F-006",
+   "criterion": "H1",
+   "screen": "All views (persistent offline toast) — worst on CREATE and PRINT",
+   "severity": 3,
+   "evidence": "The persistent 'Plotter offline' toast (~x340–940, y733–791, DISMISS at 846,746 in all 12 dumps) floats over interactive content on every view: on CREATE it covers the right half of REFRESH PREVIEW (~38px of the 140px button); on PRINT it covers the layout filename ('testsvg_20260814…' cut mid-string) and progress strip, and the status line 'Uploaded SVG finished: TEXT ZZBVFNTL' is clipped at the 800px viewport edge — body is overflow:hidden at >=1200px (service.py:150), so it is unreachable, not scrollable; on SETUP/ADVANCED it covers the 'Random coarse/fine' slider row. The only remedy is dismissing the toast, after which the offline warning is gone entirely. [Merged duplicates: IXD-VIS occlusion, VD-RESP-1 overlay + clipped status strip, ST-ERROR persistent-banner placement.]",
+   "screenshot": "screens/create_texture.png",
+   "measurement": "dump.json: DISMISS 87x32 @(846,746) on every view; REFRESH PREVIEW x=238–378 vs toast starting ~x=340; PRINT status row clipped at y=794 of an 800px viewport with body overflow:hidden",
+   "recommendation": "Move the persistent connection warning into a reserved banner strip or the top-bar chip area that reflows content instead of floating over controls; keep toasts for transient events only; audit the PRINT bottom strip so no control or status sits below the fold in the overflow-hidden shell."
+  },
+  {
+   "id": "F-007",
+   "criterion": "H5",
+   "screen": "SETUP/VERIFY, CREATE/IMAGE, CREATE/MOTIF",
+   "severity": 3,
+   "evidence": "Primary actions render fully enabled while their prerequisites are missing: SETUP/VERIFY shows a filled black START SVG PRINT directly next to 'No SVG selected'; CREATE/IMAGE shows PRINT IMAGE while 'No image selected'; CREATE/MOTIF shows SAVE TO BANK (filled) and USE IN SKETCH while 'No picture selected'. Nothing signals the action cannot succeed until it is pressed.",
+   "screenshot": "screens/setup_verify.png",
+   "measurement": null,
+   "recommendation": "Disable (dim) prerequisite-gated primary buttons with the reason in their tooltip/adjacent helper; enable on valid input."
+  },
+  {
+   "id": "F-008",
+   "criterion": "H2",
+   "screen": "CREATE/IMAGE — Pen lifts slider",
+   "severity": 3,
+   "evidence": "The 'Pen lifts' slider shows the operator a literal unevaluated code expression as its value label: \"value >= 1024 ? 'off' : value\" — the only readout for a control whose helper ('At max, the slider has no lift limit…') makes the value safety/quality-relevant; the intended 'off' state at max is invisible. The adjacent quality slider drops its value badge ('3') on top of its helper sentence. [Merged duplicates: IXD-FEED, DS-FDBK-1, ST-IDLE — reported by 4 dimensions; same root cause: unevaluated Quasar label prop.]",
+   "screenshot": "screens/create_image.png",
+   "measurement": "Visible tooltip literal: value >= 1024 ? 'off' : value",
+   "recommendation": "Fix the slider label binding (NiceGUI props ':label-value') so it renders 'off' or the number; offset badges so they never cover helper text; add a render test failing on '?'/'>=' in visible slider labels."
+  },
+  {
+   "id": "F-009",
+   "criterion": "DS-TYPE-1",
+   "screen": "All screens (typography identity)",
+   "severity": 3,
+   "evidence": "tokens.py declares FONT_BODY ('EB Garamond'), FONT_DISPLAY ('Cinzel'), FONT_LOGO ('Cinzel Decorative') and exports them as --font-body/--font-display/--font-logo, but no CSS rule in PAGE_STYLE references them and no @font-face/webfont is loaded — every screenshot renders Quasar's default sans-serif. The design system's entire typographic identity is silently absent while the tokens claim it is applied.",
+   "screenshot": "screens/print.png",
+   "measurement": "grep of service.py PAGE_STYLE: 0 references to var(--font-*); only monospace overrides for .position-readout and .log-viewer",
+   "recommendation": "Either wire the tokens (self-hosted @font-face + body { font-family: var(--font-body) } and display faces on titles/logo) or delete the three font tokens — a decision the neutral-theme redesign must make explicitly."
+  },
+  {
+   "id": "F-010",
+   "criterion": "DS-A11Y-1",
+   "screen": "All views (top-bar state chip)",
+   "severity": 2,
+   "evidence": "The FluidNC state chip 'OPERATOR PAUSED' — the single machine-state readout an operator scans constantly — is 12px bold GOLD_DIM (#8A6F2E) on WARN_WASH/CREAM, measuring 4.36:1; 12px bold is below the large-text threshold, so the 4.5:1 AA floor applies and it fails. tokens.py's own comment says GOLD_DIM exists 'where GOLD fails contrast', but it also fails at the size it is used at; GOLD itself (2.08:1) is used as border of .warning-banner. [Merged duplicate: VD-TYPE-3 chip contrast.]",
+   "screenshot": "screens/print.png",
+   "measurement": "token_contrast: GOLD_DIM on CREAM = 4.36:1 AA_normal false; GOLD on CREAM = 2.08:1; chip font-size 12px bold",
+   "recommendation": "Darken WARN one step (~#7A6228–#82682B reaches 4.5:1 on CREAM) or set the chip's text in INK with GOLD_DIM reserved for border/wash; keep GOLD strictly non-text."
+  },
+  {
+   "id": "F-011",
+   "criterion": "H2",
+   "screen": "SETUP/MACHINE connection status pills",
+   "severity": 2,
+   "evidence": "The screen the offline banner sends operators to ('press CONNECT on SETUP') reports status in protocol jargon: 'WEBUI offline', 'TELNET offline', 'INPUTS none', 'MODAL -'. 'MODAL' (G-code modal state) showing '-' is meaningless to a non-firmware operator, nothing explains which pills must be green before printing, and the operator cannot confirm what improved after pressing CONNECT. [Merged duplicate: NAV-5 — banner speaks operator language, destination page does not.]",
+   "screenshot": "screens/setup_machine.png",
+   "measurement": "dump.json SETUP: 4 status pills, all protocol-jargon labels (WEBUI x=251, TELNET x=504, INPUTS x=757, MODAL x=1010)",
+   "recommendation": "Lead with one operator-level status line ('Plotter: not reachable — check power and WiFi'); relabel pills in operator terms ('Browser UI', 'Control channel', 'Limit switches', 'Machine mode') or collapse to a single Connected/Not-connected verdict with details on demand."
+  },
+  {
+   "id": "F-012",
+   "criterion": "LAW-FITTS-2",
+   "screen": "All views (persistent top bar)",
+   "severity": 2,
+   "evidence": "Routine STOP PRINT (87x32 @1022,4) and drastic EMERGENCY STOP (129x32 @1141,4) sit in the same top-right cluster 32px apart; corner-directed mouse throws land on EMERGENCY STOP, so a miss while routinely ending a print triggers the e-stop.",
+   "screenshot": "screens/print.png",
+   "measurement": "dump.json: gap = 32px; both 32px tall in a 40px bar",
+   "recommendation": "Increase separation: EMERGENCY STOP alone in the corner with a larger hit area, STOP PRINT context-local to PRINT's System run card."
+  },
+  {
+   "id": "F-013",
+   "criterion": "H9",
+   "screen": "All views (offline toast) + SETUP/MACHINE",
+   "severity": 2,
+   "evidence": "The offline error mixes plain language with raw developer output: 'FluidNC Telnet offline: :23; HTTP offline ([Errno 61] Connection refused)' — a bare port and a Python errno leak into the operator UI. On SETUP/MACHINE, the one screen where the operator goes to fix it, the same detail line is truncated ('…HTTP offline ([Errno 61] Connecti…') with no way to expand it. The first toast line ('check power and WiFi, then press CONNECT on SETUP') is good; the detail line undermines it.",
+   "screenshot": "screens/setup_machine.png",
+   "measurement": null,
+   "recommendation": "Keep the plain-language line; move protocol detail behind an expandable 'details' affordance (untruncated), phrased as 'Control channel (telnet, port 23): unreachable'."
+  },
+  {
+   "id": "F-014",
+   "criterion": "H4",
+   "screen": "SETUP/PEN, SETUP/ADVANCED, CREATE/IMAGE, CREATE/MOTIF (numeric fields app-wide)",
+   "severity": 2,
+   "evidence": "Decimal separators are inconsistent, sometimes within one card: SETUP/PEN shows 'Pen width mm 0,3' (comma) beside 'Z step mm 0.5' (dot); SETUP/ADVANCED helper says 'CLAMP 0.25 to 3 mm' while the field below shows '0,25'; CREATE fields show '0,8'/'0,1'/'1,5'/'0,4' while origin reads '25.0 / 25.0 mm'. On a machine-control panel feeding G-code, an operator retyping '0.3' into a comma-formatted field may silently get 3 mm depending on the parser. [Merged duplicates: IXD-CONS, DS-FORM-1 — 3 dimensions.]",
+   "screenshot": "screens/setup_pen.png",
+   "measurement": "Comma decimals in ui.number inputs vs dot decimals in all computed readouts, visible simultaneously on setup_pen.png and setup_advanced.png",
+   "recommendation": "Pin display formatting to dot-decimal (matching the mm/G-code domain) app-wide; accept both separators on input."
+  },
+  {
+   "id": "F-015",
+   "criterion": "LAW-FITTS-1",
+   "screen": "PRINT — '?' legend button",
+   "severity": 2,
+   "evidence": "The '?' legend button — the only entry to the 'Reading the sheet' legend decoding the ring/dot semantics operators need mid-run — is a 17px-wide target at the preview's top-right, below the WCAG 2.5.8 24px minimum and the smallest real control in the app. (The other 26 sub-24px entries in measurements.json are 1x1 hidden native inputs under Quasar selects; '?' is the only genuine violation.) [Merged duplicates: H7 help discoverability, DS-A11Y-1 target size — 3 dimensions.]",
+   "screenshot": "screens/print.png",
+   "measurement": "measurements.json PRINT small_targets: {label: '?', w: 17, h: 34, min: 24}; dump.json: @(975,40)",
+   "recommendation": "Enlarge to >=24px wide (ideally 32x32 with a 'Legend' label) — the existing .q-btn { min-height: 30px } rule shows the pattern, add a min-width companion — or render the legend inline in the preview header."
+  },
+  {
+   "id": "F-016",
+   "criterion": "ST-EMPTY",
+   "screen": "SETUP/VERIFY — SVG upload dropzone",
+   "severity": 2,
+   "evidence": "The SVG picker is a bare black bar reading only '0.0B / 0.00%' with a '+' icon — no instruction of what to add; the zeroed byte/percent counter reads like a stalled upload rather than an empty picker. The identical component on CREATE/IMAGE ('Drop a PNG/JPG here, or click + to choose') and CREATE/MOTIF ('Drop a photo here…') is labeled — same component, inconsistent dress. [Merged duplicates: H4 consistency, VD-GES-2 component dress — 3 dimensions.]",
+   "screenshot": "screens/setup_verify.png",
+   "measurement": "0 instruction text elements in the widget; header shows only '0.0B / 0.00%'",
+   "recommendation": "Add the sibling dropzones' label ('Drop an Inkscape SVG here, or click + to choose') and hide the byte/percent counter until an upload is actually in progress."
+  },
+  {
+   "id": "F-017",
+   "criterion": "ST-EMPTY",
+   "screen": "CREATE/SHEET — preview status",
+   "severity": 2,
+   "evidence": "With no image folder chosen, the sheet preview status renders as a bare hyphen ('-', 3px-wide text element at (945,430)) — no explanation or next step. Sibling tabs do this correctly: IMAGE shows 'No image selected' + dropzone instructions, TEXTURE shows 'Save a texture in the editor, then pick it here.'",
+   "screenshot": "screens/create_sheet.png",
+   "measurement": "Empty-state text = '-' (1 character) vs designed empty states on 2 sibling tabs",
+   "recommendation": "Replace the hyphen with the sibling pattern: 'Choose an image folder above to fill the sheet preview.'"
+  },
+  {
+   "id": "F-018",
+   "criterion": "H6",
+   "screen": "CREATE/SHEET — Image folder input",
+   "severity": 2,
+   "evidence": "The 'Image folder' input is a free-text filesystem path field with no browse/picker and no example placeholder; the helper says only 'Point Image folder at a folder of images.' The operator must recall and type an exact server-side path with no validation feedback. A stray '-' placeholder also dangles under the Travel lines toggle.",
+   "screenshot": "screens/create_sheet.png",
+   "measurement": null,
+   "recommendation": "Offer a folder picker or dropdown of known/recent content folders, validate on blur with a 'found N images' confirmation, and hide the empty '-' stats line."
+  },
+  {
+   "id": "F-019",
+   "criterion": "H1",
+   "screen": "CREATE/TEXT — preview render",
+   "severity": 2,
+   "evidence": "After REFRESH PREVIEW, the rendered 'NEJE ORACLE' preview is a small ~227x98px box pinned to the top-left of the ~686x670px canvas with the leftmost glyph stems clipped at the panel edge, instead of being placed on the sheet preview like other sources. The operator cannot judge placement, size, or verify the full text they are about to plot. [Merged duplicate: ST-SUCCESS post-flow verification.]",
+   "screenshot": "screens/flow_text_preview.png",
+   "measurement": "Preview box ~227x98px at canvas origin inside ~686x670px canvas; left glyphs cut off",
+   "recommendation": "Fit-and-center the generated preview in the canvas at its actual origin/scale, matching SKETCH/TEXTURE preview behavior."
+  },
+  {
+   "id": "F-020",
+   "criterion": "H2",
+   "screen": "SETUP/VERIFY — GENERATE G-CODE success toast",
+   "severity": 2,
+   "evidence": "The success notification exposes a raw macOS temp path: 'G-code file: /var/folders/m0/…/T/gui-flows-…/spool/gui_sheet_20260815_230416.gcode'. The operator cannot act on an ephemeral temp-dir path; the meaningful facts (filename, it's in the spool, ready to print) are buried, and no next step is offered even though START TEST PRINT is on the same card. [Merged duplicate: ST-SUCCESS — 2 dimensions.]",
+   "screenshot": "screens/flow_verify_gcode.png",
+   "measurement": "Toast text = 2-line absolute /var/folders path; 0 next-step hint",
+   "recommendation": "Show 'gui_sheet_….gcode written to spool — press START TEST PRINT to plot it'; keep full paths in logs/Diagnostics."
+  },
+  {
+   "id": "F-021",
+   "criterion": "H2",
+   "screen": "CREATE/TEXT — Font selector",
+   "severity": 2,
+   "evidence": "The Font selector displays the internal font identifier 'zzBVFNTL' as the visible choice — a code the operator must memorize to map to an actual letterform; the helper ('Single-stroke engraving fonts') does not explain it and there is no glyph preview.",
+   "screenshot": "screens/create_text.png",
+   "measurement": null,
+   "recommendation": "Show human-readable font names (ideally rendering each option in its own face); keep internal IDs out of the UI."
+  },
+  {
+   "id": "F-022",
+   "criterion": "VD-COL-2",
+   "screen": "All views (left rail) — clearest on PRINT",
+   "severity": 2,
+   "evidence": "One class, .oracle-helper (12px, RUST — service.py:175), carries both neutral guidance ('XY speed writes G-code feed rates in mm/min…') and live blocking state ('Blocked while G-code streams.', 'Not ready', 'blockers: work zero · print paused'). An operator cannot distinguish a caution from a caption by color; the WARN/DANGER tokens the theme reserves for exactly this are unused here.",
+   "screenshot": "screens/print.png",
+   "measurement": "dump.json PRINT: all three state strings are class oracle-helper, 12px — identical to instructional helper text",
+   "recommendation": "Split the class: keep RUST for guidance, render live blockers/readiness in WARN or DANGER with an icon so state text is visually distinct from commentary."
+  },
+  {
+   "id": "F-023",
+   "criterion": "VD-TYPE-1",
+   "screen": "All views — worst on SETUP/PEN, SETUP/VERIFY, CREATE/MOTIF",
+   "severity": 2,
+   "evidence": "The largest font in the app is 14px; all instructional reading text is 12px (.oracle-helper), including genuine multi-line procedures the operator must follow: the 3-line Z-tune procedure (SETUP/PEN), the 2-paragraph pen-calibration procedure (SETUP/VERIFY), the 4-line motif import guidance (CREATE/MOTIF). Dense control labels at 12–14px are a defensible control-panel choice; procedure paragraphs at 12px are not.",
+   "screenshot": "screens/setup_verify.png",
+   "measurement": "measurements.json font_sizes_in_view = [12px, 13px, 14px] on all views; no text >= 16px anywhere",
+   "recommendation": "Raise multi-line procedure text to 14–16px (keep 12px for single-line field captions), or move long procedures into a help popover set at reading size."
+  },
+  {
+   "id": "F-024",
+   "criterion": "VD-TYPE-2",
+   "screen": "SETUP/VERIFY, SETUP/PEN, SETUP/ADVANCED",
+   "severity": 2,
+   "evidence": "Helper paragraphs run the full ~1010px content column at 12px — the pen-calibration paragraph on VERIFY is a single ~180-character line, 2x the 85-character ceiling — so the eye loses the return sweep on exactly the text that encodes the calibration procedure.",
+   "screenshot": "screens/setup_verify.png",
+   "measurement": "Helper text spans x≈251–1258 (~1007px) at 12px — 150–180 chars/line vs 45–85 recommended",
+   "recommendation": "Cap helper prose at max-width ~65ch inside cards; let fields keep the full column."
+  },
+  {
+   "id": "F-025",
+   "criterion": "DS-COL-1",
+   "screen": "CREATE/IMAGE, CREATE/SKETCH, SETUP/ADVANCED, SETUP/PEN",
+   "severity": 2,
+   "evidence": "Two rusts render adjacently: token RUST #8B4513 via .oracle-helper vs legacy #8f4f2b via raw Tailwind text-[#8f4f2b] (17 uses across screens.py, generative.py, calibration.py, image.py, plus preview.py:561 SVG error fill). On create_image.png a token-rust helper sits in the same panel as a legacy-rust quality line; on setup_advanced.png the MAIN DETAIL / AUTO-ADJUST / CLAMP micro-labels are legacy rust under token-rust helpers — close enough to look like an accident, far enough to read as inconsistency.",
+   "screenshot": "screens/create_image.png",
+   "measurement": "17 uses of #8f4f2b in view files vs token RUST #8B4513 (relative luminance differs 1.12:1)",
+   "recommendation": "Replace every text-[#8f4f2b] with helper_text()/.oracle-helper (or a micro_label component); change preview.py:561 fill to tokens.RUST; extend the ratchet in tests/test_gui_design_system.py to count these to zero."
+  },
+  {
+   "id": "F-026",
+   "criterion": "DS-TYPE-1",
+   "screen": "SETUP/ADVANCED (workspace cards vs left rail, app-wide pattern)",
+   "severity": 2,
+   "evidence": "Two section-title treatments coexist on one screen: left-rail cards use section_title()/.oracle-card-title (13px, weight 700, INK) while workspace cards use raw ui.label().classes('text-sm font-bold') (14px Tailwind) — 15 raw title sites across connection.py, work.py, generative.py, tests.py, calibration.py, image.py, context.py:778; 18 raw ui.card() sites bypass the card() helper entirely.",
+   "screenshot": "screens/setup_advanced.png",
+   "measurement": "dump.json: 36 .oracle-card-title elements at 13px vs raw bold titles at 14px; 15 raw title sites; 18 raw ui.card() sites",
+   "recommendation": "Convert the 18 raw ui.card() sites to the card(title=…, helper=…) context manager from ui.py so every section title goes through section_title()."
+  },
+  {
+   "id": "F-027",
+   "criterion": "DS-TYPE-1",
+   "screen": "SETUP/ADVANCED (helper-text role)",
+   "severity": 2,
+   "evidence": "The same semantic role — explanatory helper line under a control — renders three ways, all visible together on setup_advanced.png: (1) .oracle-helper, 12px token rust; (2) text-xs text-[#8f4f2b], 12px legacy rust (image.py:410, calibration.py:367, generative.py:203); (3) text-[10px] font-bold uppercase text-[#8f4f2b] micro-caps (calibration.py:347–409).",
+   "screenshot": "screens/setup_advanced.png",
+   "measurement": "3 distinct treatments (12px #8B4513 / 12px #8f4f2b / 10px bold uppercase #8f4f2b) for one semantic role",
+   "recommendation": "Keep helper_text() as the single helper; if the 10px uppercase micro-label is genuinely a different role, add one micro_label() component styled once in PAGE_STYLE from tokens."
+  },
+  {
+   "id": "F-028",
+   "criterion": "DS-NAV-1",
+   "screen": "Top bar (PRINT / CREATE / SETUP tabs)",
+   "severity": 2,
+   "evidence": ".workspace-tabs is styled twice in PAGE_STYLE with conflicting tab heights: '.top-bar .q-tab { min-height: 34px }' (service.py:50) vs '.workspace-tabs .q-tab { min-height: 42px }' (line 116). The later 42px rule wins, so nav tabs are 42px tall inside the 40px .top-bar — every top tab renders at y=-1, h=42, overflowing the bar by 2px top and bottom, with the active-tab underline flush against the bar's bottom border.",
+   "screenshot": "screens/print.png",
+   "measurement": "dump.json (all 3 screens): q-tab elements y=-1 h=42 inside .top-bar height:40px; duplicate blocks at service.py:49-50 and 115-116",
+   "recommendation": "Collapse to one .workspace-tabs definition; size tabs to fit the 40px bar (34px) or grow the bar — one rule, one number."
+  },
+  {
+   "id": "F-029",
+   "criterion": "FLOW-2",
+   "screen": "CREATE tabs (TEXTURE/IMAGE/TEXT/SHEET/MOTIF)",
+   "severity": 1,
+   "evidence": "Every parameter iteration in the creative loop requires an explicit REFRESH PREVIEW press (the text-preview flow needed it as a dedicated step); previews do not update on parameter change, adding one detour step per tweak in the app's highest-frequency loop — while SETUP/ADVANCED states 'Display filters affect preview immediately', an inconsistent update model.",
+   "screenshot": "screens/flow_text_preview.png",
+   "measurement": "text-preview flow: 3 steps, 7.6s, of which 1 step is the manual refresh",
+   "recommendation": "Debounce-auto-refresh previews on parameter change (keep the button as manual fallback for heavy renders), or at least mark the preview stale ('settings changed — refresh')."
+  },
+  {
+   "id": "F-030",
+   "criterion": "LAW-MILLER-1",
+   "screen": "CREATE/MOTIF",
+   "severity": 1,
+   "evidence": "'Import motif from picture' stacks ~13 controls in one flat group with no sub-headings (upload, 4 crop fields, Mode, Cell mm, Gamma, Despeckle, Simplify, Autocontrast, Invert, name, 2 actions). Densest view in the app: 41 interactive elements.",
+   "screenshot": "screens/create_motif.png",
+   "measurement": "measurements.json CREATE/MOTIF: interactive = 41 (highest)",
+   "recommendation": "Chunk into three labelled sub-sections (Crop, Trace, Save), <=7 controls visible per chunk."
+  },
+  {
+   "id": "F-031",
+   "criterion": "IXD-VIS",
+   "screen": "All views (top-bar state chip)",
+   "severity": 1,
+   "evidence": "The FluidNC state chip ('OPERATOR PAUSED', bordered gold pill @~316,6) uses the same pill-with-border treatment as real buttons (e.g. SCAN LAN), so a status indicator reads as a tappable control.",
+   "screenshot": "screens/setup_machine.png",
+   "measurement": null,
+   "recommendation": "Restyle as non-interactive status (filled badge or plain text with icon); only true controls carry button treatment."
+  },
+  {
+   "id": "F-032",
+   "criterion": "IXD-TOL",
+   "screen": "All views (persistent top bar)",
+   "severity": 1,
+   "evidence": "'Require Firebase' is a one-click global mode toggle (160x40 @570,0) in persistent chrome with no confirmation; an accidental click silently changes queue behavior and its consequences are unstated on screen.",
+   "screenshot": "screens/print.png",
+   "measurement": "dump.json: q-toggle 'Require Firebase' 160x40 @(570,0)",
+   "recommendation": "Move to SETUP or require confirm when switching off; show the active mode as a read-only chip."
+  },
+  {
+   "id": "F-033",
+   "criterion": "H2",
+   "screen": "PRINT — Queue card",
+   "severity": 1,
+   "evidence": "Queue metrics use terse dev shorthand: 'FAIL/SKIP 0 / 177' merges two outcomes into one tile with an unexplained denominator (177 skips with no breakdown or drill-down, while PENDING is 1); the caption 'Queue counts loaded' is a system event, not operator information; the blockers line 'blockers: work zero · print paused' is log-styled. A fresh operator cannot tell whether 177 skipped jobs is normal or a problem. [Merged duplicate: ST-IDLE queue-tile finding.]",
+   "screenshot": "screens/print.png",
+   "measurement": "FAIL/SKIP = 0 / 177 with 0 explanatory affordances",
+   "recommendation": "Split FAIL and SKIP into separate labelled tiles with hover/click detail ('177 skipped: outside current filters'), drop 'Queue counts loaded', phrase blockers as sentences."
+  },
+  {
+   "id": "F-034",
+   "criterion": "H2",
+   "screen": "Left rail (all views) + SETUP/SHEET",
+   "severity": 1,
+   "evidence": "The 'Feed' field in Manual motion has no unit ('Feed 1000', actually mm/min) while its sibling shows 'Step mm'; on SETUP/SHEET, Field W/H, Cell, Gap, Margin omit units while 'Dot mm' includes them.",
+   "screenshot": "screens/setup_sheet.png",
+   "measurement": null,
+   "recommendation": "Suffix every numeric field with its unit ('Feed mm/min', 'Field W mm', …) as already done for Step mm and Dot mm."
+  },
+  {
+   "id": "F-035",
+   "criterion": "VD-COL-1",
+   "screen": "SETUP/PEN (worst case; pattern app-wide)",
+   "severity": 1,
+   "evidence": "RUST is the brand accent, yet on SETUP/PEN roughly half of all text blocks are rust helper paragraphs. When most running text is accent-colored, the accent stops signaling anything — links, focus, and genuine emphasis no longer stand out.",
+   "screenshot": "screens/setup_pen.png",
+   "measurement": null,
+   "recommendation": "Set helper prose in INK_MID or INK_MUTED (both pass AA); reserve RUST for links, active states, and one emphasis per card."
+  },
+  {
+   "id": "F-036",
+   "criterion": "VD-TYPE-1",
+   "screen": "PRINT (queue tiles) + legend dialog",
+   "severity": 1,
+   "evidence": "Queue tile captions PENDING / ACTIVE / FAIL-SKIP are 9px uppercase letterspaced (.mini-metric .label, service.py:142) and the sheet-legend chips are 10px (.legend-chip, :145) — below any comfortable legibility floor on a 1280px desktop panel, and FAIL/SKIP is a number an operator checks under time pressure.",
+   "screenshot": "screens/flow_legend.png",
+   "measurement": "service.py: .mini-metric .label 9px; .legend-chip 10px",
+   "recommendation": "Floor all captions at 11–12px; the letterspacing can stay for the small-caps look."
+  },
+  {
+   "id": "F-037",
+   "criterion": "VD-TYPE-3",
+   "screen": "Token level (no rendered use found)",
+   "severity": 1,
+   "evidence": "RUST_LIGHT (#C4752A, 'hover / lighter accent') measures 3.23:1 on CREAM — fails AA normal — and is exported as --rust-light on every page (tokens.py:26,77), but no GUI rule consumes it. A loaded footgun: the first hover state that reaches for it will fail contrast at the app's 12–14px sizes.",
+   "screenshot": "screens/print.png",
+   "measurement": "token_contrast: RUST_LIGHT on CREAM = 3.23 (AA_normal false, AA_large true); no consumer under blocks/gui",
+   "recommendation": "Darken RUST_LIGHT to a 4.5+ value or comment it as decorative-only (borders/washes, never text) next to the GOLD_DIM precedent in tokens.py."
+  },
+  {
+   "id": "F-038",
+   "criterion": "VD-GES-1",
+   "screen": "SETUP/ADVANCED — Filters/markers rows",
+   "severity": 1,
+   "evidence": "Each origin's row label sits at x≈251 while its Preview checkbox is at x≈598 and Print checkbox at x≈936 — ~350px gaps with no row rules, zebra striping, or hover band. With five visually identical rows, tying a label to the right checkbox pair relies on eye-tracking across empty cream.",
+   "screenshot": "screens/setup_advanced.png",
+   "measurement": "label→first checkbox gap ≈ 347px; checkbox→checkbox gap ≈ 338px",
+   "recommendation": "Tighten the columns toward the labels or add hairline row separators / row hover so each label-checkbox-checkbox triple reads as one unit."
+  },
+  {
+   "id": "F-039",
+   "criterion": "VD-HIER-2",
+   "screen": "Left rail (all views); CREATE/MOTIF right panel; SETUP/PEN",
+   "severity": 1,
+   "evidence": "The machine rail's inner left edges land on 79/80/82/83px — three recurring 1–2px near-miss offsets repeated on all 14 views, so rail cards, helper text, and fields never share one column line; CREATE/MOTIF adds right-panel misses at 1063/1065 and 1090/1093 (2–3px), SETUP/PEN at 394/397. [Merged duplicates: H8, IXD-CONS — 3 dimensions, same 3 recurring offsets.]",
+   "screenshot": "screens/create_motif.png",
+   "measurement": "measurements.json alignment_near_misses: offsets 1–2px (edges 79/80/82/83) on every view; +2–3px on CREATE/MOTIF and SETUP/PEN",
+   "recommendation": "Normalize card padding and label inset to one --space token so all rail content shares a single left edge; one shared padding token removes all three recurring offsets."
+  },
+  {
+   "id": "F-040",
+   "criterion": "DS-SPACE-1",
+   "screen": "All screens (PAGE_STYLE)",
+   "severity": 1,
+   "evidence": "PAGE_STYLE bypasses the very tokens it defines. Spacing/shape: .oracle-card padding 'var(--space-md) 12px' (12px is no token), border-radius 14px (tokens are 6/10/999px), .state-chip 5px 10px, .mini-metric 5px 7px, .top-bar 2px 10px. Surfaces: four one-off near-PAPER rgba whites (.oracle-card rgba(255,252,245,0.94), .top-bar 0.84, .live-strip .mini-metric 0.9, .mini-metric rgba(255,255,255,0.45)) where the system defines exactly one PAPER #FBF8F1. [Merged duplicate: DS-COL-1 surface values — same root cause: the stylesheet ignores its own token scale.]",
+   "screenshot": "screens/print.png",
+   "measurement": "Raw off-scale values in service.py PAGE_STYLE: 12px, 14px radius, 5px 7px, 5px 10px, 2px 10px vs scale 4/6/10/16px and radii 6/10/999px; 4 distinct rgba surfaces vs 1 PAPER token",
+   "recommendation": "Sweep PAGE_STYLE onto the tokens (14px radius → var(--radius-md), 12px paddings → var(--space-md), rgba surfaces → var(--paper) or a new --paper-translucent); extend the ratchet in tests/test_gui_design_system.py to cover px and rgba literals in PAGE_STYLE."
+  },
+  {
+   "id": "F-041",
+   "criterion": "DS-MOTION-1",
+   "screen": "All screens",
+   "severity": 1,
+   "evidence": "Five duration tokens (0–4000ms) and three easing tokens are declared in tokens.py and injected as CSS variables, but PAGE_STYLE contains zero transition/animation rules referencing them — all motion is per-component Quasar accident rather than system. (Verified in code; not visible in static screenshots.)",
+   "screenshot": "screens/print.png",
+   "measurement": "0 occurrences of 'transition', var(--dur-*), or var(--ease-*) in PAGE_STYLE (service.py:15-197)",
+   "recommendation": "Add a small set of shared rules (e.g. .oracle-btn { transition: background var(--dur-fast) var(--ease-oracle); }) or remove the dead motion tokens."
+  }
+ ]
+}

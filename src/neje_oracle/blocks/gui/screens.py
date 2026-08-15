@@ -29,7 +29,15 @@ from nicegui import ui
 from ...shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS, ORIGIN_MARKER_POSITIONS, ORIGIN_PREVIEW_COLORS
 from . import tokens
 from .context import GuiContext
-from .ui import danger_action_button, helper_text, mini_metric, primary_action_button, safe_action_button, section_title
+from .ui import (
+    Section,
+    danger_action_button,
+    helper_text,
+    mini_metric,
+    primary_action_button,
+    safe_action_button,
+    section_title,
+)
 from .workspaces import calibration, connection, generative, image, tests, texture, work
 
 
@@ -144,28 +152,26 @@ def build_create(ctx: GuiContext) -> None:
                 panel = ui.column().classes("create-panel min-h-0 h-full gap-2")
             return canvas, panel
 
-        # mode -> what the shared strip below can do there. A source with no refresh (the
-        # live sketch) or no print (motif saves to the bank instead) just hides that button.
-        strip: dict[str, dict] = {}
+        # mode -> Section: the one contract every source builder returns. A source with no
+        # refresh (the live sketch) or no print (motif saves to the bank) hides that button.
+        strip: dict[str, Section] = {}
 
         canvas, panel = pane("sketch")
         with canvas:
             generative.build_sketch_canvas()
         with panel:
-            print_sketch = generative.build_sketch_controls(ctx)
-        strip["sketch"] = {"print": print_sketch, "label": "PRINT SKETCH"}
+            strip["sketch"] = generative.build_sketch_controls(ctx)
 
         canvas, panel = pane("texture")
         with canvas:
             texture.build_canvas()
         with panel:
-            texture_handle, reload_textures = texture.build_controls(ctx, actions=False)
-        strip["texture"] = {"refresh": texture_handle.refresh, "print": texture_handle.print, "label": "PRINT TEXTURE"}
+            strip["texture"] = texture.build_controls(ctx, actions=False)
 
         image_canvas, image_panel = pane("image")
         sheet_canvas, sheet_panel = pane("sheet")
         motif_canvas, motif_panel = pane("motif")
-        sections, handles = image.build_sections(
+        image_sections = image.build_sections(
             ctx,
             preview_slots={"image": image_canvas, "sheet": sheet_canvas, "motif": motif_canvas},
             actions=False,
@@ -173,45 +179,45 @@ def build_create(ctx: GuiContext) -> None:
             # gained the motif -- the loop closes on screen instead of off-stage.
             on_use_in_sketch=lambda: switch.set_value("sketch"),
         )
-        sections["image"].move(image_panel)
-        sections["sheet"].move(sheet_panel)
-        sections["motif"].move(motif_panel)
-        strip["image"] = {"refresh": handles["image"].refresh, "print": handles["image"].print, "label": "PRINT IMAGE"}
-        strip["sheet"] = {"refresh": handles["sheet"].refresh, "print": handles["sheet"].print, "label": "PRINT SHEET"}
-        strip["motif"] = {"refresh": handles["motif_refresh"]}
+        for name, target in (("image", image_panel), ("sheet", sheet_panel), ("motif", motif_panel)):
+            image_sections[name].root.move(target)
+            strip[name] = image_sections[name]
 
         canvas, panel = pane("text")
         with panel:
-            text_handle = generative.build_text(ctx, preview_slot=canvas, actions=False)
-        if text_handle is not None:
-            strip["text"] = {"refresh": text_handle.refresh, "print": text_handle.print, "label": "PRINT TEXT"}
+            text_section = generative.build_text(ctx, preview_slot=canvas, actions=False)
+        if text_section is not None:
+            strip["text"] = text_section
 
         # The one print strip: every source that prints, prints here, exactly one way.
-        def _active() -> dict:
-            return strip.get(str(switch.value), {})
+        def _active() -> Section:
+            return strip.get(str(switch.value), Section())
 
         async def strip_print() -> None:
-            action = _active().get("print")
+            action = _active().print
             if action is not None:
                 await action()
 
+        def strip_refresh() -> None:
+            action = _active().refresh
+            if action is not None:
+                action()
+
         with ui.row().classes("create-strip w-full items-center gap-2"):
-            refresh_button = safe_action_button("REFRESH PREVIEW", lambda: _active().get("refresh", lambda: None)())
+            refresh_button = safe_action_button("REFRESH PREVIEW", strip_refresh)
             ui.element("div").classes("status-spacer")
             print_button = primary_action_button("PRINT", strip_print)
 
         def show(mode: object) -> None:
             for name, box in panes.items():
                 box.set_visibility(name == mode)
-            entry = strip.get(str(mode), {})
-            refresh_button.set_visibility(entry.get("refresh") is not None)
-            print_button.set_visibility(entry.get("print") is not None)
-            if entry.get("print") is not None:
-                print_button.set_text(entry["label"])
-            if mode == "texture":
-                # The graph list is the one thing the node editor changes behind this
-                # page's back; entering the pane is the moment it must be current.
-                reload_textures()
+            entry = strip.get(str(mode), Section())
+            refresh_button.set_visibility(entry.refresh is not None)
+            print_button.set_visibility(entry.print is not None)
+            if entry.print is not None:
+                print_button.set_text(entry.print_label)
+            if entry.on_show is not None:
+                entry.on_show()
 
         switch.on_value_change(lambda event: show(event.value))
         show(switch.value)
@@ -239,8 +245,8 @@ def build_setup(ctx: GuiContext) -> None:
             connection.build(ctx)
 
         calibration_sections = calibration.build_sections(ctx)
-        boxes["pen"] = calibration_sections["pen"]
-        boxes["sheet"] = calibration_sections["sheet"]
+        boxes["pen"] = calibration_sections["pen"].root
+        boxes["sheet"] = calibration_sections["sheet"].root
 
         boxes["verify"] = ui.column().classes("w-full gap-2")
         with boxes["verify"]:
@@ -248,7 +254,7 @@ def build_setup(ctx: GuiContext) -> None:
 
         boxes["advanced"] = ui.column().classes("w-full gap-2")
         with boxes["advanced"]:
-            calibration_sections["advanced"].move(boxes["advanced"])
+            calibration_sections["advanced"].root.move(boxes["advanced"])
             with ui.expansion("Diagnostics", icon="build").classes("w-full oracle-card compact-card"):
                 work.build_diagnostics(ctx)
 

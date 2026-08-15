@@ -206,6 +206,24 @@ def client_timer(interval: float, callback: Callable[[], Any], *, once: bool = F
 # than moved around behind them.
 
 
+@dataclass
+class Section:
+    """One CREATE source or SETUP section: the single return contract for builders.
+
+    Five hand-rolled shapes used to come back from the section builders (a dict of
+    containers, a tuple with a closure, a bare coroutine, a RenderCard-or-None) and
+    screens.py destructured each by hand. A screen needs exactly this much: something
+    to place (`root`), what the shared print strip can do there (`refresh`/`print` +
+    label), and what must happen when the pane becomes visible (`on_show`).
+    """
+
+    root: Any = None
+    refresh: Callable[[], Any] | None = None
+    print: Callable[[], Any] | None = None  # async
+    print_label: str = ""
+    on_show: Callable[[], None] | None = None
+
+
 @dataclass(frozen=True)
 class Render:
     """What a source hands the print pipeline. The only currency it accepts."""

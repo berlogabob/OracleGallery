@@ -74,7 +74,3 @@ def build_diagnostics(ctx: GuiContext) -> None:
         ctx.logs_view = log_viewer([])
 
 
-def build(ctx: GuiContext) -> None:
-    """Diagnostics only. The run half lives on the PRINT screen (screens.build_print)."""
-    with ui.column().classes("w-full gap-2"):
-        build_diagnostics(ctx)

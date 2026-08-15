@@ -238,23 +238,17 @@ def register_routes() -> None:
 # ---------------------------------------------------------------------------
 # The operator-facing card
 # ---------------------------------------------------------------------------
-def build(ctx: GuiContext) -> None:
-    """Legacy stacked form, kept for tests that build this workspace alone."""
-    build_canvas()
-    build_controls(ctx)
-
-
 def build_canvas() -> None:
     """The node editor itself. No card: on the CREATE screen the editor is the canvas."""
     oracle.embedded_page("/generative/nodes.html", element_id="texture-frame")
 
 
-def build_controls(ctx: GuiContext, *, actions: bool = True) -> tuple[Any, Any]:
+def build_controls(ctx: GuiContext, *, actions: bool = True) -> oracle.Section:
     """Render-and-print for a saved texture.
 
-    Returns (card handle, reload-graph-list closure). The CREATE screen calls the reload
-    whenever this pane becomes visible -- which is what buried the RELOAD button: the list
-    went stale only because the editor saves through the API, not through this page.
+    The Section's on_show reloads the graph list whenever this pane becomes visible --
+    which is what buried the RELOAD button: the list went stale only because the editor
+    saves through the API, not through this page.
     """
     # render_card builds the knobs itself, but every knob's handler already calls refresh().
     # Handing the name a handle once the card exists keeps those call sites unaware of it.
@@ -354,4 +348,7 @@ def build_controls(ctx: GuiContext, *, actions: bool = True) -> tuple[Any, Any]:
     )
 
     refresh()
-    return card_handle["handle"], hooks["reload"]
+    handle = card_handle["handle"]
+    return oracle.Section(
+        refresh=handle.refresh, print=handle.print, print_label="PRINT TEXTURE", on_show=hooks["reload"]
+    )
