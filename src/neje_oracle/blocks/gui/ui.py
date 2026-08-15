@@ -33,17 +33,25 @@ from .support import plot_minutes_for
 
 def primary_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     """The one action that advances the task on this card."""
-    return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-primary")
+    return (
+        ui.button(label, on_click=on_click, color=None)
+        .props("dense unelevated")
+        .classes("oracle-btn oracle-btn-primary")
+    )
 
 
 def safe_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     """Reversible: generate, refresh, preview."""
-    return ui.button(label, on_click=on_click).props("dense flat").classes("oracle-btn oracle-btn-safe")
+    return ui.button(label, on_click=on_click, color=None).props("dense flat").classes("oracle-btn oracle-btn-safe")
 
 
 def danger_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     """Stops something, loses something, or moves the machine unexpectedly."""
-    return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-danger")
+    return (
+        ui.button(label, on_click=on_click, color=None)
+        .props("dense unelevated")
+        .classes("oracle-btn oracle-btn-danger")
+    )
 
 
 def stop_button(label: str, on_click: Callable[..., Any]) -> Any:
@@ -53,17 +61,23 @@ def stop_button(label: str, on_click: Callable[..., Any]) -> Any:
     Quasar buttons in the app, STOP PRINT white-on-gold at 1.7:1. Both now carry the
     danger hue the operator has already learned, at two distinct weights.
     """
-    return ui.button(label, on_click=on_click).props("dense flat").classes("oracle-btn oracle-btn-stop")
+    return ui.button(label, on_click=on_click, color=None).props("dense flat").classes("oracle-btn oracle-btn-stop")
 
 
 def estop_button(label: str, on_click: Callable[..., Any]) -> Any:
     """THE emergency stop. One per app: filled danger, heaviest button on screen."""
-    return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-estop")
+    return (
+        ui.button(label, on_click=on_click, color=None).props("dense unelevated").classes("oracle-btn oracle-btn-estop")
+    )
 
 
 def nudge_button(label: str, on_click: Callable[..., Any]) -> Any:
     """Slider fine-trim (- / +): quiet, sized by its narrow grid track."""
-    return ui.button(label, on_click=on_click).props("dense flat").classes("oracle-btn oracle-btn-nudge w-full")
+    return (
+        ui.button(label, on_click=on_click, color=None)
+        .props("dense flat")
+        .classes("oracle-btn oracle-btn-nudge w-full")
+    )
 
 
 # --- structure ------------------------------------------------------------------

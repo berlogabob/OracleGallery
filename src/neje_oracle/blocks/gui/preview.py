@@ -559,5 +559,5 @@ def _empty_preview_svg(settings: GuiSettings, message: str) -> str:
         f'width="{width:.0f}" height="{height:.0f}">'
         '<rect width="100%" height="100%" fill="#fbf7ef"/>'
         f'<text x="{width / 2:.2f}" y="{height / 2:.2f}" text-anchor="middle" '
-        f'font-size="18" fill="{tokens.RUST}">{message}</text></svg>'
+        f'font-size="18" fill="{tokens.TEXT_MUTED}">{message}</text></svg>'
     )

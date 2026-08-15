@@ -60,13 +60,13 @@ def _legend_dialog() -> ui.dialog:
                 ui.label("double ring: filler/local cell").classes("text-[10px]")
             with ui.element("div").classes("legend-chip"):
                 ui.element("span").classes("legend-dot").style(
-                    "background:var(--ink-muted); border-color:var(--ink-muted); opacity:0.45;"
+                    "background:var(--text-muted); border-color:var(--text-muted); opacity:0.45;"
                 )
                 ui.label("gray: next in line").classes("text-[10px]")
         with ui.row().classes("items-center gap-3 flex-wrap"):
             for origin in ALL_ORIGINS:
                 position = ORIGIN_MARKER_POSITIONS.get(origin, "right").replace("-", " ")
-                color = ORIGIN_PREVIEW_COLORS.get(origin, tokens.INK_MUTED)
+                color = ORIGIN_PREVIEW_COLORS.get(origin, tokens.TEXT_MUTED)
                 with ui.element("div").classes("legend-chip"):
                     ui.element("span").classes("legend-dot").style(f"background:{color}; border-color:{color};")
                     ui.label(f"{ORIGIN_LABELS[origin]} dot: {position}").classes("text-[10px]")

@@ -8,17 +8,26 @@ from nicegui import ui
 
 from ...shared.models import SystemMode
 from . import screens, tokens
-from .styles import page_style
 from .context import GuiContext
+from .styles import page_style
 from .ui import client_timer, estop_button, stop_button
 from .workspaces import generative, motion, texture
+
 
 def build_page() -> None:
     ctx = GuiContext()
 
-    # Quasar theme, from the same tokens as the CSS -- these used to be a fourth
-    # palette that nothing referenced by name.
-    ui.colors(primary=tokens.INK, secondary=tokens.RUST, accent=tokens.GOLD)
+    # Quasar theme, from the same tokens as the CSS. positive/negative/warning are
+    # seeded too, so a toast or any Quasar-coloured element lands on the palette instead
+    # of Quasar's defaults (the audit found stock Quasar red and gold on the safety controls).
+    ui.colors(
+        primary=tokens.ACCENT,
+        secondary=tokens.TEXT_MID,
+        accent=tokens.WARN,
+        positive=tokens.OK,
+        negative=tokens.DANGER,
+        warning=tokens.WARN,
+    )
     ui.add_head_html(page_style())
 
     with ui.column().classes("oracle-shell w-full gap-0 p-0"):

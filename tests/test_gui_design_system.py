@@ -128,44 +128,78 @@ def test_ratchets_are_not_slack() -> None:
         )
 
 
-def test_tokens_match_the_flutter_reference() -> None:
-    """The operator GUI and the gallery must describe one design system.
+# The operator GUI deliberately left the Oracle brand (cream/serif) on 2026-08-16: it is
+# a control panel, and the gallery keeps the brand. The old tokens↔Flutter parity test is
+# replaced by self-consistency checks: the palette must hold WCAG AA on its own terms.
 
-    public_gallery/lib/theme/oracle_theme.dart is the faithful implementation of
-    assets/Design system/. The operator app used to carry a fourth palette that was near
-    but never equal -- rust #8f4f2b vs #8B4513 across 27 uses. Parsing the Dart rather
-    than copying the values means a change on either side fails here instead of silently
-    splitting the brand again.
+
+def _luminance(hex_color: str) -> float:
+    def channel(value: float) -> float:
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(int(hex_color[i : i + 2], 16) / 255) for i in (1, 3, 5))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast(fg: str, bg: str) -> float:
+    hi, lo = sorted((_luminance(fg), _luminance(bg)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_styles_carry_no_raw_hex() -> None:
+    """styles.py may only colour through :root variables; the palette lives in tokens.py."""
+    from neje_oracle.blocks.gui import styles
+
+    assert not HEX.findall(styles.PAGE_STYLE), "a hex colour crept into PAGE_STYLE; add a token instead"
+
+
+def test_palette_is_wcag_aa() -> None:
+    """Every text-on-ground pair the theme actually renders, asserted at 4.5:1.
+
+    Computed from the tokens, not sampled from screenshots -- the audit's contrast
+    findings (GOLD on CREAM 2.08, white-on-Quasar-gold 1.7) existed because nothing
+    asserted this.
     """
-    from neje_oracle.blocks.gui import tokens
+    from neje_oracle.blocks.gui import tokens as t
 
-    dart = (Path(__file__).resolve().parents[1] / "public_gallery/lib/theme/oracle_theme.dart").read_text(
-        encoding="utf-8"
-    )
-    reference = {
-        name: "#" + value.upper()
-        for name, value in re.findall(r"static const (\w+) = Color\(0xFF([0-9a-fA-F]{6})\)", dart)
-    }
-    assert reference, "could not parse oracle_theme.dart; has the reference moved?"
+    pairs = [
+        (t.TEXT, t.SURFACE),
+        (t.TEXT, t.BG),
+        (t.TEXT_MID, t.SURFACE),
+        (t.TEXT_MID, t.BG),
+        (t.TEXT_MUTED, t.SURFACE),
+        (t.ACCENT, t.SURFACE),
+        (t.OK, t.SURFACE),
+        (t.WARN, t.SURFACE),
+        (t.WARN, t.WARN_WASH),
+        (t.DANGER, t.SURFACE),
+        (t.SURFACE, t.ACCENT),  # primary button label on its fill
+        (t.SURFACE, t.DANGER),  # danger/e-stop label on its fill
+        (t.TEXT, t.SUNKEN),
+    ]
+    for fg, bg in pairs:
+        ratio = _contrast(fg, bg)
+        assert ratio >= 4.5, f"{fg} on {bg} is {ratio:.2f}:1 -- fails WCAG AA (needs 4.5)"
 
-    for dart_name, token_name in (
-        ("cream", "CREAM"),
-        ("paper", "PAPER"),
-        ("ink", "INK"),
-        ("inkMid", "INK_MID"),
-        ("inkMuted", "INK_MUTED"),
-        ("rust", "RUST"),
-        ("gold", "GOLD"),
-        ("goldDim", "GOLD_DIM"),
-        ("rule", "RULE"),
-        ("voidColor", "VOID"),
-    ):
-        expected = reference.get(dart_name)
-        if expected is None:
-            continue
-        assert getattr(tokens, token_name) == expected, (
-            f"tokens.{token_name} is {getattr(tokens, token_name)} but oracle_theme.dart says {expected}"
-        )
+
+def test_status_triad_and_accent_are_distinct() -> None:
+    """One colour, one meaning: no status hue may reuse another or the accent."""
+    from neje_oracle.blocks.gui import tokens as t
+
+    values = [t.OK, t.WARN, t.DANGER, t.ACCENT]
+    assert len(set(values)) == len(values), "a status colour reuses another (the audit's DS-COL-1)"
+
+
+def test_every_declared_variable_is_referenced() -> None:
+    """A token that no rule uses is an identity the app claims but does not render.
+
+    The brand fonts and five motion tempos sat declared-but-unused for the theme's whole
+    life; this makes that state structurally impossible.
+    """
+    from neje_oracle.blocks.gui import styles, tokens
+
+    for name in tokens.CSS_VARIABLES:
+        assert f"var({name})" in styles.PAGE_STYLE, f"{name} is declared in tokens.py but no styles.py rule uses it"
 
 
 def test_style_owners_exist() -> None:
