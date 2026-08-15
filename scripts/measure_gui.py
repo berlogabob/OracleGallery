@@ -15,6 +15,13 @@ plus a full-page screenshot per screen. Run it after any GUI change:
 
     uv run python scripts/measure_gui.py            # report + screenshots
     uv run python scripts/measure_gui.py --gate     # exit 1 if any screen scrolls or dupes
+    uv run python scripts/measure_gui.py --dump     # + per-screen/per-segment element dumps
+
+--dump exists because the app-audit skill needs rendered hierarchies and Maestro's web
+driver cannot produce them (audit/2026-08-05-1008/measurements.json is empty for exactly
+that reason). It walks every CREATE source and SETUP section by clicking the segmented
+toggles, and writes dump.json (visible elements: tag, classes, text, bounds, font size)
+plus one screenshot per sub-view into --out.
 
 --gate is the per-batch acceptance check from the redesign plan (metrics S1-S3, S7). The
 unit-level metrics live in tests/test_operator_metrics.py; this script owns the ones that
@@ -73,6 +80,33 @@ MEASURE_JS = """(() => {
     cards, buttons: labels.length, dupes, iframes,
   };
 })()"""
+
+
+DUMP_JS = """(() => {
+  const seen = [...document.querySelectorAll(
+    'button,input,select,textarea,.q-field,.q-tab,.q-toggle,' +
+    '.oracle-card-title,.oracle-helper,.mini-metric,.oracle-metric-line,.oracle-card'
+  )]
+    .filter(e => e.offsetParent !== null)
+    .map(e => {
+      const r = e.getBoundingClientRect();
+      return {
+        tag: e.tagName.toLowerCase(),
+        cls: [...e.classList].slice(0, 4).join(' '),
+        text: (e.innerText || e.value || '').trim().replace(/\\s+/g, ' ').slice(0, 80),
+        x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height),
+        fs: getComputedStyle(e).fontSize,
+      };
+    })
+    .filter(d => d.w > 0 && d.h > 0);
+  return seen;
+})()"""
+
+# Labels of the visible segmented toggle (q-btn-toggle) on the current screen, in order.
+SEGMENTS_JS = """[...document.querySelectorAll('.q-btn-toggle')]
+  .filter(e => e.offsetParent !== null)
+  .flatMap(t => [...t.querySelectorAll('button')].map(b => b.innerText.trim()))
+  .filter(t => t.length > 1)"""
 
 
 def _find_chrome() -> str:
@@ -144,7 +178,7 @@ def _new_target() -> dict:
     sys.exit("could not open a CDP target")
 
 
-async def _measure(out_dir: Path) -> dict[str, dict]:
+async def _measure(out_dir: Path, dump: bool = False) -> dict[str, dict]:
     import websockets  # a nicegui dependency, so always present in this venv
 
     target = _new_target()
@@ -182,6 +216,24 @@ async def _measure(out_dir: Path) -> dict[str, dict]:
             results[screen] = await js(MEASURE_JS) or {}
             shot = await cmd("Page.captureScreenshot", {"format": "png"})
             (out_dir / f"{screen.lower()}.png").write_bytes(base64.b64decode(shot["data"]))
+
+            if not dump:
+                continue
+            results[screen]["elements"] = await js(DUMP_JS) or []
+            # Walk the screen's segmented toggle (CREATE sources, SETUP sections). Clicking
+            # only toggles visibility -- panes stay mounted -- so this never perturbs state.
+            for segment in await js(SEGMENTS_JS) or []:
+                await js(
+                    "[...document.querySelectorAll('.q-btn-toggle button')]"
+                    f".filter(e => e.offsetParent !== null).find(b => b.innerText.trim() === '{segment}')?.click()"
+                )
+                await asyncio.sleep(1.5)
+                key = f"{screen.lower()}_{segment.lower().replace(' ', '_')}"
+                results[screen].setdefault("segments", {})[segment] = await js(DUMP_JS) or []
+                shot = await cmd("Page.captureScreenshot", {"format": "png"})
+                (out_dir / f"{key}.png").write_bytes(base64.b64decode(shot["data"]))
+    if dump:
+        (out_dir / "dump.json").write_text(json.dumps(results, indent=1), encoding="utf-8")
     return results
 
 
@@ -216,6 +268,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--gate", action="store_true", help="exit 1 on any page scroll or duplicate action label")
     parser.add_argument("--out", type=Path, default=None, help="screenshot dir (default: a temp dir, printed)")
+    parser.add_argument("--dump", action="store_true", help="also dump visible elements per screen and segment")
     args = parser.parse_args()
 
     out_dir = args.out or Path(tempfile.mkdtemp(prefix="gui-measure-"))
@@ -226,7 +279,7 @@ def main() -> None:
     try:
         gui = _boot_sandbox_gui(sandbox)
         chrome = _boot_chrome()
-        results = asyncio.run(_measure(out_dir))
+        results = asyncio.run(_measure(out_dir, dump=args.dump))
         scrolls, dupes = _report(results)
         print(f"\nscreenshots: {out_dir}")
         if args.gate and (scrolls or dupes):
