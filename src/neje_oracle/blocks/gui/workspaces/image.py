@@ -486,19 +486,34 @@ def build_sections(
                 max=len(QUALITY_PRESETS) - 1,
                 step=1,
                 value=quality_index(str(STATE["quality"])),
-                on_change=lambda e: set_field("quality", QUALITY_PRESETS[int(e.value)]),
-            ).props(
-                "label-always markers snap :label-value=\"['draft','fast','balanced','fine','max'][value]\""
-            )
+            ).props("label-always markers snap")
+
+            # The value bubbles are computed here, not in a Vue :label-value expression:
+            # QSlider does not expose `value` to that binding, so the audit found the raw
+            # unevaluated code rendered to the operator as the label (F-008).
+            def _set_quality(e: Any) -> None:
+                set_field("quality", QUALITY_PRESETS[int(e.value)])
+                quality_fader.props(f'label-value="{QUALITY_PRESETS[int(e.value)]}"')
+
+            quality_fader.props(f'label-value="{STATE["quality"]}"')
+            quality_fader.on_value_change(_set_quality)
 
             oracle.section_title("Pen lifts")
+
+            def _lift_label(value: int) -> str:
+                return "off" if value >= 1024 else str(value)
+
+            def _set_lift(e: Any) -> None:
+                set_field("lift_budget", int(e.value))
+                ctx.fields["lift_budget"].props(f'label-value="{_lift_label(int(e.value))}"')
+
             ctx.fields["lift_budget"] = ui.slider(
                 min=0,
                 max=1024,
                 step=1,
                 value=int(STATE["lift_budget"]),
-                on_change=lambda e: set_field("lift_budget", int(e.value)),
-            ).props("label-always markers snap :label-value=\"value >= 1024 ? 'off' : value\"")
+                on_change=_set_lift,
+            ).props(f'label-always markers snap label-value="{_lift_label(int(STATE["lift_budget"]))}"')
             for fader in quality_fader, ctx.fields["lift_budget"]:
                 fader.classes("w-full tight-slider")
             helper_text(
@@ -742,7 +757,7 @@ def build_sections(
                     on_change=lambda e: set_sheet("sheet_index", int(e.value or 0)),
                 ).props("dense outlined").classes("w-24").tooltip("0 = first sheet of the folder, 1 = next, ...")
 
-            sheet_info = helper_text("-")
+            sheet_info = helper_text("Choose an image folder above to fill the sheet preview.")
 
         def render_sheet() -> oracle.Render:
             capacity = _sheet_capacity()

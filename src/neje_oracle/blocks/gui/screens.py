@@ -88,7 +88,7 @@ def build_print(ctx: GuiContext) -> None:
             with ui.row().classes("w-full items-center gap-2"):
                 ctx.preview_progress_label = helper_text("-")
                 ui.element("div").classes("status-spacer")
-                safe_action_button("?", legend.open)
+                safe_action_button("LEGEND", legend.open)
             ctx.preview = ui.html().classes("preview-frame w-full")
             # The live readouts sit under the sheet they describe, one line each.
             with ui.row().classes("w-full items-center gap-3"):
@@ -103,7 +103,9 @@ def build_print(ctx: GuiContext) -> None:
             helper_text("Start services and reset the run baseline; stop safely between sheets.")
             primary_action_button("START SYSTEM", ctx.start_system).classes("w-full")
             safe_action_button("NEW RUN", ctx.reset_baseline).classes("w-full")
-            danger_action_button("STOP SYSTEM", ctx.stop_system).classes("w-full")
+            danger_action_button("STOP SYSTEM", ctx.stop_system).classes("w-full").tooltip(
+                "Stops the services safely between sheets. Does not halt a moving machine — that is EMERGENCY STOP."
+            )
             ui.separator()
             ctx.system_check_label = helper_text("System check runs automatically when print starts.")
             ui.separator()

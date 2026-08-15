@@ -29,10 +29,10 @@ def build(ctx: GuiContext) -> None:
                 safe_action_button("SCAN LAN", ctx.scan_fluidnc)
             with ui.grid(columns=4).classes("w-full gap-1"):
                 for key, label in (
-                    ("webui", "WebUI"),
-                    ("telnet", "Telnet"),
-                    ("pins", "Inputs"),
-                    ("modal", "Modal"),
+                    ("webui", "Browser UI"),
+                    ("telnet", "Control channel"),
+                    ("pins", "Limit switches"),
+                    ("modal", "Machine mode"),
                 ):
                     ctx.fluidnc_labels[key] = mini_metric(label)
             # The status bar owns the machine state chip and position readout; these keys

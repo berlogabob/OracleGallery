@@ -271,8 +271,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                     persist_and_refresh
                 )
             with ui.grid(columns=2).classes("w-full gap-2"):
-                num("sheet_width_mm", "Field W", settings.sheet_width_mm, 1, "Printable field width in mm.")
-                num("sheet_height_mm", "Field H", settings.sheet_height_mm, 1, "Printable field height in mm.")
+                num("sheet_width_mm", "Field W mm", settings.sheet_width_mm, 1, "Printable field width in mm.")
+                num("sheet_height_mm", "Field H mm", settings.sheet_height_mm, 1, "Printable field height in mm.")
                 num(
                     "cell_diameter_mm",
                     "Cell",
@@ -280,8 +280,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                     1,
                     "Packing cell diameter and grid step base.",
                 )
-                num("gap_mm", "Gap", settings.gap_mm, 0, "Distance between neighboring cell diameters.")
-                num("sheet_margin_mm", "Margin", settings.sheet_margin_mm, 0, "Safe border inside printable field.")
+                num("gap_mm", "Gap mm", settings.gap_mm, 0, "Distance between neighboring cell diameters.")
+                num("sheet_margin_mm", "Margin mm", settings.sheet_margin_mm, 0, "Safe border inside printable field.")
                 num("marker_diameter_mm", "Dot mm", settings.marker_diameter_mm, 0.5, "Printed origin-dot diameter.")
 
         with sections["sheet"], card(compact=True):

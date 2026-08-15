@@ -174,7 +174,7 @@ __TOKENS_PLACEHOLDER__
   /* --- components (blocks/gui/ui.py emits these; nothing else styles) --- */
   .oracle-workspace { display: flex; flex-direction: column; gap: var(--space-sm); }
   .oracle-card-title { font-size: var(--type-md); font-weight: 700; color: var(--text); }
-  .oracle-helper { font-size: var(--type-sm); color: var(--text-mid); }
+  .oracle-helper { font-size: var(--type-sm); color: var(--text-mid); max-width: 65ch; }
   .oracle-toolbar { display: flex; align-items: center; gap: var(--space-sm); }
   .oracle-toolbar-wide { width: 100%; }
   .oracle-field { min-width: 7rem; }

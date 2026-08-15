@@ -60,7 +60,10 @@ def build(ctx: GuiContext) -> None:
                     tooltip="Direct SVG print: machine/work Y position for SVG coordinate 0.",
                     on_change=ctx.persist_and_refresh,
                 )
-            ui.upload(on_upload=ctx.handle_svg_upload).props("accept=.svg max-files=1 auto-upload").classes("w-full")
+            ui.upload(
+                label="Drop an Inkscape SVG here, or click + to choose",
+                on_upload=ctx.handle_svg_upload,
+            ).props("accept=.svg max-files=1 auto-upload").classes("w-full")
             with ui.row().classes("items-center gap-2"):
                 primary_action_button("START SVG PRINT", ctx.print_uploaded_svg)
                 ctx.uploaded_svg_label = ui.label("No SVG selected").classes("path-label text-xs")

@@ -67,7 +67,7 @@ def _jog_and_zero(ctx: GuiContext) -> None:
                 .classes("w-24")
             )
             ctx.fields["jog_feed"] = (
-                ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
+                ui.number("Feed mm/min", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
             )
         # A real cross. The middle cell used to hold Y-, which put the two Y buttons on the
         # same row as X- and X+ and left the pad reading as four scattered buttons.

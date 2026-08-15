@@ -145,6 +145,11 @@ class GuiContext:
         # probe after another action, etc). The live-strip "Now" metric stays as
         # the persistent indicator while this stays quiet in between transitions.
         self._fluidnc_offline_notified = False
+        # The probe's last verdict. The audit found the offline state communicated by four
+        # conflicting signals (F-004) and the Next-action card recommending a jog while the
+        # machine was unreachable (F-005); this one flag lets the chip, the blockers line
+        # and the next-action hint all say the same thing.
+        self._fluidnc_offline = False
 
         # Element handles assigned during layout / workspace build.
         self.preview: Any = None
@@ -400,7 +405,10 @@ class GuiContext:
         except Exception as exc:  # noqa: BLE001
             ui.notify(f"G-code generation failed: {exc}", color="negative")
             return
-        ui.notify(f"G-code file: {output['gcode']}", color="positive")
+        ui.notify(
+            f"{Path(output['gcode']).name} written to the spool. Press START TEST PRINT to plot it.",
+            color="positive",
+        )
         self.refresh_status()
 
     async def generate_pen_cal(self) -> None:
@@ -473,6 +481,9 @@ class GuiContext:
         readiness = self.supervisor.runtime_store.load_plotter_readiness()
         queue_online = bool(queue.get("online"))
         blockers: list[str] = []
+        if self._fluidnc_offline:
+            # First, because it blocks everything below it: no jog, no zero, no print.
+            blockers.append("plotter offline")
         if not readiness.work_zero_set:
             blockers.append("work zero")
         if not queue_online:
@@ -511,6 +522,10 @@ class GuiContext:
                 self.next_action_button.set_text(next_action.upper())
                 self.next_action_button.set_visibility(True)
                 hint = ""
+            elif self._fluidnc_offline:
+                # Jogging advice while the machine is unreachable is the wrong next step.
+                self.next_action_button.set_visibility(False)
+                hint = "Connect the plotter first: SETUP → MACHINE → CONNECT."
             elif self.next_action_key == "work_zero":
                 self.next_action_button.set_visibility(False)
                 hint = "Jog to the paper origin, then SET WORK ZERO below."
@@ -731,6 +746,13 @@ class GuiContext:
         chip = self.live_labels.get("fluidnc")
         if chip is None:
             return
+        if self._fluidnc_offline:
+            # Connection state outranks run state: 'OPERATOR PAUSED' on an unreachable
+            # machine reads as a resumable pause, which the audit found operators could
+            # not tell apart from disconnection without the toast (F-004).
+            chip.set_text("\u2715  OFFLINE")
+            chip.classes(replace="state-chip state-offline")
+            return
         lowered = status_text.lower()
         glyph, tone = "\u2715", "state-offline"
         for needle, mark, css in self._STATE_MARKS:
@@ -807,10 +829,13 @@ class GuiContext:
         if self._fluidnc_offline_notified:
             return
         self._fluidnc_offline_notified = True
+        # Top-anchored: the bottom-center default sat on the CREATE print strip and the
+        # PRINT progress row, occluding controls for as long as it stayed up (F-006).
         ui.notify(
             "Plotter offline — check power and WiFi, then press CONNECT on SETUP.",
             caption=detail,
             type="negative",
+            position="top",
             close_button="DISMISS",
             timeout=0,
         )
@@ -853,6 +878,7 @@ class GuiContext:
             self.restore_workspace()
             return
         if probe is None:  # ponytail: no configured endpoint yet — offline, not an error
+            self._fluidnc_offline = True
             self.update_fluidnc_labels({"controller_state": "Offline", "message": "No FluidNC endpoint configured"})
             self._notify_fluidnc_offline("No FluidNC endpoint configured yet.")
             self.refresh_logs()
@@ -861,6 +887,7 @@ class GuiContext:
         self.supervisor.check_fluidnc(probe)
         result = {**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port}
         self.update_fluidnc_labels(result)
+        self._fluidnc_offline = not probe.online
         if probe.online:
             self._fluidnc_offline_notified = False
             notify_if_connected(probe.message, color="positive")
