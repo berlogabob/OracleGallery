@@ -22,6 +22,7 @@ import json
 import math
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from ...shared.config import PlotterSettings, ensure_dir
 from ...shared.gui_settings import GuiSettings
@@ -424,7 +425,7 @@ def generate_z_range_sheet(
     settings: GuiSettings,
     *,
     spool_root: Path | None = None,
-    **kwargs: float,
+    **kwargs: Any,
 ) -> dict[str, Path]:
     """Write the Z range sheet into the spool, next to the pen-cal sheets."""
     gcode, manifest = build_z_range_gcode(settings, **kwargs)

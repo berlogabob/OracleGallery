@@ -13,7 +13,6 @@ from nicegui import ui
 
 from ....shared.gui_settings import NumericGuiDefaultKey
 from ....shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS
-from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ....shared.pen_profiles import (
     PEN_PROFILE_FIELDS,
     apply_pen_profile,
@@ -22,6 +21,7 @@ from ....shared.pen_profiles import (
     profile_matches,
     save_pen_profiles,
 )
+from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
 from ..ui import (

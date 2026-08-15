@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import io
-import json
 import math
 import shutil
 import subprocess
@@ -186,7 +185,7 @@ def build_sheets(pen: str, out_dir: Path | None = None, settings=None) -> dict[s
     # A lattice finer than the nib fills in solid (RUNBOOK section 4), so both the
     # sampling pitch and the hatch spacing scale with the fitted pen's width.
     cell_mm = max(1.0, pen_w * 2.0)
-    art_kwargs = dict(cell_mm=cell_mm, autocontrast=False)
+    art_kwargs = {"cell_mm": cell_mm, "autocontrast": False}
 
     def render(mode: str, **params) -> Polylines:
         return image_to_polylines(image, mode=mode, width_mm=50.0, height_mm=50.0, **art_kwargs, **params)
