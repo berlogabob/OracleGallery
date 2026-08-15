@@ -22,7 +22,7 @@ GUI_ROOT = Path(__file__).resolve().parents[1] / "src" / "neje_oracle" / "blocks
 
 # ui.py owns presentation; tokens.py owns the palette. Everything else is view code that
 # should be composing components, not styling.
-STYLE_OWNERS = {"ui.py", "tokens.py"}
+STYLE_OWNERS = {"ui.py", "tokens.py", "styles.py"}
 
 # Measured on 2026-08-11 at commit 5995e3b, before any migration. These are this
 # module's own counts (regex matches, ui.py and tokens.py excluded) -- deliberately
