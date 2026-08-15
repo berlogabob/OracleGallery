@@ -570,8 +570,8 @@ const GENERATORS = {
     const p1 = rng() * Math.PI * 2;
     const p2 = rng() * Math.PI * 2;
     const tube = 0.3 + rng() * 0.1;
-    const coils = Math.round(250 + density * 200);
-    const steps = coils * 40;
+    const coils = Math.round(80 + density * 80);
+    const steps = coils * 20;
     const radius = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.3 + scale * 0.15);
     const unit = radius / (1 + a1 + a2 + tube);
     const cx = PLOTTER_WIDTH_MM / 2;
@@ -655,7 +655,7 @@ const GENERATORS = {
         points.push({ x: cx + lx * cosine - ly * sine, y: cy + lx * sine + ly * cosine });
       };
       for (let i = 0; i <= 12; i++) addPoint(i / 12, 1);
-      for (let i = 12; i >= 0; i--) addPoint(i / 12, -1);
+      for (let i = 11; i >= 0; i--) addPoint(i / 12, -1);
       return points;
     };
     const inBounds = function(points) {

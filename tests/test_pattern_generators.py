@@ -175,3 +175,18 @@ def test_field_targets_do_different_things(field_results: dict) -> None:
     assert field_results["densityKept"] < field_results["total"]
     assert field_results["sizedCount"] == field_results["total"]
     assert field_results["invertedKept"] + field_results["kept"] == field_results["total"]
+
+
+def test_ribbon_point_count_stays_plottable(
+    generated_patterns: tuple[Path, dict[str, int]],
+) -> None:
+    # A default ribbon once emitted 10k-18k points (~12 m of ink), blowing the
+    # 40k segment budget when stacked with other layers. Keep it under 8k.
+    output, _ = generated_patterns
+    svg = (output / "ribbon.svg").read_text()
+    total_points = sum(
+        len(match.split()) for match in re.findall(r'points="([^"]+)"', svg)
+    ) + sum(
+        len(re.findall(r"[ML]", match)) for match in re.findall(r'\bd="([^"]+)"', svg)
+    )
+    assert 500 < total_points <= 8000
