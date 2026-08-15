@@ -560,6 +560,159 @@ const GENERATORS = {
     return shapes;
   },
 
+  // One continuous coil swept around a seeded, warped guide loop.
+  ribbon: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    const lobes = 2 + Math.floor(rng() * 3);
+    const a1 = 0.35 + rng() * 0.15;
+    const a2 = 0.15 + rng() * 0.15;
+    const p1 = rng() * Math.PI * 2;
+    const p2 = rng() * Math.PI * 2;
+    const tube = 0.3 + rng() * 0.1;
+    const coils = Math.round(80 + density * 80);
+    const steps = coils * 20;
+    const radius = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.3 + scale * 0.15);
+    const unit = radius / (1 + a1 + a2 + tube);
+    const cx = PLOTTER_WIDTH_MM / 2;
+    const cy = PLOTTER_HEIGHT_MM / 2;
+    const points = [];
+    const guide = function(t) {
+      const r = 1 + a1 * Math.sin(lobes * t + p1) + a2 * Math.sin((lobes + 1) * t + p2);
+      return { x: r * Math.cos(t), y: r * Math.sin(t) };
+    };
+
+    for (let i = 0; i <= steps; i++) {
+      const u = Math.PI * 2 * i / steps;
+      const w = Math.PI * 2 * coils * i / steps;
+      const g = guide(u);
+      const before = guide(u - 0.0001);
+      const after = guide(u + 0.0001);
+      const dx = after.x - before.x;
+      const dy = after.y - before.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const tx = dx / length;
+      const ty = dy / length;
+      const normal = tube * Math.cos(w);
+      const tangent = 0.55 * tube * Math.sin(w);
+      points.push({
+        x: cx + unit * (g.x - ty * normal + tx * tangent),
+        y: cy + unit * (g.y + tx * normal + ty * tangent)
+      });
+    }
+
+    return [{ type: 'polyline', points: points }];
+  },
+
+  // Concentric harmonograph rings drifting into a wavy star bloom.
+  bloom: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    const rings = Math.round(30 + density * 30);
+    const petals = 5 + Math.floor(rng() * 5);
+    const basePhase = 1.5 + rng();
+    const drift = 1.5 + rng();
+    const extent = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.3 + scale * 0.15);
+    const radiusScale = extent / 1.24;
+    const cx = PLOTTER_WIDTH_MM / 2;
+    const cy = PLOTTER_HEIGHT_MM / 2;
+    const shapes = [];
+
+    for (let ring = 1; ring <= rings; ring++) {
+      const f = ring / rings;
+      const radius = radiusScale * f;
+      const amplitude = 0.24 * f * (1 + 0.35 * Math.sin(3 * f * Math.PI)) * radiusScale;
+      const phase = basePhase + f * drift;
+      const points = [];
+      for (let degree = 0; degree < 360; degree++) {
+        const theta = degree * Math.PI / 180;
+        const r = radius + amplitude * Math.sin(petals * theta + phase);
+        points.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) });
+      }
+      points.push({ x: points[0].x, y: points[0].y });
+      shapes.push({ type: 'polyline', points: points });
+    }
+
+    return shapes;
+  },
+
+  // Bouncing random-walk stems with leaves and spaced radial flowers.
+  vine: function(rng, params) {
+    const density = densityOf(params);
+    const scale = scaleOf(params);
+    const walks = Math.round(6 + density * 4);
+    const unit = Math.min(PLOTTER_WIDTH_MM, PLOTTER_HEIGHT_MM) * (0.035 + scale * 0.035);
+    const step = unit * 0.22;
+    const shapes = [];
+    const flowers = [];
+    const leafPoints = function(cx, cy, angle, size) {
+      const points = [];
+      const cosine = Math.cos(angle);
+      const sine = Math.sin(angle);
+      const addPoint = function(t, side) {
+        const lx = size * t;
+        const ly = side * size * 0.42 * Math.sin(Math.PI * t);
+        points.push({ x: cx + lx * cosine - ly * sine, y: cy + lx * sine + ly * cosine });
+      };
+      for (let i = 0; i <= 12; i++) addPoint(i / 12, 1);
+      for (let i = 11; i >= 0; i--) addPoint(i / 12, -1);
+      return points;
+    };
+    const inBounds = function(points) {
+      return points.every(function(point) {
+        return point.x >= 0 && point.x <= PLOTTER_WIDTH_MM && point.y >= 0 && point.y <= PLOTTER_HEIGHT_MM;
+      });
+    };
+
+    for (let walk = 0; walk < walks; walk++) {
+      let x = rng() * PLOTTER_WIDTH_MM;
+      let y = rng() * PLOTTER_HEIGHT_MM;
+      let heading = rng() * Math.PI * 2;
+      const stem = [{ x: x, y: y }];
+      shapes.push({ type: 'polyline', points: stem });
+
+      const steps = Math.round(80 + rng() * 40);
+      for (let i = 0; i < steps; i++) {
+        heading += (rng() - 0.5) * 1.1;
+        const nextX = x + Math.cos(heading) * step;
+        const nextY = y + Math.sin(heading) * step;
+        if (nextX < 0 || nextX > PLOTTER_WIDTH_MM) heading = Math.PI - heading;
+        if (nextY < 0 || nextY > PLOTTER_HEIGHT_MM) heading = -heading;
+        x += Math.cos(heading) * step;
+        y += Math.sin(heading) * step;
+        stem.push({ x: x, y: y });
+
+        if (rng() < 0.12) {
+          const size = unit * (0.35 + rng() * 0.35);
+          const angle = heading + (rng() < 0.5 ? -1.2 : 1.2);
+          const points = leafPoints(x, y, angle, size);
+          if (inBounds(points)) shapes.push({ type: 'polyline', points: points });
+        }
+
+        if (rng() < 0.03) {
+          const petals = 5 + Math.floor(rng() * 3);
+          const size = unit * (0.3 + rng() * 0.2);
+          const overlaps = flowers.some(function(flower) {
+            return Math.hypot(x - flower.x, y - flower.y) < Math.max(size, flower.size) * 1.5;
+          });
+          if (!overlaps) {
+            const phase = rng() * Math.PI * 2;
+            const flower = [];
+            for (let petal = 0; petal < petals; petal++) {
+              flower.push(leafPoints(x, y, phase + petal * Math.PI * 2 / petals, size));
+            }
+            if (flower.every(inBounds)) {
+              flowers.push({ x: x, y: y, size: size });
+              for (const points of flower) shapes.push({ type: 'polyline', points: points });
+            }
+          }
+        }
+      }
+    }
+
+    return shapes;
+  },
+
   mondrian: function(rng, params) {
     const density = densityOf(params);
     const scale = scaleOf(params);

@@ -70,6 +70,18 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "z_feed_mm_min": 1200.0,
         "pen_down_dwell_ms": 60.0,
     },
+    # Textile ball-tip marker: the line width is pressure-sensitive, so the Z ladder is
+    # the decisive calibration block — these numbers start from ballpoint and only the
+    # paper can pick the real depth. Ink flows freely, so no dwell.
+    "textile": {
+        "pen_width_mm": 0.8,
+        "draw_rate": 2400.0,
+        "travel_rate": 5000.0,
+        "z_down_mm": -26.0,
+        "z_up_mm": 0.0,
+        "z_feed_mm_min": 1200.0,
+        "pen_down_dwell_ms": 0.0,
+    },
 }
 
 

@@ -120,3 +120,15 @@ a `GuiSettings` field and all 32 now round-trip.
 now builds every workspace, writes a probe into each such control, and asserts it survives
 the pull. That makes the failure mode impossible to ship without touching the god class —
 the cheap half of the refactor, taken now.
+
+## Open debt: the lift_budget triple-write path (feat/raw-artifacts)
+
+The pen-lift budget is one operator concept written along three independent paths: the
+IMAGE workspace passes it as a mode kwarg (`blocks/gui/workspaces/image.py` →
+`blocks/imaging/modes.py`), the SKETCH workspace stamps it into the SVG as
+`data-neje-lift-budget` (`blocks/gui/workspaces/generative.py::stamp_lift_budget`), and
+`blocks/gcode/svg_gcode.py::_pen_lift_budget` re-parses that attribute at G-code time.
+All three must agree on the `>= 1024 = off` sentinel; today a test pins each leg, but a
+fourth print path would have to remember to join the convention by hand. Debt: fold the
+sentinel + stamp/parse pair into one shared helper (natural home: `shared/pathops.py`)
+before a new print path appears.

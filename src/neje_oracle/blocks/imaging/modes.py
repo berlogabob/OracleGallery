@@ -10,6 +10,8 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps, UnidentifiedImageError
 
+from neje_oracle.shared.pathops import join_with_budget
+
 Polylines = list[list[tuple[float, float]]]
 
 MAX_SEGMENTS_DEFAULT = 40_000
@@ -276,6 +278,7 @@ def flow(
     blur_px: float = 2.0,
     step_mm: float = 0.6,
     max_length_mm: float = 40.0,
+    dash_mm: float = 0.0,
 ) -> Polylines:
     """Streamlines that follow the image's iso-tone contours.
 
@@ -287,6 +290,8 @@ def flow(
         raise ValueError("flow spacings must be positive and min_spacing_mm <= max_spacing_mm")
     if step_mm <= 0:
         raise ValueError("step_mm must be positive")
+    if dash_mm < 0:
+        raise ValueError("dash_mm must be non-negative")
 
     darkness = tone.darkness
     smoothed = _smoothed_darkness(darkness, blur_px)
@@ -380,7 +385,16 @@ def flow(
         for point_x, point_y in pending:
             mark(point_x, point_y)
         if len(path) >= 2:
-            polylines.append(path)
+            if dash_mm > 0:
+                points_per_dash = math.ceil(dash_mm / step_mm) + 1
+                skipped_points = math.floor(dash_mm / (2 * step_mm))
+                stride = points_per_dash + skipped_points
+                polylines.extend(
+                    path[start : start + points_per_dash]
+                    for start in range(0, len(path) - 1, stride)
+                )
+            else:
+                polylines.append(path)
     return polylines
 
 
@@ -1036,6 +1050,8 @@ def wave(
     amplitude_mm: float = 0.8,
     cycles_per_mm: float = 0.35,
     min_darkness: float = 0.05,
+    orientation: str = "horizontal",
+    connect_rows: bool = False,
 ) -> Polylines:
     """Rows that ripple harder and faster where the image is dark — the waveform-portrait look.
 
@@ -1052,8 +1068,21 @@ def wave(
         raise ValueError("row_pitch_mm must be positive")
     if amplitude_mm < 0 or cycles_per_mm <= 0:
         raise ValueError("amplitude_mm must be non-negative and cycles_per_mm positive")
+    if orientation not in ("horizontal", "vertical"):
+        raise ValueError("orientation must be 'horizontal' or 'vertical'")
+
+    vertical = orientation == "vertical"
+    if vertical:
+        tone = replace(
+            tone,
+            darkness=tone.darkness.T,
+            width_mm=tone.height_mm,
+            height_mm=tone.width_mm,
+        )
 
     polylines: Polylines = []
+    connected: list[tuple[float, float]] = []
+    reverse_row = False
     step_mm = max(tone.cell_mm, 1.0 / (cycles_per_mm * 8.0))
     row_y = row_pitch_mm / 2.0
     # Keep the swing inside its own row so neighbouring rows cannot cross and merge into ink.
@@ -1061,6 +1090,7 @@ def wave(
     while row_y < tone.height_mm:
         phase = 0.0
         run: list[tuple[float, float]] = []
+        row_lines: Polylines = []
         samples = max(1, math.ceil(tone.width_mm / step_mm))
         for index in range(samples + 1):
             x = tone.width_mm * index / samples
@@ -1068,7 +1098,7 @@ def wave(
             if darkness < min_darkness:
                 if len(run) >= 2:
                     run.append((run[-1][0], row_y))
-                    polylines.append(run)
+                    row_lines.append(run)
                 run = []
                 continue
             phase += math.tau * cycles_per_mm * step_mm * (0.4 + darkness)
@@ -1078,8 +1108,18 @@ def wave(
             run.append((x, _clip(row_y + math.sin(phase) * swing * darkness, 0, tone.height_mm)))
         if len(run) >= 2:
             run.append((run[-1][0], row_y))
-            polylines.append(run)
+            row_lines.append(run)
+        if connect_rows and row_lines:
+            row = [point for line in row_lines for point in line]
+            connected.extend(reversed(row) if reverse_row else row)
+        else:
+            polylines.extend(row_lines)
         row_y += row_pitch_mm
+        reverse_row = not reverse_row
+    if connected:
+        polylines = [connected]
+    if vertical:
+        polylines = [[(y, x) for x, y in polyline] for polyline in polylines]
     return polylines
 
 
@@ -1358,6 +1398,7 @@ def tone_to_polylines(
     mode: str,
     max_segments: int = MAX_SEGMENTS_DEFAULT,
     min_stroke_mm: float = 0.0,
+    lift_budget: int = 1024,
     **params: Any,
 ) -> Polylines:
     """Render an already-built ToneGrid.
@@ -1371,11 +1412,15 @@ def tone_to_polylines(
     # Centre-out modes carry their own order. Serpentine buckets by floor(first point's y),
     # which would reshuffle a spiral's arcs into a raster scan and add back every pen lift
     # the mode exists to avoid.
-    if mode not in CONTINUOUS_MODES:
+    # A connected wave is already one polyline, so serpentine has nothing to reorder.
+    if mode not in CONTINUOUS_MODES and not (mode == "wave" and params.get("connect_rows")):
         strokes = order_serpentine(strokes)
     polylines = [polyline for polyline in strokes if len(polyline) >= 2]
     if min_stroke_mm > 0:
         polylines = [polyline for polyline in polylines if _stroke_extent_mm(polyline) >= min_stroke_mm]
+    # 1024 is the off position.
+    if lift_budget < 1024 and polylines:
+        polylines = join_with_budget(polylines, lift_budget)
     segment_count = sum(len(polyline) - 1 for polyline in polylines)
     if segment_count > max_segments:
         raise ValueError(
@@ -1398,6 +1443,7 @@ def image_to_polylines(
     autocontrast: bool = True,
     max_segments: int = MAX_SEGMENTS_DEFAULT,
     min_stroke_mm: float = 0.0,
+    lift_budget: int = 1024,
     **params: Any,
 ) -> Polylines:
     # Validated here as well as in tone_to_polylines on purpose: these guards must fire BEFORE
@@ -1416,7 +1462,14 @@ def image_to_polylines(
         # which lifts fabric texture and JPEG noise into ink (tests/test_imaging_speckle.py).
         autocontrast=autocontrast,
     )
-    return tone_to_polylines(tone, mode=mode, max_segments=max_segments, min_stroke_mm=min_stroke_mm, **params)
+    return tone_to_polylines(
+        tone,
+        mode=mode,
+        max_segments=max_segments,
+        min_stroke_mm=min_stroke_mm,
+        lift_budget=lift_budget,
+        **params,
+    )
 
 
 def polylines_to_svg(

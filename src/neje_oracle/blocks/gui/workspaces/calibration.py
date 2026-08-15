@@ -21,9 +21,19 @@ from ....shared.pen_profiles import (
     profile_matches,
     save_pen_profiles,
 )
+from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import helper_text, mini_metric, number_control, primary_action_button
+from ..ui import (
+    card,
+    helper_text,
+    mini_metric,
+    number_control,
+    primary_action_button,
+    safe_action_button,
+    select,
+    toolbar,
+)
 
 
 def build_sections(ctx: GuiContext) -> dict[str, Any]:
@@ -170,7 +180,9 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     label="Pen-up Z (mm)",
                     value=settings.z_up_mm,
                     default=0,
-                    min_value=-25,
+                    # The same floor the G-code generators clamp at, so the box can
+                    # accept anything a calibration sheet can legally print.
+                    min_value=Z_ABSOLUTE_FLOOR_MM,
                     width_class="w-full",
                     tooltip="Height the pen lifts to between strokes. Emitted as G0 Z when the Z servo is in use.",
                     on_change=persist_and_refresh,
@@ -181,7 +193,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     label="Pen-down Z (mm)",
                     value=settings.z_down_mm,
                     default=-25,
-                    min_value=-25,
+                    min_value=Z_ABSOLUTE_FLOOR_MM,
                     width_class="w-full",
                     tooltip="Pen pressure: how far the pen presses into the paper. Too shallow leaves gaps, too deep splays the nib.",
                     on_change=persist_and_refresh,
@@ -223,6 +235,9 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                 )
 
             _build_pen_profile_row(ctx)
+
+        with sections["pen"]:
+            _build_z_tune_card(ctx)
 
         # -- SHEET: layout geometry + organic ----------------------------------------
         sections["sheet"] = ui.column().classes("w-full gap-2")
@@ -475,6 +490,44 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                 show_symbol(picker.value)
 
     return sections
+
+
+def _build_z_tune_card(ctx: GuiContext) -> None:
+    """Interactive Z calibration: step the servo, read the machine Z, capture it.
+
+    Replaces the plot-a-ladder-sheet loop for finding z_down_mm / z_up_mm: jog until
+    the nib just marks, SET AS PEN-DOWN; jog to the shallowest clean clearance,
+    SET AS PEN-UP. Both land in the profile fields, so SAVE AS PROFILE keeps them.
+    """
+    if not ctx.supervisor.plotter_settings.use_z_servo:
+        # With use_z_servo off, Z is a binary M5/M3 pen solenoid: there is no position
+        # to jog or capture, so the card explains itself instead of offering dead buttons.
+        with card(
+            "Z tune",
+            "Z jogging needs the Z servo (NEJE_PLOTTER_USE_Z_SERVO). This machine drives the pen as an on/off solenoid.",
+        ):
+            pass
+        return
+    with card(
+        "Z tune",
+        "Jog Z until the nib just marks the paper, then SET AS PEN-DOWN. "
+        "Jog up to the shallowest height that clears the paper, then SET AS PEN-UP. "
+        f"SAVE AS PROFILE above keeps both. Jogs stay inside {Z_ABSOLUTE_FLOOR_MM:g}..0 mm.",
+    ):
+        with toolbar(full_width=True):
+            ctx.fields["z_step"] = select(
+                {0.1: "0.1", 0.25: "0.25", 0.5: "0.5", 1.0: "1", 5.0: "5"}, value=0.5, label="Z step mm"
+            )
+            safe_action_button("Z+", ctx.jog_z_up).tooltip("Raise the pen by one step")
+            safe_action_button("Z−", ctx.jog_z_down).tooltip("Lower the pen by one step")
+            ctx.machine_z_label = mini_metric("Machine Z")
+        with toolbar(full_width=True):
+            safe_action_button("SET AS PEN-DOWN", lambda: ctx.capture_z("z_down_mm")).tooltip(
+                "Current machine Z becomes Pen-down Z (mm)"
+            )
+            safe_action_button("SET AS PEN-UP", lambda: ctx.capture_z("z_up_mm")).tooltip(
+                "Current machine Z becomes Pen-up Z (mm)"
+            )
 
 
 def _build_pen_profile_row(ctx: GuiContext) -> None:

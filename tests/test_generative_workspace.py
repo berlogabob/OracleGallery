@@ -92,3 +92,37 @@ def test_the_capture_buffer_is_gone() -> None:
 
     assert not hasattr(generative, "LATEST")
     assert not hasattr(generative, "_handle_generative_svg")
+
+
+def test_stamp_lift_budget_marks_the_svg_root() -> None:
+    from neje_oracle.blocks.gui.workspaces.generative import stamp_lift_budget
+
+    svg = b"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M0,0 L1,1'/></svg>"
+    assert stamp_lift_budget(svg, 1024) == svg
+    stamped = stamp_lift_budget(svg, 3)
+    assert b'data-neje-lift-budget="3"' in stamped
+    assert stamped.count(b"<svg") == 1
+
+
+def test_stamp_lift_budget_survives_hostile_but_legal_svg() -> None:
+    from neje_oracle.blocks.gui.workspaces.generative import stamp_lift_budget
+
+    # Namespace-prefixed root: attribute must land inside the root tag, after the name.
+    prefixed = b"<svg:svg xmlns:svg='http://www.w3.org/2000/svg'><svg:path d='M0,0 L1,1'/></svg:svg>"
+    stamped = stamp_lift_budget(prefixed, 5)
+    assert b'data-neje-lift-budget="5"' in stamped
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(stamped)  # must stay well-formed
+
+    # A comment mentioning <svg before the real root must not swallow the stamp.
+    commented = b"<!-- <svg decoy --><svg xmlns='http://www.w3.org/2000/svg'><path d='M0,0 L1,1'/></svg>"
+    stamped = stamp_lift_budget(commented, 4)
+    root = ET.fromstring(stamped)
+    assert root.get("data-neje-lift-budget") == "4"
+
+    # Re-stamping replaces the value instead of stacking duplicate attributes.
+    once = stamp_lift_budget(b"<svg xmlns='http://www.w3.org/2000/svg'/>", 7)
+    twice = stamp_lift_budget(once, 3)
+    assert twice.count(b"data-neje-lift-budget") == 1
+    assert ET.fromstring(twice).get("data-neje-lift-budget") == "3"

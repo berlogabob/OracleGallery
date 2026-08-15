@@ -313,3 +313,74 @@ def test_hatch_midtone_is_not_solid() -> None:
     assert black > 0
     assert mid < black * 0.8, f"midtone {mid:.0f}mm vs black {black:.0f}mm — no shading"
     assert light < mid, f"light {light:.0f}mm not lighter than mid {mid:.0f}mm"
+
+
+def test_lift_budget_zero_collapses_any_mode_to_one_stroke() -> None:
+    gradient = np.tile(np.linspace(0, 255, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    for mode in ("hatch", "contour"):
+        polylines = image_to_polylines(
+            data, mode=mode, width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=0
+        )
+        assert len(polylines) == 1, mode
+
+
+def test_lift_budget_default_changes_nothing() -> None:
+    gradient = np.tile(np.linspace(0, 255, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    baseline = image_to_polylines(data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+    assert (
+        image_to_polylines(
+            data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=1024
+        )
+        == baseline
+    )
+
+
+def test_wave_orientation_and_connect_rows() -> None:
+    from neje_oracle.blocks.imaging.modes import wave
+
+    gradient = np.tile(np.linspace(40, 215, 60, dtype=np.uint8), (60, 1))
+    data = _png(Image.fromarray(gradient, mode="L"))
+    tone = load_tone(data, width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+
+    def _extent(stroke, axis):
+        values = [point[axis] for point in stroke]
+        return max(values) - min(values)
+
+    horizontal_stroke = max(wave(tone), key=len)
+    vertical_stroke = max(wave(tone, orientation="vertical"), key=len)
+    assert _extent(horizontal_stroke, 0) > _extent(horizontal_stroke, 1)
+    assert _extent(vertical_stroke, 1) > _extent(vertical_stroke, 0)
+
+    assert len(wave(tone, connect_rows=True)) == 1
+    assert len(wave(tone, orientation="vertical", connect_rows=True)) == 1
+
+
+def test_flow_dash_mm_breaks_streamlines() -> None:
+    from neje_oracle.blocks.imaging.modes import flow
+
+    rng = np.random.default_rng(7)
+    blob = rng.integers(30, 220, size=(60, 60), dtype=np.uint8)
+    data = _png(Image.fromarray(blob, mode="L"))
+    tone = load_tone(data, width_mm=60.0, height_mm=60.0, cell_mm=1.0)
+
+    continuous = flow(tone)
+    dashed = flow(tone, dash_mm=3.0)
+    assert len(dashed) > len(continuous)
+
+    def _path_length(stroke):
+        return sum(
+            math.dist(stroke[i - 1], stroke[i]) for i in range(1, len(stroke))
+        )
+
+    assert max(_path_length(stroke) for stroke in dashed) <= 3.0 * 1.5
+
+    # Dashes must leave real gaps: no consecutive strokes may abut (a zero-length
+    # travel is an extra pen lift, not a dash), and skipped gap material means
+    # measurably less ink than the continuous version.
+    gaps = [math.dist(dashed[i - 1][-1], dashed[i][0]) for i in range(1, len(dashed))]
+    assert min(gaps) > 0.05
+    assert sum(_path_length(stroke) for stroke in dashed) <= 0.85 * sum(
+        _path_length(stroke) for stroke in continuous
+    )

@@ -626,3 +626,52 @@ def _gcode_draw_line_count(gcode: str) -> int:
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
     return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+
+
+def test_lift_budget_metadata_caps_pen_downs(tmp_path: Path) -> None:
+    svg_path = tmp_path / "budget.svg"
+    paths = "".join(
+        f"<path d='M{10 + i * 15},{10 + (i % 3) * 30} L{20 + i * 15},{10 + (i % 3) * 30}' stroke='black' fill='none'/>"
+        for i in range(6)
+    )
+    svg_path.write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+        "<g data-neje-lift-budget='2'>" + paths + "</g>"
+        "</svg>",
+        encoding="utf-8",
+    )
+
+    gcode = generate_sheet_gcode(
+        [SheetItem(source_kind="user", session_id="b", title="B", svg_path=svg_path)],
+        [SheetPlacement(index=0, center_x_mm=100, center_y_mm=100, diameter_mm=160)],
+        sample_step_mm=100,
+        cell_diameter_mm=40,
+        travel_rate=5000,
+        draw_rate=1800,
+        pen_up_command="M5",
+        pen_down_command="M3 S15",
+        include_rings=False,
+    )
+
+    assert 1 <= gcode.count("M3 S15") <= 3
+
+
+def test_lift_budget_1024_is_the_off_position(tmp_path: Path) -> None:
+    # A stamped 1024 must mean "no budget", matching the GUI slider where the
+    # max position means "no limit" — not a real budget of 1024 lifts.
+    from neje_oracle.blocks.gcode.svg_gcode import _pen_lift_budget
+
+    def _svg_with(budget: int) -> Path:
+        svg_path = tmp_path / f"b{budget}.svg"
+        svg_path.write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+            f"<g data-neje-lift-budget='{budget}'>"
+            "<path d='M10,10 L20,10' stroke='black' fill='none'/>"
+            "</g></svg>",
+            encoding="utf-8",
+        )
+        return svg_path
+
+    assert _pen_lift_budget(_svg_with(8)) == 8
+    assert _pen_lift_budget(_svg_with(1024)) is None
+    assert _pen_lift_budget(_svg_with(2048)) is None

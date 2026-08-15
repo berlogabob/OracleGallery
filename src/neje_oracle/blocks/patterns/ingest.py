@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
+from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
@@ -105,7 +106,7 @@ def image_to_motif_polylines(
     despeckle_mm: float = 1.5,
     simplify_mm: float = 0.4,
     max_segments: int = MAX_MOTIF_SEGMENTS,
-    **params: object,
+    **params: Any,
 ) -> Polylines:
     """Trace a picture into a normalized motif: unit box, centred on the origin."""
     if simplify_mm < 0:
