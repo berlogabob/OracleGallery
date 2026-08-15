@@ -123,7 +123,8 @@ def test_shipped_profiles_are_complete() -> None:
 
 
 def test_shipped_json_matches_the_python_fallback() -> None:
-    """The same three profiles are defined twice: STARTER_PROFILES and the tracked JSON.
+    """The same profiles (fineliner, gel, ballpoint, textile) are defined twice:
+    STARTER_PROFILES and the tracked JSON.
 
     The file was generated from the dict, so they agree today. This is what makes them
     fail the suite rather than silently drift into two different answers for 'gel'.

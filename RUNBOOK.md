@@ -481,7 +481,7 @@ instrument-dependent settings — `pen_width_mm`, `draw_rate`, `travel_rate`, `z
 Sheet size, layout and sampling are deliberately not in a profile: those belong to the
 machine and the job, so swapping pens must not disturb them.
 
-Ships with `fineliner`, `gel` and `ballpoint`. **Those are starting points, not
+Ships with `fineliner`, `gel`, `ballpoint` and `textile`. **Those are starting points, not
 measurements.** The calibration sheet is what turns them into real numbers.
 
 Switch pens on `SETUP` → Motion speed → **Fitted pen**. Selecting a profile
