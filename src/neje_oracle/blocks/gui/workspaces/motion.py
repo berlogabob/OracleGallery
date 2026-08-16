@@ -20,10 +20,10 @@ from nicegui import ui
 from ..context import GuiContext
 from ..ui import (
     card,
-    danger_action_button,
     helper_text,
     primary_action_button,
     safe_action_button,
+    stop_button,
 )
 
 
@@ -55,7 +55,7 @@ def _next_action(ctx: GuiContext) -> None:
 
 def _jog_and_zero(ctx: GuiContext) -> None:
     with card("Manual motion", compact=True):
-        helper_text("Blocked while G-code streams.")
+        ctx.ready_labels["motion_hint"] = helper_text("—")
         with ui.row().classes("gap-2 items-end"):
             ctx.fields["jog_step"] = (
                 ui.select(
@@ -94,7 +94,9 @@ def _jog_and_zero(ctx: GuiContext) -> None:
         # Zeroing concludes the jog flow: fix paper, jog to the upper-left origin, lower Z
         # to pen contact, then confirm. It moves the machine's idea of where the sheet is,
         # hence the danger treatment.
-        danger_action_button("SET WORK ZERO", ctx.set_work_zero).classes("w-full").tooltip(
+        # Danger-outline, not a fourth danger fill: the re-audit found four identical
+        # red fills on one screen diluting the stop family (F-114). Consequential, not a stop.
+        stop_button("SET WORK ZERO", ctx.set_work_zero).classes("w-full").tooltip(
             "Fix paper, jog to the upper-left origin, lower Z and set pen contact, then confirm."
         )
         ctx.ready_labels["message"] = ui.label("-").classes("oracle-helper path-label")

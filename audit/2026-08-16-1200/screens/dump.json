@@ -1,0 +1,7872 @@
+{
+ "PRINT": {
+  "panel_h": 760,
+  "panel_vis": 760,
+  "panels": [
+   {
+    "h": 760,
+    "vis": 760
+   }
+  ],
+  "page_h": 800,
+  "page_vis": 800,
+  "cards": 2,
+  "buttons": 17,
+  "dupes": [],
+  "iframes": [],
+  "elements": [
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "PRINT",
+    "x": 86,
+    "y": 2,
+    "w": 71,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "CREATE",
+    "x": 157,
+    "y": 2,
+    "w": 84,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "SETUP",
+    "x": 240,
+    "y": 2,
+    "w": 75,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-toggle cursor-pointer no-outline row",
+    "text": "Require Firebase",
+    "x": 503,
+    "y": 0,
+    "w": 164,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "STOP PRINT",
+    "x": 993,
+    "y": 3,
+    "w": 97,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "EMERGENCY STOP",
+    "x": 1122,
+    "y": 4,
+    "w": 148,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+    "x": 0,
+    "y": 40,
+    "w": 222,
+    "h": 126,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Next action",
+    "x": 13,
+    "y": 51,
+    "w": 74,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+    "x": 13,
+    "y": 77,
+    "w": 196,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+    "x": 13,
+    "y": 119,
+    "w": 196,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+    "x": 0,
+    "y": 172,
+    "w": 222,
+    "h": 455,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Manual motion",
+    "x": 13,
+    "y": 183,
+    "w": 95,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Blocked while G-code streams.",
+    "x": 13,
+    "y": 208,
+    "w": 176,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Step mm 1 arrow_drop_down",
+    "x": 13,
+    "y": 232,
+    "w": 96,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-select__focus-target",
+    "text": "1",
+    "x": 25,
+    "y": 258,
+    "w": 1,
+    "h": 1,
+    "fs": "14px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Feed mm/min",
+    "x": 13,
+    "y": 280,
+    "w": 96,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-field__native q-placeholder",
+    "text": "1000",
+    "x": 25,
+    "y": 280,
+    "w": 72,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "Y+",
+    "x": 80,
+    "y": 326,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "X-",
+    "x": 13,
+    "y": 364,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "X+",
+    "x": 146,
+    "y": 364,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "Y-",
+    "x": 80,
+    "y": 402,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN UP",
+    "x": 13,
+    "y": 442,
+    "w": 64,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN DOWN",
+    "x": 81,
+    "y": 442,
+    "w": 90,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME X",
+    "x": 13,
+    "y": 480,
+    "w": 68,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME Y",
+    "x": 85,
+    "y": 480,
+    "w": 68,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME ALL",
+    "x": 13,
+    "y": 520,
+    "w": 196,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SET WORK ZERO",
+    "x": 13,
+    "y": 560,
+    "w": 196,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper path-label",
+    "text": "Not ready",
+    "x": 13,
+    "y": 598,
+    "w": 56,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "layout preview | 15 cells | 1 queued, 14 filler | symbols picked at print time",
+    "x": 238,
+    "y": 48,
+    "w": 413,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "LEGEND",
+    "x": 923,
+    "y": 40,
+    "w": 69,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "0/15 cells \u00b7 user 0 \u00b7 idle 0",
+    "x": 419,
+    "y": 747,
+    "w": 141,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "System run",
+    "x": 1009,
+    "y": 44,
+    "w": 74,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Start services and reset the run baseline; stop safely between sheets.",
+    "x": 1009,
+    "y": 72,
+    "w": 263,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "START SYSTEM",
+    "x": 1009,
+    "y": 116,
+    "w": 263,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "NEW RUN",
+    "x": 1009,
+    "y": 155,
+    "w": 263,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "STOP SYSTEM",
+    "x": 1009,
+    "y": 197,
+    "w": 263,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "System check runs automatically when print starts.",
+    "x": 1009,
+    "y": 246,
+    "w": 263,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Queue",
+    "x": 1009,
+    "y": 299,
+    "w": 42,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "PENDING 1",
+    "x": 1009,
+    "y": 327,
+    "w": 85,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "ACTIVE 0",
+    "x": 1098,
+    "y": 327,
+    "w": 85,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "FAIL/SKIP 0 / 177",
+    "x": 1187,
+    "y": 327,
+    "w": 85,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "DISMISS",
+    "x": 857,
+    "y": 22,
+    "w": 89,
+    "h": 32,
+    "fs": "14px"
+   }
+  ]
+ },
+ "CREATE": {
+  "panel_h": 760,
+  "panel_vis": 760,
+  "panels": [
+   {
+    "h": 760,
+    "vis": 760
+   },
+   {
+    "h": 760,
+    "vis": 760
+   }
+  ],
+  "page_h": 800,
+  "page_vis": 800,
+  "cards": 3,
+  "buttons": 20,
+  "dupes": [],
+  "iframes": [
+   675
+  ],
+  "elements": [
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "PRINT",
+    "x": 86,
+    "y": 2,
+    "w": 71,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "CREATE",
+    "x": 157,
+    "y": 2,
+    "w": 84,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "SETUP",
+    "x": 240,
+    "y": 2,
+    "w": 75,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-toggle cursor-pointer no-outline row",
+    "text": "Require Firebase",
+    "x": 503,
+    "y": 0,
+    "w": 164,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "STOP PRINT",
+    "x": 993,
+    "y": 3,
+    "w": 97,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "EMERGENCY STOP",
+    "x": 1122,
+    "y": 4,
+    "w": 148,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+    "x": 0,
+    "y": 40,
+    "w": 222,
+    "h": 126,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Next action",
+    "x": 13,
+    "y": 51,
+    "w": 74,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+    "x": 13,
+    "y": 77,
+    "w": 196,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+    "x": 13,
+    "y": 119,
+    "w": 196,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+    "x": 0,
+    "y": 172,
+    "w": 222,
+    "h": 455,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Manual motion",
+    "x": 13,
+    "y": 183,
+    "w": 95,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Blocked while G-code streams.",
+    "x": 13,
+    "y": 208,
+    "w": 176,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Step mm 1 arrow_drop_down",
+    "x": 13,
+    "y": 232,
+    "w": 96,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-select__focus-target",
+    "text": "1",
+    "x": 25,
+    "y": 258,
+    "w": 1,
+    "h": 1,
+    "fs": "14px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Feed mm/min",
+    "x": 13,
+    "y": 280,
+    "w": 96,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-field__native q-placeholder",
+    "text": "1000",
+    "x": 25,
+    "y": 280,
+    "w": 72,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "Y+",
+    "x": 80,
+    "y": 326,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "X-",
+    "x": 13,
+    "y": 364,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "X+",
+    "x": 146,
+    "y": 364,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "Y-",
+    "x": 80,
+    "y": 402,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN UP",
+    "x": 13,
+    "y": 442,
+    "w": 64,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN DOWN",
+    "x": 81,
+    "y": 442,
+    "w": 90,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME X",
+    "x": 13,
+    "y": 480,
+    "w": 68,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME Y",
+    "x": 85,
+    "y": 480,
+    "w": 68,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME ALL",
+    "x": 13,
+    "y": 520,
+    "w": 196,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SET WORK ZERO",
+    "x": 13,
+    "y": 560,
+    "w": 196,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper path-label",
+    "text": "Not ready",
+    "x": 13,
+    "y": 598,
+    "w": 56,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SKETCH",
+    "x": 238,
+    "y": 40,
+    "w": 63,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "TEXTURE",
+    "x": 301,
+    "y": 40,
+    "w": 71,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "IMAGE",
+    "x": 373,
+    "y": 40,
+    "w": 52,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "TEXT",
+    "x": 425,
+    "y": 40,
+    "w": 44,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SHEET",
+    "x": 468,
+    "y": 40,
+    "w": 53,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "MOTIF",
+    "x": 521,
+    "y": 40,
+    "w": 51,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Send to plotter Origin X/Y: 25.0 / 25.0 mm (set on SETUP) Stream to plotter (aut",
+    "x": 932,
+    "y": 80,
+    "w": 340,
+    "h": 162,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Send to plotter",
+    "x": 945,
+    "y": 91,
+    "w": 97,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Origin X/Y: 25.0 / 25.0 mm (set on SETUP)",
+    "x": 945,
+    "y": 116,
+    "w": 237,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-toggle cursor-pointer no-outline row",
+    "text": "Stream to plotter (auto-print each captured frame)",
+    "x": 945,
+    "y": 140,
+    "w": 314,
+    "h": 42,
+    "fs": "14px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Interval s",
+    "x": 945,
+    "y": 190,
+    "w": 112,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-field__native q-placeholder",
+    "text": "15",
+    "x": 957,
+    "y": 190,
+    "w": 88,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PRINT SKETCH",
+    "x": 1157,
+    "y": 768,
+    "w": 115,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "DISMISS",
+    "x": 857,
+    "y": 22,
+    "w": 89,
+    "h": 32,
+    "fs": "14px"
+   }
+  ],
+  "segments": {
+   "SKETCH": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SKETCH",
+     "x": 238,
+     "y": 40,
+     "w": 63,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXTURE",
+     "x": 301,
+     "y": 40,
+     "w": 71,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "IMAGE",
+     "x": 373,
+     "y": 40,
+     "w": 52,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXT",
+     "x": 425,
+     "y": 40,
+     "w": 44,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 468,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MOTIF",
+     "x": 521,
+     "y": 40,
+     "w": 51,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Send to plotter Origin X/Y: 25.0 / 25.0 mm (set on SETUP) Stream to plotter (aut",
+     "x": 932,
+     "y": 80,
+     "w": 340,
+     "h": 162,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Send to plotter",
+     "x": 945,
+     "y": 91,
+     "w": 97,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Origin X/Y: 25.0 / 25.0 mm (set on SETUP)",
+     "x": 945,
+     "y": 116,
+     "w": 237,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Stream to plotter (auto-print each captured frame)",
+     "x": 945,
+     "y": 140,
+     "w": 314,
+     "h": 42,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Interval s",
+     "x": 945,
+     "y": 190,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "15",
+     "x": 957,
+     "y": 190,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PRINT SKETCH",
+     "x": 1157,
+     "y": 768,
+     "w": 115,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "TEXTURE": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SKETCH",
+     "x": 238,
+     "y": 40,
+     "w": 63,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXTURE",
+     "x": 301,
+     "y": 40,
+     "w": 71,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "IMAGE",
+     "x": 373,
+     "y": 40,
+     "w": 52,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXT",
+     "x": 425,
+     "y": 40,
+     "w": 44,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 468,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MOTIF",
+     "x": 521,
+     "y": 40,
+     "w": 51,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card",
+     "text": "Print texture Render a saved graph through a plotter mode, then send it to the m",
+     "x": 932,
+     "y": 80,
+     "w": 340,
+     "h": 390,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Print texture",
+     "x": 943,
+     "y": 91,
+     "w": 81,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Render a saved graph through a plotter mode, then send it to the machine.",
+     "x": 943,
+     "y": 116,
+     "w": 318,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Texture arrow_drop_down",
+     "x": 943,
+     "y": 158,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "",
+     "x": 955,
+     "y": 184,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Mode hatch arrow_drop_down",
+     "x": 1061,
+     "y": 158,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "hatch",
+     "x": 1073,
+     "y": 184,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Width mm",
+     "x": 943,
+     "y": 204,
+     "w": 178,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "150",
+     "x": 955,
+     "y": 204,
+     "w": 154,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Height mm",
+     "x": 943,
+     "y": 250,
+     "w": 178,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "150",
+     "x": 955,
+     "y": 250,
+     "w": 154,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cell mm",
+     "x": 943,
+     "y": 296,
+     "w": 178,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0.8",
+     "x": 955,
+     "y": 296,
+     "w": 154,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Seed",
+     "x": 943,
+     "y": 342,
+     "w": 178,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "7",
+     "x": 955,
+     "y": 342,
+     "w": 154,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Travel lines",
+     "x": 943,
+     "y": 388,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-metric-line",
+     "text": "Save a texture in the editor, then pick it here.",
+     "x": 943,
+     "y": 434,
+     "w": 253,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "REFRESH PREVIEW",
+     "x": 238,
+     "y": 766,
+     "w": 146,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PRINT TEXTURE",
+     "x": 1149,
+     "y": 767,
+     "w": 123,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "IMAGE": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SKETCH",
+     "x": 238,
+     "y": 40,
+     "w": 63,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXTURE",
+     "x": 301,
+     "y": 40,
+     "w": 71,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "IMAGE",
+     "x": 373,
+     "y": 40,
+     "w": 52,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXT",
+     "x": 425,
+     "y": 40,
+     "w": 44,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 468,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MOTIF",
+     "x": 521,
+     "y": 40,
+     "w": 51,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Image to line art A single pen cannot print grey. Each mode turns tone into geom",
+     "x": 932,
+     "y": 80,
+     "w": 340,
+     "h": 241,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Image to line art",
+     "x": 945,
+     "y": 91,
+     "w": 105,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "A single pen cannot print grey. Each mode turns tone into geometry the plotter c",
+     "x": 945,
+     "y": 116,
+     "w": 314,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-uploader__input overflow-hidden absolute-full",
+     "text": "",
+     "x": 1219,
+     "y": 199,
+     "w": 32,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card",
+     "text": "Conversion Follows the drawing's own lines, filling bold strokes to weight. For ",
+     "x": 932,
+     "y": 329,
+     "w": 340,
+     "h": 537,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Conversion",
+     "x": 943,
+     "y": 340,
+     "w": 73,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Follows the drawing's own lines, filling bold strokes to weight. For ink drawing",
+     "x": 943,
+     "y": 366,
+     "w": 318,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Mode trace arrow_drop_down",
+     "x": 943,
+     "y": 408,
+     "w": 144,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "trace",
+     "x": 955,
+     "y": 433,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Source scan arrow_drop_down",
+     "x": 1095,
+     "y": 408,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "scan",
+     "x": 1107,
+     "y": 433,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Width mm",
+     "x": 943,
+     "y": 456,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "150",
+     "x": 955,
+     "y": 456,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Height mm",
+     "x": 1063,
+     "y": 456,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "150",
+     "x": 1075,
+     "y": 456,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Quality: FINE \u2014 about 61 min for a 150 mm drawing. Slower presets trace finer an",
+     "x": 943,
+     "y": 502,
+     "w": 318,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Pen lifts",
+     "x": 943,
+     "y": 578,
+     "w": 53,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "At max, the slider has no lift limit; lower values join strokes into fewer pen-d",
+     "x": 943,
+     "y": 637,
+     "w": 318,
+     "h": 54,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cell mm",
+     "x": 943,
+     "y": 697,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0.1",
+     "x": 955,
+     "y": 697,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Detail",
+     "x": 1063,
+     "y": 697,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 1075,
+     "y": 697,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Gamma",
+     "x": 943,
+     "y": 745,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 955,
+     "y": 745,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Invert",
+     "x": 1047,
+     "y": 745,
+     "w": 93,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Travel lines",
+     "x": 943,
+     "y": 791,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-metric-line",
+     "text": "Upload an image to see the preview.",
+     "x": 943,
+     "y": 837,
+     "w": 205,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "REFRESH PREVIEW",
+     "x": 238,
+     "y": 766,
+     "w": 146,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PRINT IMAGE",
+     "x": 1169,
+     "y": 767,
+     "w": 103,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "TEXT": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SKETCH",
+     "x": 238,
+     "y": 40,
+     "w": 63,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXTURE",
+     "x": 301,
+     "y": 40,
+     "w": 71,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "IMAGE",
+     "x": 373,
+     "y": 40,
+     "w": 52,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXT",
+     "x": 425,
+     "y": 40,
+     "w": 44,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 468,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MOTIF",
+     "x": 521,
+     "y": 40,
+     "w": 51,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card",
+     "text": "Line text Single-stroke engraving fonts. One pen pass per letter, no outlines to",
+     "x": 932,
+     "y": 80,
+     "w": 340,
+     "h": 312,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Line text",
+     "x": 943,
+     "y": 91,
+     "w": 56,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Single-stroke engraving fonts. One pen pass per letter, no outlines to fill.",
+     "x": 943,
+     "y": 116,
+     "w": 318,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Font zzBVFNTL arrow_drop_down",
+     "x": 943,
+     "y": 158,
+     "w": 192,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "zzBVFNTL",
+     "x": 955,
+     "y": 184,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cap height mm",
+     "x": 943,
+     "y": 206,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "10",
+     "x": 955,
+     "y": 206,
+     "w": 104,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Text",
+     "x": 943,
+     "y": 252,
+     "w": 318,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "textarea",
+     "cls": "q-field__native q-placeholder",
+     "text": "NEJE ORACLE",
+     "x": 955,
+     "y": 266,
+     "w": 294,
+     "h": 24,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Travel lines",
+     "x": 943,
+     "y": 298,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-metric-line",
+     "text": "43 strokes, 89 segments, 0.3 m drawn + 0.4 m travel, ~2 min at current feeds (0 ",
+     "x": 943,
+     "y": 344,
+     "w": 318,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "REFRESH PREVIEW",
+     "x": 238,
+     "y": 766,
+     "w": 146,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PRINT TEXT",
+     "x": 1178,
+     "y": 767,
+     "w": 94,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "SHEET": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SKETCH",
+     "x": 238,
+     "y": 40,
+     "w": 63,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXTURE",
+     "x": 301,
+     "y": 40,
+     "w": 71,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "IMAGE",
+     "x": 373,
+     "y": 40,
+     "w": 52,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXT",
+     "x": 425,
+     "y": 40,
+     "w": 44,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 468,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MOTIF",
+     "x": 521,
+     "y": 40,
+     "w": 51,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card",
+     "text": "Frame sheet Fill one sheet from a folder, using the mode and tone settings above",
+     "x": 932,
+     "y": 80,
+     "w": 340,
+     "h": 400,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Frame sheet",
+     "x": 943,
+     "y": 91,
+     "w": 80,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Fill one sheet from a folder, using the mode and tone settings above. Set the ce",
+     "x": 943,
+     "y": 116,
+     "w": 318,
+     "h": 72,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Image folder",
+     "x": 943,
+     "y": 194,
+     "w": 318,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "",
+     "x": 955,
+     "y": 194,
+     "w": 294,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cell width mm",
+     "x": 943,
+     "y": 240,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "40",
+     "x": 955,
+     "y": 240,
+     "w": 104,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cell height mm",
+     "x": 1079,
+     "y": 240,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "60",
+     "x": 1091,
+     "y": 240,
+     "w": 104,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Gap mm",
+     "x": 943,
+     "y": 288,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "5",
+     "x": 955,
+     "y": 288,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Padding mm",
+     "x": 1047,
+     "y": 288,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "2",
+     "x": 1059,
+     "y": 288,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cut line rect arrow_drop_down",
+     "x": 943,
+     "y": 334,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "rect",
+     "x": 955,
+     "y": 360,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Sheet #",
+     "x": 1079,
+     "y": 334,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 1091,
+     "y": 334,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "30 per sheet. Point 'Image folder' at a folder of images.",
+     "x": 943,
+     "y": 380,
+     "w": 312,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Travel lines",
+     "x": 943,
+     "y": 404,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-metric-line",
+     "text": "-",
+     "x": 943,
+     "y": 450,
+     "w": 6,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "REFRESH PREVIEW",
+     "x": 238,
+     "y": 766,
+     "w": 146,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PRINT SHEET",
+     "x": 1168,
+     "y": 767,
+     "w": 104,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "MOTIF": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SKETCH",
+     "x": 238,
+     "y": 40,
+     "w": 63,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXTURE",
+     "x": 301,
+     "y": 40,
+     "w": 71,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "IMAGE",
+     "x": 373,
+     "y": 40,
+     "w": 52,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "TEXT",
+     "x": 425,
+     "y": 40,
+     "w": 44,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 468,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MOTIF",
+     "x": 521,
+     "y": 40,
+     "w": 51,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Import motif from picture Crop to ONE motif, then save it into the pattern bank.",
+     "x": 932,
+     "y": 80,
+     "w": 340,
+     "h": 671,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Import motif from picture",
+     "x": 945,
+     "y": 91,
+     "w": 164,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Crop to ONE motif, then save it into the pattern bank. Contour at 1 band gives a",
+     "x": 945,
+     "y": 116,
+     "w": 314,
+     "h": 72,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Upload a picture to begin",
+     "x": 945,
+     "y": 216,
+     "w": 143,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-uploader__input overflow-hidden absolute-full",
+     "text": "",
+     "x": 1219,
+     "y": 259,
+     "w": 32,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Crop L %",
+     "x": 945,
+     "y": 376,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 957,
+     "y": 376,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Crop T %",
+     "x": 1065,
+     "y": 376,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 1077,
+     "y": 376,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Crop W %",
+     "x": 945,
+     "y": 424,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "100",
+     "x": 957,
+     "y": 424,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Crop H %",
+     "x": 1065,
+     "y": 424,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "100",
+     "x": 1077,
+     "y": 424,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Mode contour arrow_drop_down",
+     "x": 945,
+     "y": 470,
+     "w": 160,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "contour",
+     "x": 957,
+     "y": 496,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cell mm",
+     "x": 1113,
+     "y": 470,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0.8",
+     "x": 1125,
+     "y": 470,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Gamma",
+     "x": 945,
+     "y": 518,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 957,
+     "y": 518,
+     "w": 88,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Despeckle mm",
+     "x": 945,
+     "y": 564,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1.5",
+     "x": 957,
+     "y": 564,
+     "w": 104,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Simplify mm",
+     "x": 1081,
+     "y": 564,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0.4",
+     "x": 1093,
+     "y": 564,
+     "w": 104,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Autocontrast",
+     "x": 945,
+     "y": 612,
+     "w": 139,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Invert",
+     "x": 1092,
+     "y": 612,
+     "w": 93,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Motif name",
+     "x": 945,
+     "y": 658,
+     "w": 224,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "",
+     "x": 957,
+     "y": 658,
+     "w": 200,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SAVE TO BANK",
+     "x": 945,
+     "y": 707,
+     "w": 115,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "USE IN SKETCH",
+     "x": 1068,
+     "y": 706,
+     "w": 122,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "REFRESH PREVIEW",
+     "x": 238,
+     "y": 766,
+     "w": 146,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ]
+  }
+ },
+ "SETUP": {
+  "panel_h": 760,
+  "panel_vis": 760,
+  "panels": [
+   {
+    "h": 760,
+    "vis": 760
+   },
+   {
+    "h": 760,
+    "vis": 760
+   }
+  ],
+  "page_h": 800,
+  "page_vis": 800,
+  "cards": 3,
+  "buttons": 23,
+  "dupes": [],
+  "iframes": [],
+  "elements": [
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "PRINT",
+    "x": 86,
+    "y": 2,
+    "w": 71,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "CREATE",
+    "x": 157,
+    "y": 2,
+    "w": 84,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-tab relative-position self-stretch flex",
+    "text": "SETUP",
+    "x": 240,
+    "y": 2,
+    "w": 75,
+    "h": 36,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-toggle cursor-pointer no-outline row",
+    "text": "Require Firebase",
+    "x": 503,
+    "y": 0,
+    "w": 164,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "STOP PRINT",
+    "x": 993,
+    "y": 3,
+    "w": 97,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "EMERGENCY STOP",
+    "x": 1122,
+    "y": 4,
+    "w": 148,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+    "x": 0,
+    "y": 40,
+    "w": 222,
+    "h": 126,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Next action",
+    "x": 13,
+    "y": 51,
+    "w": 74,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+    "x": 13,
+    "y": 77,
+    "w": 196,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+    "x": 13,
+    "y": 119,
+    "w": 196,
+    "h": 36,
+    "fs": "12px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+    "x": 0,
+    "y": 172,
+    "w": 222,
+    "h": 455,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "Manual motion",
+    "x": 13,
+    "y": 183,
+    "w": 95,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Blocked while G-code streams.",
+    "x": 13,
+    "y": 208,
+    "w": 176,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Step mm 1 arrow_drop_down",
+    "x": 13,
+    "y": 232,
+    "w": 96,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-select__focus-target",
+    "text": "1",
+    "x": 25,
+    "y": 258,
+    "w": 1,
+    "h": 1,
+    "fs": "14px"
+   },
+   {
+    "tag": "label",
+    "cls": "q-field row no-wrap items-start",
+    "text": "Feed mm/min",
+    "x": 13,
+    "y": 280,
+    "w": 96,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "input",
+    "cls": "q-field__native q-placeholder",
+    "text": "1000",
+    "x": 25,
+    "y": 280,
+    "w": 72,
+    "h": 40,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "Y+",
+    "x": 80,
+    "y": 326,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "X-",
+    "x": 13,
+    "y": 364,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "X+",
+    "x": 146,
+    "y": 364,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "Y-",
+    "x": 80,
+    "y": 402,
+    "w": 63,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN UP",
+    "x": 13,
+    "y": 442,
+    "w": 64,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN DOWN",
+    "x": 81,
+    "y": 442,
+    "w": 90,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME X",
+    "x": 13,
+    "y": 480,
+    "w": 68,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME Y",
+    "x": 85,
+    "y": 480,
+    "w": 68,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "HOME ALL",
+    "x": 13,
+    "y": 520,
+    "w": 196,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SET WORK ZERO",
+    "x": 13,
+    "y": 560,
+    "w": 196,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper path-label",
+    "text": "Not ready",
+    "x": 13,
+    "y": 598,
+    "w": 56,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "MACHINE",
+    "x": 238,
+    "y": 40,
+    "w": 72,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "PEN",
+    "x": 310,
+    "y": 40,
+    "w": 36,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SHEET",
+    "x": 346,
+    "y": 40,
+    "w": 53,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "VERIFY",
+    "x": 399,
+    "y": 40,
+    "w": 56,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "ADVANCED",
+    "x": 455,
+    "y": 40,
+    "w": 84,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "q-card nicegui-card oracle-card compact-card",
+    "text": "FluidNC Connection Connect and recover the controller. Jog and homing are in the",
+    "x": 238,
+    "y": 80,
+    "w": 1034,
+    "h": 225,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-card-title",
+    "text": "FluidNC Connection",
+    "x": 251,
+    "y": 91,
+    "w": 128,
+    "h": 20,
+    "fs": "13px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Connect and recover the controller. Jog and homing are in the left rail.",
+    "x": 251,
+    "y": 116,
+    "w": 396,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "CONNECT",
+    "x": 251,
+    "y": 140,
+    "w": 80,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "SCAN LAN",
+    "x": 339,
+    "y": 140,
+    "w": 85,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "BROWSER UI offline",
+    "x": 251,
+    "y": 180,
+    "w": 249,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "CONTROL CHANNEL offline",
+    "x": 504,
+    "y": 180,
+    "w": 249,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "LIMIT SWITCHES none",
+    "x": 757,
+    "y": 180,
+    "w": 249,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "mini-metric",
+    "text": "MACHINE MODE -",
+    "x": 1010,
+    "y": 180,
+    "w": 249,
+    "h": 45,
+    "fs": "14px"
+   },
+   {
+    "tag": "div",
+    "cls": "oracle-helper",
+    "text": "Recovery (alarm or hold only):",
+    "x": 251,
+    "y": 268,
+    "w": 170,
+    "h": 18,
+    "fs": "12px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "UNLOCK",
+    "x": 429,
+    "y": 260,
+    "w": 72,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "RESUME",
+    "x": 508,
+    "y": 260,
+    "w": 71,
+    "h": 34,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "RESET / ABORT",
+    "x": 1141,
+    "y": 261,
+    "w": 118,
+    "h": 32,
+    "fs": "14px"
+   },
+   {
+    "tag": "button",
+    "cls": "q-btn q-btn-item non-selectable no-outline",
+    "text": "DISMISS",
+    "x": 857,
+    "y": 22,
+    "w": 89,
+    "h": 32,
+    "fs": "14px"
+   }
+  ],
+  "segments": {
+   "MACHINE": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MACHINE",
+     "x": 238,
+     "y": 40,
+     "w": 72,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN",
+     "x": 310,
+     "y": 40,
+     "w": 36,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 346,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "VERIFY",
+     "x": 399,
+     "y": 40,
+     "w": 56,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "ADVANCED",
+     "x": 455,
+     "y": 40,
+     "w": 84,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "FluidNC Connection Connect and recover the controller. Jog and homing are in the",
+     "x": 238,
+     "y": 80,
+     "w": 1034,
+     "h": 225,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "FluidNC Connection",
+     "x": 251,
+     "y": 91,
+     "w": 128,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect and recover the controller. Jog and homing are in the left rail.",
+     "x": 251,
+     "y": 116,
+     "w": 396,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "CONNECT",
+     "x": 251,
+     "y": 140,
+     "w": 80,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SCAN LAN",
+     "x": 339,
+     "y": 140,
+     "w": 85,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "BROWSER UI offline",
+     "x": 251,
+     "y": 180,
+     "w": 249,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "CONTROL CHANNEL offline",
+     "x": 504,
+     "y": 180,
+     "w": 249,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "LIMIT SWITCHES none",
+     "x": 757,
+     "y": 180,
+     "w": 249,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "MACHINE MODE -",
+     "x": 1010,
+     "y": 180,
+     "w": 249,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Recovery (alarm or hold only):",
+     "x": 251,
+     "y": 268,
+     "w": 170,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "UNLOCK",
+     "x": 429,
+     "y": 260,
+     "w": 72,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "RESUME",
+     "x": 508,
+     "y": 260,
+     "w": 71,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "RESET / ABORT",
+     "x": 1141,
+     "y": 261,
+     "w": 118,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "PEN": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MACHINE",
+     "x": 238,
+     "y": 40,
+     "w": 72,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN",
+     "x": 310,
+     "y": 40,
+     "w": 36,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 346,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "VERIFY",
+     "x": 399,
+     "y": 40,
+     "w": 56,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "ADVANCED",
+     "x": 455,
+     "y": 40,
+     "w": 84,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Motion speed XY speed writes G-code feed rates in mm/min. Acceleration uses the ",
+     "x": 238,
+     "y": 80,
+     "w": 1034,
+     "h": 370,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Motion speed",
+     "x": 251,
+     "y": 91,
+     "w": 87,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's ",
+     "x": 251,
+     "y": 116,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Travel mm/min",
+     "x": 251,
+     "y": 158,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "5000",
+     "x": 263,
+     "y": 158,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Draw mm/min",
+     "x": 759,
+     "y": 158,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1800",
+     "x": 771,
+     "y": 158,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "XY accel mm/s^2",
+     "x": 251,
+     "y": 206,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 263,
+     "y": 206,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Pen-up Z (mm)",
+     "x": 759,
+     "y": 206,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 771,
+     "y": 206,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Pen-down Z (mm)",
+     "x": 251,
+     "y": 254,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "-25",
+     "x": 263,
+     "y": 254,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Z mm/min",
+     "x": 759,
+     "y": 254,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 771,
+     "y": 254,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Pen width mm",
+     "x": 251,
+     "y": 302,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0.3",
+     "x": 263,
+     "y": 302,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Pen-down dwell ms",
+     "x": 759,
+     "y": 302,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 771,
+     "y": 302,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Pen profile",
+     "x": 251,
+     "y": 367,
+     "w": 61,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Fitted pen arrow_drop_down",
+     "x": 328,
+     "y": 356,
+     "w": 176,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "",
+     "x": 340,
+     "y": 382,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Save as",
+     "x": 512,
+     "y": 356,
+     "w": 160,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "",
+     "x": 524,
+     "y": 356,
+     "w": 136,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SAVE AS PROFILE",
+     "x": 680,
+     "y": 360,
+     "w": 135,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Shipped values are starting points, not measurements. Print the pen calibration ",
+     "x": 251,
+     "y": 402,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card",
+     "text": "Z tune Jog Z until the nib just marks the paper, then SET AS PEN-DOWN. Jog up to",
+     "x": 238,
+     "y": 457,
+     "w": 1034,
+     "h": 192,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Z tune",
+     "x": 249,
+     "y": 468,
+     "w": 41,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Jog Z until the nib just marks the paper, then SET AS PEN-DOWN. Jog up to the sh",
+     "x": 249,
+     "y": 494,
+     "w": 491,
+     "h": 54,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Z step mm 0.5 arrow_drop_down",
+     "x": 249,
+     "y": 556,
+     "w": 112,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "0.5",
+     "x": 261,
+     "y": 582,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Z+",
+     "x": 367,
+     "y": 559,
+     "w": 29,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Z\u2212",
+     "x": 402,
+     "y": 559,
+     "w": 29,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "MACHINE Z -",
+     "x": 436,
+     "y": 554,
+     "w": 87,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET AS PEN-DOWN",
+     "x": 249,
+     "y": 605,
+     "w": 149,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET AS PEN-UP",
+     "x": 404,
+     "y": 605,
+     "w": 123,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "SHEET": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MACHINE",
+     "x": 238,
+     "y": 40,
+     "w": 72,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN",
+     "x": 310,
+     "y": 40,
+     "w": 36,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 346,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "VERIFY",
+     "x": 399,
+     "y": 40,
+     "w": 56,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "ADVANCED",
+     "x": 455,
+     "y": 40,
+     "w": 84,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Layout 15 cells Preview mode Preview tuning arrow_drop_down Layout Hex arrow_dro",
+     "x": 238,
+     "y": 80,
+     "w": 1034,
+     "h": 276,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Preview mode Preview tuning arrow_drop_down",
+     "x": 251,
+     "y": 117,
+     "w": 1008,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "Preview tuning",
+     "x": 263,
+     "y": 142,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Layout Hex arrow_drop_down",
+     "x": 251,
+     "y": 163,
+     "w": 128,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "Hex",
+     "x": 263,
+     "y": 188,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Rings",
+     "x": 387,
+     "y": 163,
+     "w": 92,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Origin dots",
+     "x": 487,
+     "y": 163,
+     "w": 127,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Field W mm",
+     "x": 251,
+     "y": 209,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "250",
+     "x": 263,
+     "y": 209,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Field H mm",
+     "x": 759,
+     "y": 209,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "440",
+     "x": 771,
+     "y": 209,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Cell",
+     "x": 251,
+     "y": 257,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "80",
+     "x": 263,
+     "y": 257,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Gap mm",
+     "x": 759,
+     "y": 257,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 771,
+     "y": 257,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Margin mm",
+     "x": 251,
+     "y": 305,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 263,
+     "y": 305,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Dot mm",
+     "x": 759,
+     "y": 305,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1.5",
+     "x": 771,
+     "y": 305,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Organic / Voronoi Voronoi cell Seed Rotation ramp - + Scale ramp - +",
+     "x": 238,
+     "y": 364,
+     "w": 1034,
+     "h": 200,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Organic / Voronoi",
+     "x": 251,
+     "y": 375,
+     "w": 168,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Voronoi cell",
+     "x": 251,
+     "y": 421,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "18",
+     "x": 263,
+     "y": 421,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Seed",
+     "x": 759,
+     "y": 421,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1007",
+     "x": 771,
+     "y": 421,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Rotation ramp",
+     "x": 251,
+     "y": 478,
+     "w": 135,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "",
+     "x": 1113,
+     "y": 467,
+     "w": 74,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 1125,
+     "y": 467,
+     "w": 50,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "-",
+     "x": 1195,
+     "y": 471,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "+",
+     "x": 1231,
+     "y": 471,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Scale ramp",
+     "x": 251,
+     "y": 524,
+     "w": 135,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "",
+     "x": 1113,
+     "y": 513,
+     "w": 74,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 1125,
+     "y": 513,
+     "w": 50,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "-",
+     "x": 1195,
+     "y": 517,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "+",
+     "x": 1231,
+     "y": 517,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "VERIFY": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MACHINE",
+     "x": 238,
+     "y": 40,
+     "w": 72,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN",
+     "x": 310,
+     "y": 40,
+     "w": 36,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 346,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "VERIFY",
+     "x": 399,
+     "y": 40,
+     "w": 56,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "ADVANCED",
+     "x": 455,
+     "y": 40,
+     "w": 84,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Test prints Generates a local sheet from bundled symbols or starts a test print ",
+     "x": 238,
+     "y": 88,
+     "w": 1034,
+     "h": 272,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Test prints",
+     "x": 251,
+     "y": 99,
+     "w": 69,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Generates a local sheet from bundled symbols or starts a test print from the cur",
+     "x": 251,
+     "y": 124,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "GENERATE G-CODE",
+     "x": 251,
+     "y": 166,
+     "w": 150,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "START TEST PRINT",
+     "x": 409,
+     "y": 167,
+     "w": 145,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Pen calibration: one sheet, a ladder per setting \u2014 draw feed, pen-down Z and dwe",
+     "x": 251,
+     "y": 213,
+     "w": 491,
+     "h": 54,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "The Z ladder stays within +/-1mm of the current pen-down depth (never past -30mm",
+     "x": 251,
+     "y": 273,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "GENERATE PEN CAL G-CODE",
+     "x": 251,
+     "y": 315,
+     "w": 217,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "SVG test draw Prints the selected Inkscape SVG directly to FluidNC. Requires pas",
+     "x": 238,
+     "y": 368,
+     "w": 1034,
+     "h": 357,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "SVG test draw",
+     "x": 251,
+     "y": 379,
+     "w": 92,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Prints the selected Inkscape SVG directly to FluidNC. Requires passing system ch",
+     "x": 251,
+     "y": 405,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "SVG X0",
+     "x": 251,
+     "y": 447,
+     "w": 1008,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "25",
+     "x": 263,
+     "y": 447,
+     "w": 984,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "SVG Y0",
+     "x": 251,
+     "y": 495,
+     "w": 1008,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "25",
+     "x": 263,
+     "y": 495,
+     "w": 984,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-uploader__input overflow-hidden absolute-full",
+     "text": "",
+     "x": 1219,
+     "y": 551,
+     "w": 32,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "START SVG PRINT",
+     "x": 251,
+     "y": 659,
+     "w": 137,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Use generated G-code first when validating layout or sampling changes.",
+     "x": 251,
+     "y": 697,
+     "w": 408,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ],
+   "ADVANCED": [
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "PRINT",
+     "x": 86,
+     "y": 2,
+     "w": 71,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "CREATE",
+     "x": 157,
+     "y": 2,
+     "w": 84,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-tab relative-position self-stretch flex",
+     "text": "SETUP",
+     "x": 240,
+     "y": 2,
+     "w": 75,
+     "h": 36,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-toggle cursor-pointer no-outline row",
+     "text": "Require Firebase",
+     "x": 503,
+     "y": 0,
+     "w": 164,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "STOP PRINT",
+     "x": 993,
+     "y": 3,
+     "w": 97,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "EMERGENCY STOP",
+     "x": 1122,
+     "y": 4,
+     "w": 148,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Next action Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT. blockers: plot",
+     "x": 0,
+     "y": 40,
+     "w": 222,
+     "h": 126,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Next action",
+     "x": 13,
+     "y": 51,
+     "w": 74,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Connect the plotter first: SETUP \u2192 MACHINE \u2192 CONNECT.",
+     "x": 13,
+     "y": 77,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "blockers: plotter offline \u00b7 work zero \u00b7 print paused",
+     "x": 13,
+     "y": 119,
+     "w": 196,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Manual motion Blocked while G-code streams. Step mm 1 arrow_drop_down Feed mm/mi",
+     "x": 0,
+     "y": 172,
+     "w": 222,
+     "h": 455,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-card-title",
+     "text": "Manual motion",
+     "x": 13,
+     "y": 183,
+     "w": 95,
+     "h": 20,
+     "fs": "13px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Blocked while G-code streams.",
+     "x": 13,
+     "y": 208,
+     "w": 176,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Step mm 1 arrow_drop_down",
+     "x": 13,
+     "y": 232,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "1",
+     "x": 25,
+     "y": 258,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Feed mm/min",
+     "x": 13,
+     "y": 280,
+     "w": 96,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1000",
+     "x": 25,
+     "y": 280,
+     "w": 72,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y+",
+     "x": 80,
+     "y": 326,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X-",
+     "x": 13,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "X+",
+     "x": 146,
+     "y": 364,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "Y-",
+     "x": 80,
+     "y": 402,
+     "w": 63,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN UP",
+     "x": 13,
+     "y": 442,
+     "w": 64,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN DOWN",
+     "x": 81,
+     "y": 442,
+     "w": 90,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME X",
+     "x": 13,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME Y",
+     "x": 85,
+     "y": 480,
+     "w": 68,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "HOME ALL",
+     "x": 13,
+     "y": 520,
+     "w": 196,
+     "h": 34,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SET WORK ZERO",
+     "x": 13,
+     "y": 560,
+     "w": 196,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper path-label",
+     "text": "Not ready",
+     "x": 13,
+     "y": 598,
+     "w": 56,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "MACHINE",
+     "x": 238,
+     "y": 40,
+     "w": 72,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "PEN",
+     "x": 310,
+     "y": 40,
+     "w": 36,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "SHEET",
+     "x": 346,
+     "y": 40,
+     "w": 53,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "VERIFY",
+     "x": 399,
+     "y": 40,
+     "w": 56,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "ADVANCED",
+     "x": 455,
+     "y": 40,
+     "w": 84,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-card nicegui-card oracle-card compact-card",
+     "text": "Use these controls for curve sampling, origin filters, and symbol correction aft",
+     "x": 238,
+     "y": 88,
+     "w": 1034,
+     "h": 1000,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Use these controls for curve sampling, origin filters, and symbol correction aft",
+     "x": 251,
+     "y": 99,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Sets how many G-code points are generated from SVG curves. Smaller spacing is sm",
+     "x": 251,
+     "y": 167,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "ACTIVE SPACING 1.00 mm",
+     "x": 251,
+     "y": 209,
+     "w": 333,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "PATH DENSITY 100 pts / 100 mm",
+     "x": 588,
+     "y": 209,
+     "w": 333,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "mini-metric",
+     "text": "G-CODE LOAD NORMAL",
+     "x": 926,
+     "y": 209,
+     "w": 333,
+     "h": 45,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Spacing at normal cell size (mm)",
+     "x": 251,
+     "y": 281,
+     "w": 1008,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 263,
+     "y": 281,
+     "w": 984,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Auto density strength",
+     "x": 251,
+     "y": 348,
+     "w": 1008,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 263,
+     "y": 348,
+     "w": 984,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "0.25 to 3 mm",
+     "x": 299,
+     "y": 394,
+     "w": 75,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Finest allowed spacing",
+     "x": 251,
+     "y": 418,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0.25",
+     "x": 263,
+     "y": 418,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Coarsest allowed spacing",
+     "x": 759,
+     "y": 418,
+     "w": 500,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "3",
+     "x": 771,
+     "y": 418,
+     "w": 476,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Send to FluidNC Row at a time arrow_drop_down",
+     "x": 251,
+     "y": 464,
+     "w": 1008,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-select__focus-target",
+     "text": "Row at a time",
+     "x": 263,
+     "y": 489,
+     "w": 1,
+     "h": 1,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Display filters affect preview immediately. Print filters apply from the next ro",
+     "x": 251,
+     "y": 536,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Preview hides cells on screen only. Print selects claimable job origins; filler ",
+     "x": 251,
+     "y": 578,
+     "w": 489,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Global scale multiplies every per-symbol scale, on screen and on paper.",
+     "x": 251,
+     "y": 769,
+     "w": 405,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Random coarse/fine scale the organic layout scatter on paper. 35 / 0 = as shippe",
+     "x": 251,
+     "y": 793,
+     "w": 465,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Random coarse",
+     "x": 251,
+     "y": 828,
+     "w": 135,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "",
+     "x": 1113,
+     "y": 817,
+     "w": 74,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "35",
+     "x": 1125,
+     "y": 817,
+     "w": 50,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "-",
+     "x": 1195,
+     "y": 821,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "+",
+     "x": 1231,
+     "y": 821,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Random fine",
+     "x": 251,
+     "y": 874,
+     "w": 135,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "",
+     "x": 1113,
+     "y": 863,
+     "w": 74,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "0",
+     "x": 1125,
+     "y": 863,
+     "w": 50,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "-",
+     "x": 1195,
+     "y": 867,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "+",
+     "x": 1231,
+     "y": 867,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Global scale",
+     "x": 251,
+     "y": 920,
+     "w": 135,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "",
+     "x": 1113,
+     "y": 909,
+     "w": 74,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 1125,
+     "y": 909,
+     "w": 50,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "-",
+     "x": 1195,
+     "y": 913,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "+",
+     "x": 1231,
+     "y": 913,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "Double-click any scale slider to reset it to 1.0. Scale changes are applied and ",
+     "x": 251,
+     "y": 955,
+     "w": 491,
+     "h": 36,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "Symbol arrow_drop_down",
+     "x": 251,
+     "y": 997,
+     "w": 208,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__input q-placeholder col",
+     "text": "20260416_213514_plotter",
+     "x": 263,
+     "y": 1011,
+     "w": 154,
+     "h": 24,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "oracle-helper",
+     "text": "20260416_213514_plot",
+     "x": 251,
+     "y": 1048,
+     "w": 135,
+     "h": 18,
+     "fs": "12px"
+    },
+    {
+     "tag": "label",
+     "cls": "q-field row no-wrap items-start",
+     "text": "",
+     "x": 1113,
+     "y": 1037,
+     "w": 74,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "input",
+     "cls": "q-field__native q-placeholder",
+     "text": "1",
+     "x": 1125,
+     "y": 1037,
+     "w": 50,
+     "h": 40,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "-",
+     "x": 1195,
+     "y": 1041,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "+",
+     "x": 1231,
+     "y": 1041,
+     "w": 28,
+     "h": 32,
+     "fs": "14px"
+    },
+    {
+     "tag": "div",
+     "cls": "q-expansion-item q-item-type q-expansion-item--collapsed q-expansion-item--standard",
+     "text": "build Diagnostics keyboard_arrow_down",
+     "x": 238,
+     "y": 1096,
+     "w": 1034,
+     "h": 70,
+     "fs": "14px"
+    },
+    {
+     "tag": "button",
+     "cls": "q-btn q-btn-item non-selectable no-outline",
+     "text": "DISMISS",
+     "x": 857,
+     "y": 22,
+     "w": 89,
+     "h": 32,
+     "fs": "14px"
+    }
+   ]
+  }
+ }
+}

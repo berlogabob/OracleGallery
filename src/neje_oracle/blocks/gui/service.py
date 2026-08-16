@@ -10,7 +10,7 @@ from ...shared.models import SystemMode
 from . import screens, tokens
 from .context import GuiContext
 from .styles import page_style
-from .ui import client_timer, estop_button, stop_button
+from .ui import client_timer, estop_button, stop_button, warning_banner
 from .workspaces import generative, motion, texture
 
 
@@ -67,6 +67,13 @@ def build_page() -> None:
         ui.label(
             "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
         ).classes("mobile-operator-warning")
+        # The persistent offline fact lives in a banner that reflows the layout; a floating
+        # toast overlaid whatever sat under it -- first the print strip, then, moved to the
+        # top, the state chip it was meant to explain (audit F-006, re-audit F-102).
+        ctx.offline_banner = warning_banner(
+            "Plotter offline — check power and WiFi, then press CONNECT on SETUP → MACHINE."
+        )
+        ctx.offline_banner.set_visibility(False)
 
         # Machine rail + the screen's own area. Each screen owns everything right of the
         # rail -- canvas, context, action strip -- because "one big thing per screen" cannot

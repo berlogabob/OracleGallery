@@ -159,6 +159,7 @@ class GuiContext:
         self.system_check_label: Any = None
         self.logs_view: Any = None
         self.uploaded_svg_label: Any = None
+        self.offline_banner: Any = None
         self.workspace_tabs: Any = None
 
     # ---- settings persistence -------------------------------------------------
@@ -511,6 +512,18 @@ class GuiContext:
         # readiness line and the blockers list. Queue online-ness: the blockers list, with
         # detail on PRINT. Sheet id: PRINT's canvas readouts. State: the chip.
         self._set_state_chip(status_text)
+        if self.offline_banner is not None:
+            self.offline_banner.set_visibility(self._fluidnc_offline)
+        if self.ready_labels.get("motion_hint") is not None:
+            # The card used to state one static reason ('Blocked while G-code streams.')
+            # whatever the actual state was (F-004 residual).
+            if self._fluidnc_offline:
+                motion_hint = "Offline — connect on SETUP first."
+            elif "run" in status_text.lower():
+                motion_hint = "Blocked while G-code streams."
+            else:
+                motion_hint = "Jog is live. Step and feed apply to the next move."
+            self.ready_labels["motion_hint"].set_text(motion_hint)
         if self.blockers_label is not None:
             self.blockers_label.set_text(f"blockers: {' · '.join(blockers)}" if blockers else "nothing blocking")
         if self.next_action_button is not None:
@@ -829,15 +842,16 @@ class GuiContext:
         if self._fluidnc_offline_notified:
             return
         self._fluidnc_offline_notified = True
-        # Top-anchored: the bottom-center default sat on the CREATE print strip and the
-        # PRINT progress row, occluding controls for as long as it stayed up (F-006).
+        # Transient: it marks the moment of the transition. The persistent fact is the
+        # offline banner (reflows layout) and the OFFLINE chip -- a sticky floating toast
+        # occluded whatever sat under it (F-006, F-102).
         ui.notify(
             "Plotter offline — check power and WiFi, then press CONNECT on SETUP.",
             caption=detail,
             type="negative",
             position="top",
             close_button="DISMISS",
-            timeout=0,
+            timeout=8000,
         )
 
     async def fluidnc_action(
