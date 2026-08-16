@@ -33,29 +33,65 @@ from .support import plot_minutes_for
 
 def primary_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     """The one action that advances the task on this card."""
-    return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-primary")
+    return (
+        ui.button(label, on_click=on_click, color=None)
+        .props("dense unelevated")
+        .classes("oracle-btn oracle-btn-primary")
+    )
 
 
 def safe_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     """Reversible: generate, refresh, preview."""
-    return ui.button(label, on_click=on_click).props("dense flat").classes("oracle-btn oracle-btn-safe")
+    return ui.button(label, on_click=on_click, color=None).props("dense flat").classes("oracle-btn oracle-btn-safe")
 
 
 def danger_action_button(label: str, on_click: Callable[..., Any]) -> Any:
     """Stops something, loses something, or moves the machine unexpectedly."""
-    return ui.button(label, on_click=on_click).props("dense unelevated").classes("oracle-btn oracle-btn-danger")
+    return (
+        ui.button(label, on_click=on_click, color=None)
+        .props("dense unelevated")
+        .classes("oracle-btn oracle-btn-danger")
+    )
+
+
+def stop_button(label: str, on_click: Callable[..., Any]) -> Any:
+    """Halts the current print: danger-outlined -- loud, but subordinate to the e-stop.
+
+    The audit's one sev-4 (F-001): the two most consequential controls were the only raw
+    Quasar buttons in the app, STOP PRINT white-on-gold at 1.7:1. Both now carry the
+    danger hue the operator has already learned, at two distinct weights.
+    """
+    return ui.button(label, on_click=on_click, color=None).props("dense flat").classes("oracle-btn oracle-btn-stop")
+
+
+def estop_button(label: str, on_click: Callable[..., Any]) -> Any:
+    """THE emergency stop. One per app: filled danger, heaviest button on screen."""
+    return (
+        ui.button(label, on_click=on_click, color=None).props("dense unelevated").classes("oracle-btn oracle-btn-estop")
+    )
+
+
+def nudge_button(label: str, on_click: Callable[..., Any]) -> Any:
+    """Slider fine-trim (- / +): quiet, sized by its narrow grid track."""
+    return (
+        ui.button(label, on_click=on_click, color=None)
+        .props("dense flat")
+        .classes("oracle-btn oracle-btn-nudge w-full")
+    )
 
 
 # --- structure ------------------------------------------------------------------
 
 
 @contextmanager
-def card(title: str | None = None, helper: str | None = None) -> Any:
+def card(title: str | None = None, helper: str | None = None, *, compact: bool = False) -> Any:
     """The workspace building block: a panel with an optional title and helper line.
 
-    Replaces 23 hand-written copies of card + bold label + helper_text.
+    Replaces 23 hand-written copies of card + bold label + helper_text. `compact=True`
+    is the workspace card (tight padding, full width); the default is the dialog card.
     """
-    with ui.card().classes("oracle-card") as element:
+    classes = "oracle-card compact-card w-full" if compact else "oracle-card"
+    with ui.card().classes(classes) as element:
         if title:
             section_title(title)
         if helper:
@@ -70,6 +106,12 @@ def section_title(text: str) -> Any:
 def helper_text(text: str) -> Any:
     """Explanatory line under a title. Was 31 helper calls plus 13 hand-inlined copies."""
     return ui.label(text).classes("oracle-helper")
+
+
+def micro_label(text: str) -> Any:
+    """Tiny uppercase column/group label. The third helper-text treatment the audit found
+    (10px bold uppercase in a near-token rust), made one component in the real token."""
+    return ui.label(text).classes("oracle-micro-label")
 
 
 @contextmanager
@@ -204,6 +246,24 @@ def client_timer(interval: float, callback: Callable[[], Any], *, once: bool = F
 # borrow the estimator. It lives here because ui.py is a design-system STYLE_OWNER: every
 # .classes() and ui.card() absorbed from a workspace is deleted from the ratchet counts rather
 # than moved around behind them.
+
+
+@dataclass
+class Section:
+    """One CREATE source or SETUP section: the single return contract for builders.
+
+    Five hand-rolled shapes used to come back from the section builders (a dict of
+    containers, a tuple with a closure, a bare coroutine, a RenderCard-or-None) and
+    screens.py destructured each by hand. A screen needs exactly this much: something
+    to place (`root`), what the shared print strip can do there (`refresh`/`print` +
+    label), and what must happen when the pane becomes visible (`on_show`).
+    """
+
+    root: Any = None
+    refresh: Callable[[], Any] | None = None
+    print: Callable[[], Any] | None = None  # async
+    print_label: str = ""
+    on_show: Callable[[], None] | None = None
 
 
 @dataclass(frozen=True)

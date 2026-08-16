@@ -19,11 +19,11 @@ from nicegui import ui
 
 from ..context import GuiContext
 from ..ui import (
-    danger_action_button,
+    card,
     helper_text,
     primary_action_button,
     safe_action_button,
-    section_title,
+    stop_button,
 )
 
 
@@ -47,17 +47,15 @@ def _next_action(ctx: GuiContext) -> None:
         if ctx.next_action_key == "start_print":
             await ctx.start_print()
 
-    with ui.card().classes("oracle-card compact-card w-full"):
-        section_title("Next action")
+    with card("Next action", compact=True):
         ctx.next_action_button = primary_action_button("—", run).classes("w-full")
         ctx.next_action_hint = helper_text("—")
         ctx.blockers_label = ui.label("blockers: —").classes("oracle-helper")
 
 
 def _jog_and_zero(ctx: GuiContext) -> None:
-    with ui.card().classes("oracle-card compact-card w-full"):
-        section_title("Manual motion")
-        helper_text("Blocked while G-code streams.")
+    with card("Manual motion", compact=True):
+        ctx.ready_labels["motion_hint"] = helper_text("—")
         with ui.row().classes("gap-2 items-end"):
             ctx.fields["jog_step"] = (
                 ui.select(
@@ -69,7 +67,7 @@ def _jog_and_zero(ctx: GuiContext) -> None:
                 .classes("w-24")
             )
             ctx.fields["jog_feed"] = (
-                ui.number("Feed", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
+                ui.number("Feed mm/min", value=1000, min=1, step=100).props("dense outlined").classes("w-24")
             )
         # A real cross. The middle cell used to hold Y-, which put the two Y buttons on the
         # same row as X- and X+ and left the pad reading as four scattered buttons.
@@ -96,7 +94,9 @@ def _jog_and_zero(ctx: GuiContext) -> None:
         # Zeroing concludes the jog flow: fix paper, jog to the upper-left origin, lower Z
         # to pen contact, then confirm. It moves the machine's idea of where the sheet is,
         # hence the danger treatment.
-        danger_action_button("SET WORK ZERO", ctx.set_work_zero).classes("w-full").tooltip(
+        # Danger-outline, not a fourth danger fill: the re-audit found four identical
+        # red fills on one screen diluting the stop family (F-114). Consequential, not a stop.
+        stop_button("SET WORK ZERO", ctx.set_work_zero).classes("w-full").tooltip(
             "Fix paper, jog to the upper-left origin, lower Z and set pen contact, then confirm."
         )
         ctx.ready_labels["message"] = ui.label("-").classes("oracle-helper path-label")

@@ -64,7 +64,7 @@ def test_calibration_workspace_builds_and_populates_layout_and_scale_fields(monk
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
-        calibration.build(ctx)
+        calibration.build_sections(ctx)
 
     expected_fields = {
         "layout_mode",
@@ -126,7 +126,7 @@ def test_work_workspace_builds_and_populates_thermal_queue_and_log_controls(monk
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
-        work.build(ctx)
+        work.build_diagnostics(ctx)
 
     assert {"thermal_printer_url", "thermal_session_dir", "log_filter"} <= ctx.fields.keys()
     assert "message" in ctx.thermal_printer_labels
@@ -167,7 +167,9 @@ def test_generative_workspace_builds_sketch_and_line_text_cards_without_raising(
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
-        generative.build(ctx)
+        generative.build_sketch_canvas()
+        generative.build_sketch_controls(ctx)
+        generative.build_text(ctx)
 
     # Building without raising is the regression signal (catches a renamed ctx attribute,
     # e.g. print_generative_svg, or a shx.list_fonts() break).
@@ -205,7 +207,8 @@ def test_texture_workspace_builds_and_renders_a_shipped_preset(monkeypatch: pyte
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
-        texture_workspace.build(ctx)
+        texture_workspace.build_canvas()
+        texture_workspace.build_controls(ctx)
 
     assert ctx.fields == {}
     # Pick a shipped preset the way the operator would, and confirm real geometry comes back.
@@ -214,7 +217,8 @@ def test_texture_workspace_builds_and_renders_a_shipped_preset(monkeypatch: pyte
     texture_workspace.STATE["height_mm"] = 60.0
     texture_workspace.STATE["cell_mm"] = 1.0
     with ui.column():
-        texture_workspace.build(ctx)
+        texture_workspace.build_canvas()
+        texture_workspace.build_controls(ctx)
     assert texture_workspace.STATE["svg"].startswith("<svg")
     texture_workspace.STATE["graph"] = ""
 
@@ -241,7 +245,7 @@ def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypat
         # Only the per-picture keys, which are exactly the ones build() must NOT overwrite.
         image_workspace.STATE.update({"name": "swatch.png", "bytes": buffer.getvalue()})
         with ui.column():
-            image_workspace.build(ctx)
+            image_workspace.build_sections(ctx)
 
         assert "<svg" in image_workspace.STATE["svg"]
         assert image_workspace.STATE["mode"] == "halftone", "sticky knobs must restore from settings"
@@ -264,7 +268,7 @@ def test_motif_import_card_traces_a_real_preview(monkeypatch: pytest.MonkeyPatch
         image_workspace.MOTIF_STATE.update({"name": "glyph.png", "bytes": _to_png(image)})
         ctx = _new_ctx(monkeypatch)
         with ui.column():
-            image_workspace.build(ctx)
+            image_workspace.build_sections(ctx)
         assert "<svg" in image_workspace.MOTIF_STATE["svg"]
     finally:
         image_workspace.MOTIF_STATE.clear()
@@ -278,7 +282,7 @@ def test_motif_import_card_reports_a_bad_crop_instead_of_raising(monkeypatch: py
         image_workspace.MOTIF_STATE.update({"name": "blank.png", "bytes": _to_png(Image.new("L", (200, 200), 255))})
         ctx = _new_ctx(monkeypatch)
         with ui.column():
-            image_workspace.build(ctx)
+            image_workspace.build_sections(ctx)
         assert image_workspace.MOTIF_STATE["svg"] == ""
     finally:
         image_workspace.MOTIF_STATE.clear()
@@ -305,8 +309,14 @@ def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.Mo
         # IMAGE is in the list because it was not: its twenty-odd knobs lived in module
         # dicts, reached no persistence layer, and this test never built the workspace, so
         # the whole class of bug was invisible to the one test written to catch it.
-        for workspace in (connection, calibration, tests_workspace, work, image_workspace):
-            workspace.build(ctx)
+        for build in (
+            connection.build,
+            calibration.build_sections,
+            tests_workspace.build,
+            work.build_diagnostics,
+            image_workspace.build_sections,
+        ):
+            build(ctx)
 
     # Probe per declared type: an int field is pulled through int(), so a fractional
     # probe would truncate and read as "did not survive" when it persisted correctly.
@@ -685,7 +695,7 @@ def test_z_tune_card_builds_with_step_jog_and_capture_controls(monkeypatch: pyte
     ctx = _new_ctx(monkeypatch)
 
     with ui.column():
-        calibration.build(ctx)
+        calibration.build_sections(ctx)
 
     assert "z_step" in ctx.fields
     assert ctx.machine_z_label is not None
@@ -706,7 +716,7 @@ def test_z_tune_card_explains_itself_without_a_z_servo(monkeypatch: pytest.Monke
     monkeypatch.setattr(ctx.supervisor, "plotter_settings", replace(ctx.supervisor.plotter_settings, use_z_servo=False))
 
     with ui.column():
-        calibration.build(ctx)
+        calibration.build_sections(ctx)
 
     assert "z_step" not in ctx.fields
     assert ctx.machine_z_label is None
@@ -717,7 +727,7 @@ def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest
 
     ctx = _new_ctx(monkeypatch)
     with ui.column():
-        calibration.build(ctx)
+        calibration.build_sections(ctx)
 
     notices: list[str] = []
     monkeypatch.setattr("neje_oracle.blocks.gui.context.ui.notify", lambda msg, **kw: notices.append(str(msg)))
@@ -759,8 +769,14 @@ def test_capture_z_lands_in_the_profile_field_and_survives_the_pull(monkeypatch:
     with ui.column():
         # The whole page, like the round-trip test: persist_and_refresh pulls controls
         # from several tabs at once, and the widget's own on_change fires the real thing.
-        for workspace in (connection, calibration, tests_workspace, work, image_workspace):
-            workspace.build(ctx)
+        for build in (
+            connection.build,
+            calibration.build_sections,
+            tests_workspace.build,
+            work.build_diagnostics,
+            image_workspace.build_sections,
+        ):
+            build(ctx)
 
     monkeypatch.setattr("neje_oracle.blocks.gui.context.ui.notify", lambda *a, **kw: None)
     monkeypatch.setattr(ctx, "persist_and_refresh", ctx.pull_settings_from_fields)

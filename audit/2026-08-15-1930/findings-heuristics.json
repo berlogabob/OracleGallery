@@ -1,0 +1,155 @@
+[
+ {
+  "criterion": "H1",
+  "screen": "PRINT (persistent top bar + left rail, all views)",
+  "severity": 3,
+  "evidence": "The machine's disconnected state is communicated by four conflicting signals: the top-bar chip reads 'OPERATOR PAUSED' (implying a resumable pause) while the plotter is actually offline; the left rail shows a bare 'Not ready' under SET WORK ZERO with no reason; the position readout shows 'X – · Y –'; and the real state only appears in a dismissable red toast. The Manual motion card also permanently shows 'Blocked while G-code streams.' when nothing is streaming, reading as current state. An operator under time pressure cannot tell paused from disconnected without reading the toast before dismissing it.",
+  "screenshot": "screens/print.png",
+  "measurement": null,
+  "recommendation": "Make the top-bar chip reflect connection state first (OFFLINE / CONNECTING / IDLE / RUN / PAUSED); replace bare 'Not ready' with the blocking reason ('Plotter offline — connect on SETUP'); show the 'Blocked while G-code streams' helper only while a stream is active."
+ },
+ {
+  "criterion": "H1",
+  "screen": "CREATE (all sources), PRINT, SETUP/ADVANCED",
+  "severity": 3,
+  "evidence": "The persistent offline toast (x≈340–940, y≈746–778, DISMISS button at 846,746 in dump.json) overlaps interactive controls and status: on CREATE it covers the right half of the REFRESH PREVIEW button (button starts at x≈238, y≈768); on PRINT it covers the layout filename ('testsvg_20260814…' truncated) and the progress bar, and the status line 'Uploaded SVG finished: TEXT ZZBVFNTL' is clipped at the 800px viewport edge; on SETUP/ADVANCED it covers the 'Random coarse/fine' slider row. The only remedy is dismissing the toast, after which the offline warning is gone entirely.",
+  "screenshot": "screens/create_texture.png",
+  "measurement": "dump.json: DISMISS button at x=846 y=746 w=87 h=32 on every view; PRINT SKETCH at y=768 h=32 (bottom edge = viewport bottom)",
+  "recommendation": "Move the persistent connection warning into a reserved banner strip (or the top-bar chip) that reflows content instead of floating over controls; keep toasts for transient events only."
+ },
+ {
+  "criterion": "H2",
+  "screen": "CREATE/IMAGE",
+  "severity": 3,
+  "evidence": "The 'Pen lifts' slider renders a literal code expression to the operator as its value label: 'value >= 1024 ? 'off' : value' — an unevaluated JS ternary shown in the tooltip/badge. The adjacent quality slider also drops its value badge ('3') on top of the helper sentence, obscuring it.",
+  "screenshot": "screens/create_image.png",
+  "measurement": null,
+  "recommendation": "Evaluate the label function so the badge shows the number or 'off'; fix the slider label-function binding and offset badges so they never cover helper text."
+ },
+ {
+  "criterion": "H4",
+  "screen": "Top bar + PRINT right panel (all views)",
+  "severity": 3,
+  "evidence": "Three differently-scoped stop controls compete with no scope hints: STOP PRINT (gold, top bar), EMERGENCY STOP (red, top bar), STOP SYSTEM (black, PRINT panel), plus RESET / ABORT on SETUP/MACHINE. STOP SYSTEM is styled identically to START SYSTEM (both filled black, stacked 40px apart at x=1009), giving the destructive action no distinct look. Worst, STOP PRINT — the control an operator reaches for first in a gallery incident — is white text on gold, the least legible element in the top bar.",
+  "screenshot": "screens/print.png",
+  "measurement": "measurements.json token_contrast: GOLD on CREAM = 2.08:1, AA_normal false, AA_large false (#C9A84C on #F7F4EF); dump.json: START SYSTEM y=116, STOP SYSTEM y=197, same 263×32 black style",
+  "recommendation": "Differentiate the stop hierarchy: give STOP PRINT an AA-compliant warning treatment (e.g. GOLD_DIM #8A6F2E or DANGER outline), style STOP SYSTEM as destructive (outlined red) distinct from START SYSTEM, and add tooltips stating each control's scope ('pauses current sheet' vs 'kills services' vs 'halts motion now')."
+ },
+ {
+  "criterion": "H5",
+  "screen": "SETUP/VERIFY, CREATE/IMAGE, CREATE/MOTIF",
+  "severity": 3,
+  "evidence": "Primary actions render fully enabled while their prerequisites are missing: SETUP/VERIFY shows a filled black START SVG PRINT button directly next to the text 'No SVG selected'; CREATE/IMAGE shows PRINT IMAGE while 'No image selected'; CREATE/MOTIF shows SAVE TO BANK (filled) and USE IN SKETCH while 'No picture selected'. Nothing signals the action cannot succeed until it is pressed.",
+  "screenshot": "screens/setup_verify.png",
+  "measurement": null,
+  "recommendation": "Disable (dim) prerequisite-gated primary buttons and put the reason in their tooltip/adjacent helper; enable on valid input."
+ },
+ {
+  "criterion": "H9",
+  "screen": "All views (offline toast) + SETUP/MACHINE",
+  "severity": 2,
+  "evidence": "The offline error mixes plain language with raw developer output: 'FluidNC Telnet offline: :23; HTTP offline ([Errno 61] Connection refused)' — a bare port (':23') and a Python errno leak into the operator UI. On SETUP/MACHINE, the one screen where the operator goes to fix it, the same detail line is truncated to '…HTTP offline ([Errno 61] Connecti…' with no way to expand it. The first toast line ('check power and WiFi, then press CONNECT on SETUP') is good; the detail line undermines it.",
+  "screenshot": "screens/setup_machine.png",
+  "measurement": null,
+  "recommendation": "Keep the plain-language line; move protocol detail behind an expandable 'details' affordance (untruncated), phrased as 'Control channel (telnet, port 23): unreachable'."
+ },
+ {
+  "criterion": "H4",
+  "screen": "SETUP/PEN, SETUP/ADVANCED, CREATE/TEXTURE, CREATE/IMAGE, CREATE/MOTIF",
+  "severity": 2,
+  "evidence": "Decimal separators are inconsistent, sometimes within one screen: SETUP/PEN shows 'Pen width mm 0,3' (comma) beside 'Z step mm 0.5' (dot); SETUP/ADVANCED helper says 'CLAMP 0.25 to 3 mm' (dot) while the field below shows '0,25' (comma); CREATE fields show '0,8', '0,1', '1,5', '0,4' while origin reads '25.0 / 25.0 mm'. Beyond consistency, this is error-prone: an operator retyping '0.3' into a comma-formatted field may silently get 3 mm depending on the parser.",
+  "screenshot": "screens/setup_pen.png",
+  "measurement": null,
+  "recommendation": "Pick one locale for numeric display (dot, matching the mm/G-code domain), format all fields through it, and accept both separators on input."
+ },
+ {
+  "criterion": "H2",
+  "screen": "SETUP/MACHINE",
+  "severity": 2,
+  "evidence": "The connection status row uses protocol jargon as operator-facing metrics: 'WEBUI offline', 'TELNET offline', 'INPUTS none', 'MODAL -'. 'MODAL' (G-code modal state) showing '-' is meaningless to a non-firmware operator, and nothing explains which of these must be green before printing.",
+  "screenshot": "screens/setup_machine.png",
+  "measurement": "dump.json SETUP: mini-metric divs 'WEBUI offline' (x=251), 'TELNET offline' (x=504), 'INPUTS none' (x=757), 'MODAL -' (x=1010)",
+  "recommendation": "Relabel in operator terms ('Browser UI', 'Control channel', 'Limit switches', 'Machine mode') with a one-line 'what good looks like' helper, or collapse to a single Connected/Not-connected verdict with details on demand."
+ },
+ {
+  "criterion": "H2",
+  "screen": "SETUP/VERIFY (verify-gcode flow success)",
+  "severity": 2,
+  "evidence": "The success notification after GENERATE G-CODE exposes a raw macOS temp path: 'G-code file: /var/folders/m0/bl8qzm4x6tn5d0tgmfj8ntf40000gn/T/gui-flows-i_a68xvv/spool/gui_sheet_20260815_230416.gcode'. The operator cannot act on an ephemeral temp-dir path; the meaningful facts (file name, it's in the spool, ready to print) are buried in it.",
+  "screenshot": "screens/flow_verify_gcode.png",
+  "measurement": null,
+  "recommendation": "Show 'gui_sheet_20260815_230416.gcode written to spool' with a link/button to preview or queue it; keep full paths in logs."
+ },
+ {
+  "criterion": "H1",
+  "screen": "CREATE/TEXT",
+  "severity": 2,
+  "evidence": "The text preview ('NEJE ORACLE') renders in a small box pinned to the canvas's top-left corner, overflowing the canvas edge with the glyph tops clipped, instead of being placed on the sheet preview like other sources. The operator cannot judge placement or size from it, defeating the preview's purpose.",
+  "screenshot": "screens/create_text.png",
+  "measurement": null,
+  "recommendation": "Render the text preview inside the sheet canvas at its actual origin/scale, matching SKETCH/TEXTURE preview behavior."
+ },
+ {
+  "criterion": "H6",
+  "screen": "CREATE/SHEET",
+  "severity": 2,
+  "evidence": "The 'Image folder' input is a free-text filesystem path field with no browse/picker and no example placeholder beyond the label; the helper says 'Point Image folder at a folder of images.' The operator must recall and type an exact server-side path with no validation feedback shown. A stray '-' placeholder also dangles under the Travel lines toggle.",
+  "screenshot": "screens/create_sheet.png",
+  "measurement": null,
+  "recommendation": "Offer a folder picker or a dropdown of known content folders (recent/scanned), validate the path on blur with a found-N-images confirmation, and hide the empty '-' stats line."
+ },
+ {
+  "criterion": "H4",
+  "screen": "SETUP/VERIFY",
+  "severity": 2,
+  "evidence": "The SVG upload dropzone is a bare black bar reading only '0.0B / 0.00%' with a '+' icon — no instruction text — while the equivalent dropzones on CREATE/IMAGE ('Drop a PNG/JPG here, or click + to choose') and CREATE/MOTIF ('Drop a photo here, or click + to choose') are labeled. Same component, inconsistent affordance; '0.0B / 0.00%' alone reads as debug output.",
+  "screenshot": "screens/setup_verify.png",
+  "measurement": null,
+  "recommendation": "Add the same 'Drop an Inkscape SVG here, or click + to choose' label used by the other dropzones."
+ },
+ {
+  "criterion": "H7",
+  "screen": "PRINT",
+  "severity": 2,
+  "evidence": "The '?' legend button — the only in-context help for reading the sheet preview (ring/dot semantics operators need mid-run) — is a 17px-wide target at the preview's top-right corner, below the 24px minimum and the smallest real control in the app.",
+  "screenshot": "screens/print.png",
+  "measurement": "measurements.json PRINT small_targets: {label: '?', w: 17, h: 34, min: 24}; dump.json: button '?' at x=975 y=40 w=17 h=34",
+  "recommendation": "Enlarge the button to ≥32×32 (icon + 'Legend' label) or make the legend toggle part of the preview header row."
+ },
+ {
+  "criterion": "H2",
+  "screen": "CREATE/TEXT",
+  "severity": 2,
+  "evidence": "The Font selector displays the internal font identifier 'zzBVFNTL' as the visible choice — a code the operator must memorize to map to an actual letterform; the helper text ('Single-stroke engraving fonts') does not explain it, and there is no glyph preview in the field.",
+  "screenshot": "screens/create_text.png",
+  "measurement": null,
+  "recommendation": "Show human-readable font names (and ideally render each option in its own face) and keep internal IDs out of the UI."
+ },
+ {
+  "criterion": "H2",
+  "screen": "PRINT",
+  "severity": 1,
+  "evidence": "Queue metrics use terse dev shorthand: 'FAIL/SKIP 0 / 177' has an unexplained denominator (177 of what, when PENDING is 1?), and the caption below reads 'Queue counts loaded' — a system event, not operator information. The Next-action line 'blockers: work zero · print paused' is similarly log-styled.",
+  "screenshot": "screens/print.png",
+  "measurement": null,
+  "recommendation": "Label the denominator ('0 failed / 177 total jobs' or split into two metrics), drop 'Queue counts loaded', and phrase blockers as sentences ('Waiting on: work zero, print paused')."
+ },
+ {
+  "criterion": "H8",
+  "screen": "Left rail (all views)",
+  "severity": 1,
+  "evidence": "The jog-cluster and rail card edges land 1–3px apart instead of on a shared column: measured edge groups at 79/80px, 80/82px, 82/83px on every view (and 1063/1065, 1090/1093 on CREATE/MOTIF; 394/397 on SETUP/PEN), producing a subtly ragged rail.",
+  "screenshot": "screens/print.png",
+  "measurement": "measurements.json alignment_near_misses (all views): edges [79,80] offset 1, [80,82] offset 2, [82,83] offset 1; CREATE/MOTIF adds [1063,1065] offset 2, [1090,1093] offset 3; SETUP/PEN adds [394,397] offset 3",
+  "recommendation": "Snap the jog buttons and card contents to a shared grid column so vertical edges align exactly."
+ },
+ {
+  "criterion": "H2",
+  "screen": "Left rail (all views)",
+  "severity": 1,
+  "evidence": "The 'Feed' field in Manual motion has no unit ('Feed 1000') while its sibling shows 'Step mm'; feed is mm/min but the operator must know that. Same pattern on SETUP/SHEET where Field W/H, Cell, Gap, Margin omit units while 'Dot mm' includes them.",
+  "screenshot": "screens/setup_sheet.png",
+  "measurement": null,
+  "recommendation": "Suffix every numeric field with its unit ('Feed mm/min', 'Field W mm', …) as already done for Step mm and Dot mm."
+ }
+]

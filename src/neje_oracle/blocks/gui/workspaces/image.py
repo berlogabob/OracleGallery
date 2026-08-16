@@ -24,7 +24,7 @@ from ....shared.gui_settings import GuiSettings
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import read_upload_event_payload
-from ..ui import helper_text, primary_action_button, safe_action_button
+from ..ui import card, helper_text, primary_action_button, safe_action_button
 
 # These dicts are still the workspace's working state, but the tune-once knobs are no longer
 # only here: operators asked for sticky values, so they are mirrored to GuiSettings (see
@@ -334,24 +334,18 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced", source: st
     return {}
 
 
-def build(ctx: GuiContext) -> None:
-    """Legacy stacked form, kept for tests that build this workspace alone."""
-    with ui.column().classes("w-full gap-2"):
-        build_sections(ctx)
-
-
 def build_sections(
     ctx: GuiContext,
     preview_slots: dict[str, Any] | None = None,
     *,
     actions: bool = True,
     on_use_in_sketch: Any = None,
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The three image sources as separate columns the CREATE screen can place as panes.
+) -> dict[str, oracle.Section]:
+    """The three image sources as Sections the CREATE screen can place as panes.
 
     `preview_slots` maps a section name to a container its render preview should land in --
     the canvas column of that mode -- so knobs and picture live in different grid tracks.
-    Returns (sections, render-card handles) so the screen's print strip can dispatch.
+    Each Section carries its container (`root`) and what the print strip can do there.
     """
     slots = preview_slots or {}
     sections: dict[str, Any] = {}
@@ -379,8 +373,7 @@ def build_sections(
 
     sections["image"] = ui.column().classes("w-full gap-2")
     with sections["image"]:
-        with ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Image to line art").classes("text-sm font-bold")
+        with card("Image to line art", compact=True):
             helper_text(
                 "A single pen cannot print grey. Each mode turns tone into geometry the plotter can actually draw."
             )
@@ -407,7 +400,7 @@ def build_sections(
             ).classes("w-full")
 
         def conversion_controls() -> None:
-            mode_help = ui.label(MODE_HELP[STATE["mode"]]).classes("text-xs text-[#8f4f2b]")
+            mode_help = helper_text(MODE_HELP[STATE["mode"]])
             built_controls: dict[str, Any] = {}
 
             def set_field(key: str, value: Any) -> None:
@@ -486,26 +479,41 @@ def build_sections(
                     .classes("w-28")
                 )
 
-            quality_label = ui.label("").classes("text-xs text-[#8f4f2b]")
+            quality_label = helper_text("")
             built_controls["quality_label"] = quality_label
             quality_fader = ui.slider(
                 min=0,
                 max=len(QUALITY_PRESETS) - 1,
                 step=1,
                 value=quality_index(str(STATE["quality"])),
-                on_change=lambda e: set_field("quality", QUALITY_PRESETS[int(e.value)]),
-            ).props(
-                "label-always markers snap :label-value=\"['draft','fast','balanced','fine','max'][value]\""
-            )
+            ).props("label-always markers snap")
+
+            # The value bubbles are computed here, not in a Vue :label-value expression:
+            # QSlider does not expose `value` to that binding, so the audit found the raw
+            # unevaluated code rendered to the operator as the label (F-008).
+            def _set_quality(e: Any) -> None:
+                set_field("quality", QUALITY_PRESETS[int(e.value)])
+                quality_fader.props(f'label-value="{QUALITY_PRESETS[int(e.value)]}"')
+
+            quality_fader.props(f'label-value="{STATE["quality"]}"')
+            quality_fader.on_value_change(_set_quality)
 
             oracle.section_title("Pen lifts")
+
+            def _lift_label(value: int) -> str:
+                return "off" if value >= 1024 else str(value)
+
+            def _set_lift(e: Any) -> None:
+                set_field("lift_budget", int(e.value))
+                ctx.fields["lift_budget"].props(f'label-value="{_lift_label(int(e.value))}"')
+
             ctx.fields["lift_budget"] = ui.slider(
                 min=0,
                 max=1024,
                 step=1,
                 value=int(STATE["lift_budget"]),
-                on_change=lambda e: set_field("lift_budget", int(e.value)),
-            ).props("label-always markers snap :label-value=\"value >= 1024 ? 'off' : value\"")
+                on_change=_set_lift,
+            ).props(f'label-always markers snap label-value="{_lift_label(int(STATE["lift_budget"]))}"')
             for fader in quality_fader, ctx.fields["lift_budget"]:
                 fader.classes("w-full tight-slider")
             helper_text(
@@ -749,7 +757,7 @@ def build_sections(
                     on_change=lambda e: set_sheet("sheet_index", int(e.value or 0)),
                 ).props("dense outlined").classes("w-24").tooltip("0 = first sheet of the folder, 1 = next, ...")
 
-            sheet_info = ui.label("-").classes("text-xs text-[#8f4f2b]")
+            sheet_info = helper_text("Choose an image folder above to fill the sheet preview.")
 
         def render_sheet() -> oracle.Render:
             capacity = _sheet_capacity()
@@ -859,10 +867,17 @@ def build_sections(
 
     refresh_preview()
     refresh_sheet_capacity()
-    return sections, {
-        "image": card_handle["handle"],
-        "sheet": sheet_card_handle["handle"],
-        "motif_refresh": motif_refresh,
+    image_handle = card_handle["handle"]
+    sheet_handle = sheet_card_handle["handle"]
+    return {
+        "image": oracle.Section(
+            root=sections["image"], refresh=image_handle.refresh, print=image_handle.print, print_label="PRINT IMAGE"
+        ),
+        "sheet": oracle.Section(
+            root=sections["sheet"], refresh=sheet_handle.refresh, print=sheet_handle.print, print_label="PRINT SHEET"
+        ),
+        # Motif saves to the bank instead of printing, so the strip only offers refresh.
+        "motif": oracle.Section(root=sections["motif"], refresh=motif_refresh),
     }
 
 
@@ -904,15 +919,14 @@ def _build_motif_import_card(ctx: GuiContext, preview_slot: Any = None, on_use_i
     if preview_slot is not None:
         with preview_slot:
             preview = ui.html().classes("preview-frame preview-fill w-full")
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Import motif from picture").classes("text-sm font-bold")
+    with card("Import motif from picture", compact=True):
         helper_text(
             "Crop to ONE motif, then save it into the pattern bank. "
             "Contour at 1 band gives a single outline; more bands double every stroke. "
             "Autocontrast off is usually better for fabric photos — it lifts weave texture into ink."
         )
         selected_label = ui.label("No picture selected").classes("path-label text-xs")
-        status_label = ui.label("-").classes("text-xs text-[#8f4f2b]")
+        status_label = helper_text("-")
         if preview is None:
             preview = ui.html().classes("preview-frame w-full")
 

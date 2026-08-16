@@ -11,7 +11,9 @@ state+supervisor bundle, not a DI framework.
 
 from __future__ import annotations
 
+import functools
 import subprocess
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
@@ -19,6 +21,7 @@ from typing import Any, TypeVar
 from nicegui import run, ui
 
 from ...app.supervisor import SupervisorService
+from ...shared import telemetry
 from ...shared.models import ComponentStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
@@ -43,7 +46,7 @@ from .support import (
     save_oracle_plotter_config,
     save_symbol_scales,
 )
-from .ui import helper_text, notify_if_connected
+from .ui import card, danger_action_button, helper_text, notify_if_connected, safe_action_button
 
 # The three screens. Anything else -- including the seven module-named tabs these replaced --
 # falls back to PRINT, which is where an operator should land anyway.
@@ -51,6 +54,36 @@ VALID_WORKSPACES = {"print", "create", "setup"}
 
 
 _T = TypeVar("_T")
+
+
+def _instrumented(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Wrap an async task handler with task_start/task_ok/task_fail telemetry.
+
+    A handler that returns bool reports that bool as the outcome (print_svg_payload
+    returns False on a refused print without raising).
+    """
+
+    def decorate(fn: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(fn)
+        async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+            started = time.monotonic()
+            telemetry.log_event("task_start", task=name)
+            try:
+                result = await fn(self, *args, **kwargs)
+            except Exception as exc:
+                telemetry.log_event(
+                    "task_fail", task=name, duration_s=round(time.monotonic() - started, 2), error=str(exc)[:200]
+                )
+                raise
+            ok = result if isinstance(result, bool) else True
+            telemetry.log_event(
+                "task_ok" if ok else "task_fail", task=name, duration_s=round(time.monotonic() - started, 2)
+            )
+            return result
+
+        return wrapper
+
+    return decorate
 
 
 class GuiContext:
@@ -112,6 +145,11 @@ class GuiContext:
         # probe after another action, etc). The live-strip "Now" metric stays as
         # the persistent indicator while this stays quiet in between transitions.
         self._fluidnc_offline_notified = False
+        # The probe's last verdict. The audit found the offline state communicated by four
+        # conflicting signals (F-004) and the Next-action card recommending a jog while the
+        # machine was unreachable (F-005); this one flag lets the chip, the blockers line
+        # and the next-action hint all say the same thing.
+        self._fluidnc_offline = False
 
         # Element handles assigned during layout / workspace build.
         self.preview: Any = None
@@ -121,6 +159,7 @@ class GuiContext:
         self.system_check_label: Any = None
         self.logs_view: Any = None
         self.uploaded_svg_label: Any = None
+        self.offline_banner: Any = None
         self.workspace_tabs: Any = None
 
     # ---- settings persistence -------------------------------------------------
@@ -333,6 +372,7 @@ class GuiContext:
         self.refresh_status()
         self.refresh_logs()
 
+    @_instrumented("print_svg")
     async def print_svg_payload(self, svg_bytes: bytes, name: str) -> bool:
         """Print an SVG built in-process (line text, image conversion). Returns success."""
         if not svg_bytes:
@@ -366,7 +406,10 @@ class GuiContext:
         except Exception as exc:  # noqa: BLE001
             ui.notify(f"G-code generation failed: {exc}", color="negative")
             return
-        ui.notify(f"G-code file: {output['gcode']}", color="positive")
+        ui.notify(
+            f"{Path(output['gcode']).name} written to the spool. Press START TEST PRINT to plot it.",
+            color="positive",
+        )
         self.refresh_status()
 
     async def generate_pen_cal(self) -> None:
@@ -439,6 +482,9 @@ class GuiContext:
         readiness = self.supervisor.runtime_store.load_plotter_readiness()
         queue_online = bool(queue.get("online"))
         blockers: list[str] = []
+        if self._fluidnc_offline:
+            # First, because it blocks everything below it: no jog, no zero, no print.
+            blockers.append("plotter offline")
         if not readiness.work_zero_set:
             blockers.append("work zero")
         if not queue_online:
@@ -466,6 +512,18 @@ class GuiContext:
         # readiness line and the blockers list. Queue online-ness: the blockers list, with
         # detail on PRINT. Sheet id: PRINT's canvas readouts. State: the chip.
         self._set_state_chip(status_text)
+        if self.offline_banner is not None:
+            self.offline_banner.set_visibility(self._fluidnc_offline)
+        if self.ready_labels.get("motion_hint") is not None:
+            # The card used to state one static reason ('Blocked while G-code streams.')
+            # whatever the actual state was (F-004 residual).
+            if self._fluidnc_offline:
+                motion_hint = "Offline — connect on SETUP first."
+            elif "run" in status_text.lower():
+                motion_hint = "Blocked while G-code streams."
+            else:
+                motion_hint = "Jog is live. Step and feed apply to the next move."
+            self.ready_labels["motion_hint"].set_text(motion_hint)
         if self.blockers_label is not None:
             self.blockers_label.set_text(f"blockers: {' · '.join(blockers)}" if blockers else "nothing blocking")
         if self.next_action_button is not None:
@@ -477,6 +535,10 @@ class GuiContext:
                 self.next_action_button.set_text(next_action.upper())
                 self.next_action_button.set_visibility(True)
                 hint = ""
+            elif self._fluidnc_offline:
+                # Jogging advice while the machine is unreachable is the wrong next step.
+                self.next_action_button.set_visibility(False)
+                hint = "Connect the plotter first: SETUP → MACHINE → CONNECT."
             elif self.next_action_key == "work_zero":
                 self.next_action_button.set_visibility(False)
                 hint = "Jog to the paper origin, then SET WORK ZERO below."
@@ -533,6 +595,7 @@ class GuiContext:
 
     # ---- system lifecycle -----------------------------------------------------
 
+    @_instrumented("start_system")
     async def start_system(self) -> None:
         self.pull_settings_from_fields()
         self._save_settings()
@@ -540,6 +603,7 @@ class GuiContext:
         ui.notify("System supervisor started in safe mode", color="positive")
         self.refresh_status()
 
+    @_instrumented("stop_system")
     async def stop_system(self) -> None:
         await run.io_bound(self.supervisor.stop_system)
         ui.notify("System stopped safely", color="warning")
@@ -578,6 +642,7 @@ class GuiContext:
         if workspace in VALID_WORKSPACES:
             self.active_workspace["value"] = workspace
             self.supervisor.runtime_store.save_json("gui_workspace", {"tab": workspace})
+            telemetry.log_event("screen_switch", screen=workspace)
 
     def preview_mode_changed(self, value: Any) -> None:
         mode = str(value or "preview")
@@ -694,6 +759,13 @@ class GuiContext:
         chip = self.live_labels.get("fluidnc")
         if chip is None:
             return
+        if self._fluidnc_offline:
+            # Connection state outranks run state: 'OPERATOR PAUSED' on an unreachable
+            # machine reads as a resumable pause, which the audit found operators could
+            # not tell apart from disconnection without the toast (F-004).
+            chip.set_text("\u2715  OFFLINE")
+            chip.classes(replace="state-chip state-offline")
+            return
         lowered = status_text.lower()
         glyph, tone = "\u2715", "state-offline"
         for needle, mark, css in self._STATE_MARKS:
@@ -738,7 +810,7 @@ class GuiContext:
             labels["message"].set_text(str(result.get("message") or result.get("last_error") or "-"))
 
     def confirm_action(self, title: str, message: str, action: Any) -> None:
-        with ui.dialog() as dialog, ui.card().classes("oracle-card"):
+        with ui.dialog() as dialog, card():
             ui.label(title).classes("text-sm font-bold")
             helper_text(message)
 
@@ -754,8 +826,8 @@ class GuiContext:
                     self.refresh_logs()
 
             with ui.row().classes("gap-2"):
-                ui.button("Cancel", on_click=dialog.close).props("dense flat")
-                ui.button("Confirm", on_click=confirmed).props("dense color=warning")
+                safe_action_button("Cancel", dialog.close)
+                danger_action_button("Confirm", confirmed)
         dialog.open()
 
     def _notify_fluidnc_offline(self, detail: str) -> None:
@@ -770,26 +842,36 @@ class GuiContext:
         if self._fluidnc_offline_notified:
             return
         self._fluidnc_offline_notified = True
+        # Transient: it marks the moment of the transition. The persistent fact is the
+        # offline banner (reflows layout) and the OFFLINE chip -- a sticky floating toast
+        # occluded whatever sat under it (F-006, F-102).
         ui.notify(
             "Plotter offline — check power and WiFi, then press CONNECT on SETUP.",
             caption=detail,
             type="negative",
+            position="top",
             close_button="DISMISS",
-            timeout=0,
+            timeout=8000,
         )
 
     async def fluidnc_action(
         self, label: str, action: Any, *, refresh_probe: bool = True, success_message: str | None = None
     ) -> None:
         ui.notify(f"Sending {label}...", color="info")
+        telemetry.log_event("task_start", task=f"fluidnc:{label}")
         try:
             state = await self._blocking(action)
         except Exception as exc:  # noqa: BLE001
+            telemetry.log_event("task_fail", task=f"fluidnc:{label}", error=str(exc)[:200])
             ui.notify(f"{label} failed: {exc}", color="negative")
             self.refresh_status()
             self.refresh_logs()
             self.restore_workspace()
             return
+        telemetry.log_event(
+            "task_ok" if state.status == ComponentStatus.RUNNING else "task_fail",
+            task=f"fluidnc:{label}",
+        )
         if state.status == ComponentStatus.RUNNING and success_message:
             ui.notify(success_message, color="positive")
         else:
@@ -810,6 +892,7 @@ class GuiContext:
             self.restore_workspace()
             return
         if probe is None:  # ponytail: no configured endpoint yet — offline, not an error
+            self._fluidnc_offline = True
             self.update_fluidnc_labels({"controller_state": "Offline", "message": "No FluidNC endpoint configured"})
             self._notify_fluidnc_offline("No FluidNC endpoint configured yet.")
             self.refresh_logs()
@@ -818,6 +901,7 @@ class GuiContext:
         self.supervisor.check_fluidnc(probe)
         result = {**probe.to_dict(), "online": probe.online, "host": probe.telnet_host, "port": probe.telnet_port}
         self.update_fluidnc_labels(result)
+        self._fluidnc_offline = not probe.online
         if probe.online:
             self._fluidnc_offline_notified = False
             notify_if_connected(probe.message, color="positive")
@@ -953,12 +1037,14 @@ class GuiContext:
             lambda: self.fluidnc_action("unlock", self.supervisor.unlock_fluidnc_alarm),
         )
 
+    @_instrumented("stop_print")
     async def stop_print(self) -> None:
         state = await self._blocking(self.supervisor.stop_print)
         ui.notify(state.message, color="warning")
         self.refresh_status()
         self.refresh_logs()
 
+    @_instrumented("emergency_stop")
     async def emergency_stop(self) -> None:
         state = await self._blocking(self.supervisor.emergency_stop_fluidnc)
         ui.notify(state.message, color="negative")

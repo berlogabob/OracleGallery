@@ -1,0 +1,128 @@
+[
+ {
+  "criterion": "VD-TYPE-3",
+  "screen": "ALL (top bar) + SETUP/MACHINE",
+  "severity": 3,
+  "evidence": "STOP PRINT (top bar, every view) and UNLOCK (SETUP/MACHINE recovery row) render a white/cream label on a gold fill. Both are declared as Quasar `color=warning` (src/neje_oracle/blocks/gui/service.py L239, workspaces/connection.py L52) â ui.colors() at service.py L205 never overrides `warning`, so the fill is Quasar's default #F2C037, even lighter than the theme GOLD. These are the app's two mid-tier safety controls and their labels are near-invisible.",
+  "screenshot": "screens/setup_machine.png",
+  "measurement": "token_contrast: GOLD on CREAM = 2.08 (fails AA and AA-large) â the nearest measured token pair; light-on-#F2C037 is lower still (~1.8:1)",
+  "recommendation": "Map Quasar `warning` to a token that carries dark text (e.g. GOLD fill + INK label, or WARN_WASH fill + GOLD_DIM border + INK text), and register it in ui.colors() so no default Quasar color can leak into safety controls."
+ },
+ {
+  "criterion": "VD-TYPE-3",
+  "screen": "ALL (top bar state chip)",
+  "severity": 2,
+  "evidence": "The FluidNC state chip 'OPERATOR PAUSED' â the single machine-state readout an operator scans constantly â is 12px bold GOLD_DIM text (.state-warn, service.py L87; WARN = GOLD_DIM in tokens.py L37) on WARN_WASH. 12px is normal-size text, so the 4.5:1 threshold applies and 4.36 misses it.",
+  "screenshot": "screens/print.png",
+  "measurement": "token_contrast: GOLD_DIM on CREAM = 4.36 (fails AA normal, passes AA-large); chip font-size 12px",
+  "recommendation": "Darken WARN by one step (~#7A6228 reaches 4.5+ on CREAM/WARN_WASH) or set the chip's text in INK and keep GOLD_DIM for the border/background wash only."
+ },
+ {
+  "criterion": "VD-COL-3",
+  "screen": "ALL (top bar, toasts) + SETUP/MACHINE",
+  "severity": 2,
+  "evidence": "The two highest-stakes colors on screen are off-palette Quasar defaults, not Oracle tokens: EMERGENCY STOP, RESET / ABORT and every error toast use default `negative` (#C10015, bright signal red), STOP PRINT/UNLOCK/Confirm use default `warning` (#F2C037). The theme defines DANGER #8C2F1D (7.54:1, passes) and WARN precisely for these roles (tokens.py L36-38) but service.py L205 only maps primary/secondary/accent, so the rendered reds and golds match neither the design system nor the measured token table.",
+  "screenshot": "screens/print.png",
+  "measurement": "tokens.py DANGER=#8C2F1D (measured 7.54, passes AA) vs rendered Quasar negative #C10015; tokens.py GOLD/#C9A84C vs rendered #F2C037",
+  "recommendation": "Extend ui.colors() with warning/negative/positive mapped to WARN, DANGER, OK so every semantic color on screen is a measured theme token."
+ },
+ {
+  "criterion": "VD-COL-2",
+  "screen": "ALL (left rail) â clearest on PRINT",
+  "severity": 2,
+  "evidence": "One class, .oracle-helper (12px, color RUST â service.py L175), carries both neutral guidance ('XY speed writes G-code feed rates in mm/minâ¦', 'System check runs automatically when print starts.') and live blocking state ('Blocked while G-code streams.', 'Not ready', 'blockers: work zero Â· print paused'). An operator cannot distinguish a caution from a caption by color; the semantic WARN/DANGER tokens the theme reserves for exactly this (tokens.py L32-38) are unused here.",
+  "screenshot": "screens/print.png",
+  "measurement": "dump.json PRINT: 'Blocked while G-code streams.', 'Not ready', 'blockers: â¦' all class oracle-helper, 12px â identical to instructional helper text",
+  "recommendation": "Split the class: keep RUST for guidance, render live blockers/readiness in WARN or DANGER with an icon, so state text is visually distinct from commentary."
+ },
+ {
+  "criterion": "VD-COL-1",
+  "screen": "SETUP/PEN (worst case; pattern is app-wide)",
+  "severity": 1,
+  "evidence": "RUST is the brand accent, yet on SETUP/PEN roughly half of all text blocks are rust helper paragraphs (Motion speed intro, 'Shipped values are starting pointsâ¦', the entire 3-line Z-tune instruction block, 'Pen profile' label). When most running text is accent-colored, the accent stops signaling anything â links, focus and genuine emphasis no longer stand out.",
+  "screenshot": "screens/setup_pen.png",
+  "measurement": null,
+  "recommendation": "Set helper prose in INK_MID or INK_MUTED (both pass AA) and reserve RUST for links, active states, and one emphasis per card."
+ },
+ {
+  "criterion": "VD-TYPE-1",
+  "screen": "ALL â worst on SETUP/PEN, SETUP/VERIFY, CREATE/MOTIF",
+  "severity": 2,
+  "evidence": "The largest font in the app is 14px; all instructional reading text is 12px (.oracle-helper). This includes genuine multi-line procedure prose an operator must read and follow: the 3-line Z-tune procedure (SETUP/PEN), the 2-paragraph pen-calibration procedure (SETUP/VERIFY), the 4-line motif import guidance (CREATE/MOTIF). Dense control labels at 12-14px are a defensible control-panel choice; procedure paragraphs at 12px are not.",
+  "screenshot": "screens/setup_verify.png",
+  "measurement": "measurements.json font_sizes_in_view = [12px, 13px, 14px] on all 14 views; no text >= 16px anywhere",
+  "recommendation": "Raise multi-line procedure text to 14-16px (keep 12px for single-line field captions), or move long procedures into a legend/help popover set at reading size."
+ },
+ {
+  "criterion": "VD-TYPE-1",
+  "screen": "PRINT (queue tiles) + legend dialog",
+  "severity": 1,
+  "evidence": "Queue tile captions PENDING / ACTIVE / FAIL-SKIP are 9px uppercase letterspaced (.mini-metric .label, service.py L142) and the sheet-legend chips are 10px (.legend-chip, L145). These are captions, but 9px letterspaced uppercase on a 1280px desktop panel is below any comfortable legibility floor, and FAIL/SKIP is a number an operator checks under time pressure.",
+  "screenshot": "screens/flow_legend.png",
+  "measurement": "service.py: .mini-metric .label font-size 9px; .legend-chip font-size 10px (dump.json reports the 14px container, not the 9px child)",
+  "recommendation": "Floor all captions at 11-12px; the letterspacing can stay for the small-caps look."
+ },
+ {
+  "criterion": "VD-TYPE-2",
+  "screen": "SETUP/VERIFY, SETUP/PEN, SETUP/ADVANCED",
+  "severity": 2,
+  "evidence": "Helper paragraphs run the full ~1010px content column at 12px: 'Pen calibration: one sheet, a ladder per setting â draw feed, pen-down Z and dwell vary row by row. Read the best rung off each ladderâ¦' (VERIFY) is a single ~180-character line; 'Shipped values are starting points, not measurementsâ¦' (PEN) is similar. At 2x the 85-character ceiling, the eye loses the return sweep on exactly the text that encodes the calibration procedure.",
+  "screenshot": "screens/setup_verify.png",
+  "measurement": "helper text spans xâ251â1258 (~1007px) at 12px â 150-180 chars/line vs 45-85 recommended",
+  "recommendation": "Cap helper prose at max-width ~65ch inside cards; let fields keep the full column."
+ },
+ {
+  "criterion": "VD-HIER-1",
+  "screen": "PRINT",
+  "severity": 2,
+  "evidence": "The run band stacks START SYSTEM and STOP SYSTEM as visually identical solid-ink primary buttons (same size, fill, weight) with NEW RUN between them â two opposite, equally-loud actions 80px apart, and SET WORK ZERO in the left rail is a third identical solid-ink primary on the same screen. Nothing marks which action is 'the' next one; the Next-action card says SET WORK ZERO but the emphasis system doesn't.",
+  "screenshot": "screens/print.png",
+  "measurement": "dump.json PRINT: START SYSTEM, STOP SYSTEM, SET WORK ZERO all solid-ink q-btn, 14px, full card width",
+  "recommendation": "Keep one solid primary per screen (the action the Next-action card names); demote STOP SYSTEM to an outline button â it already has STOP PRINT/EMERGENCY STOP as loud siblings for urgency."
+ },
+ {
+  "criterion": "VD-RESP-1",
+  "screen": "ALL â worst on PRINT, CREATE/MOTIF, SETUP/ADVANCED",
+  "severity": 2,
+  "evidence": "The persistent 'Plotter offline' toast sits bottom-center and overlaps working content on every view: on PRINT it covers the uploaded-file name and progress strip (the filename 'testsvg_20260814â¦' is cut mid-string and the status line 'Uploaded SVG finishedâ¦' is clipped by the viewport â body is overflow:hidden at >=1200px, service.py L150, so it is unreachable, not scrollable); on CREATE/TEXT and CREATE/MOTIF it overlaps the already half-clipped REFRESH PREVIEW button; on SETUP/ADVANCED it covers the 'Random coarse' slider row.",
+  "screenshot": "screens/print.png",
+  "measurement": "toast bounds â x340-940, y733-791 over content; PRINT status row clipped at y=794 of an 800px viewport with body overflow:hidden",
+  "recommendation": "Dock the offline banner into the top bar (it is machine state, same family as the state chip) or reserve a fixed banner row; audit the PRINT bottom strip so no control or status line sits below the fold in the overflow-hidden shell."
+ },
+ {
+  "criterion": "VD-GES-1",
+  "screen": "SETUP/ADVANCED",
+  "severity": 1,
+  "evidence": "In Filters/markers, each origin's row label sits at xâ251 while its Preview checkbox is at xâ598 and its Print checkbox at xâ936 â 350px gaps with no row rules, zebra striping, or hover band. With five visually identical rows, tying 'Filler MacBook' to the right pair of checkboxes relies on eye-tracking across empty cream.",
+  "screenshot": "screens/setup_advanced.png",
+  "measurement": "labelâfirst checkbox gap â 347px; checkboxâcheckbox gap â 338px",
+  "recommendation": "Tighten the columns toward the labels or add hairline row separators / row hover so each label-checkbox-checkbox triple reads as one unit."
+ },
+ {
+  "criterion": "VD-GES-2",
+  "screen": "SETUP/VERIFY vs CREATE/MOTIF",
+  "severity": 1,
+  "evidence": "The same component (dark upload drop-zone) appears with different dress: CREATE/MOTIF's says 'Drop a photo here, or click + to choose' with the + affordance; SETUP/VERIFY's shows only '0.0B / 0.00%' with a bare + and no instruction, so the identical control reads as a different (and opaque) element there.",
+  "screenshot": "screens/setup_verify.png",
+  "measurement": null,
+  "recommendation": "Give the VERIFY uploader the same 'Drop an SVG here, or click +' label so repeated components look and read identically."
+ },
+ {
+  "criterion": "VD-HIER-2",
+  "screen": "ALL (left machine rail); CREATE/MOTIF right panel",
+  "severity": 1,
+  "evidence": "The machine rail's inner left edges land on 79/80/82/83px â three near-miss offsets of 1-2px repeated on all 14 views, so the rail's cards, helper text and fields never share one column line. CREATE/MOTIF adds right-panel misses at 1063/1065 and 1090/1093 (2-3px).",
+  "screenshot": "screens/create_motif.png",
+  "measurement": "measurements.json alignment_near_misses: offsets 1-2px (edges 79/80/82/83) on every view; +2px and +3px on CREATE/MOTIF (1063/1065, 1090/1093)",
+  "recommendation": "Normalize card padding and label inset in the rail to one --space token so all rail content shares a single left edge."
+ },
+ {
+  "criterion": "VD-TYPE-3",
+  "screen": "token level (no rendered use found)",
+  "severity": 1,
+  "evidence": "RUST_LIGHT (#C4752A, 'hover / lighter accent') measures 3.23 on CREAM â fails AA normal â and is exported as --rust-light in every page (tokens.py L26, L77), but no GUI rule or component currently consumes it. It is a loaded footgun: the first hover state or secondary accent that reaches for it will fail contrast at the app's 12-14px sizes.",
+  "screenshot": "screens/print.png",
+  "measurement": "token_contrast: RUST_LIGHT on CREAM = 3.23 (fails AA normal, passes AA-large); grep confirms no consumer under blocks/gui",
+  "recommendation": "Either darken RUST_LIGHT to a 4.5+ value or comment it as decorative-only (borders/washes, never text) next to the GOLD_DIM precedent in tokens.py."
+ }
+]

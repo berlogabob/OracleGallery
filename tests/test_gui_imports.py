@@ -20,10 +20,15 @@ def test_gui_entrypoint_and_workspace_modules_import() -> None:
     for module in modules:
         importlib.import_module(module)
 
-    # Every workspace exposes a single build(ctx) entry point.
-    for name in ("connection", "calibration", "tests", "work"):
+    # Every workspace exposes its real entry point; the stacked build() shims are gone.
+    for name, entry in (
+        ("connection", "build"),
+        ("calibration", "build_sections"),
+        ("tests", "build"),
+        ("work", "build_diagnostics"),
+    ):
         workspace = importlib.import_module(f"neje_oracle.blocks.gui.workspaces.{name}")
-        assert callable(workspace.build)
+        assert callable(getattr(workspace, entry))
 
 
 def test_gui_context_always_boots_with_preview_mode_even_if_store_has_printing(monkeypatch: pytest.MonkeyPatch) -> None:

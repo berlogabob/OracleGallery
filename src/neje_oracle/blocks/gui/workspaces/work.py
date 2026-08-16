@@ -10,24 +10,22 @@ from __future__ import annotations
 from nicegui import ui
 
 from ..context import GuiContext
-from ..ui import helper_text, log_viewer, primary_action_button, safe_action_button
+from ..ui import card, danger_action_button, helper_text, log_viewer, primary_action_button, safe_action_button
 
 
 def build_diagnostics(ctx: GuiContext) -> None:
     """The peripherals and the log tail: opened when something is wrong, not during a run."""
     fields = ctx.fields
 
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Mac mini uploader").classes("text-sm font-bold")
+    with card("Mac mini uploader", compact=True):
         with ui.row().classes("gap-2"):
             safe_action_button("START", ctx.start_macmini)
-            ui.button("STOP", on_click=ctx.stop_macmini).props("dense color=warning")
+            danger_action_button("STOP", ctx.stop_macmini)
             safe_action_button("SCAN", ctx.scan_macmini)
             safe_action_button("RESTART", ctx.restart_macmini)
         helper_text("Controlled through NEJE_MACMINI_AGENT_URL")
 
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Thermal printer").classes("text-sm font-bold")
+    with card("Thermal printer", compact=True):
         saved_printer = ctx.supervisor.runtime_store.load_json("thermal_printer", {"url": "http://10.28.8.56"})
         fields["thermal_printer_url"] = (
             ui.input("ESP32 URL", value=str(saved_printer.get("url") or "http://10.28.8.56"))
@@ -49,8 +47,7 @@ def build_diagnostics(ctx: GuiContext) -> None:
             "Printer offline is a warning only; plotter and upload workflow continue."
         ).classes("path-label text-xs")
 
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Logs").classes("text-sm font-bold")
+    with card("Logs", compact=True):
         fields["log_filter"] = (
             ui.select(
                 {
@@ -74,7 +71,3 @@ def build_diagnostics(ctx: GuiContext) -> None:
         ctx.logs_view = log_viewer([])
 
 
-def build(ctx: GuiContext) -> None:
-    """Diagnostics only. The run half lives on the PRINT screen (screens.build_print)."""
-    with ui.column().classes("w-full gap-2"):
-        build_diagnostics(ctx)

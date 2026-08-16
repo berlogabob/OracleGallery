@@ -25,9 +25,12 @@ from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
 from ..ui import (
+    Section,
     card,
     helper_text,
+    micro_label,
     mini_metric,
+    nudge_button,
     number_control,
     primary_action_button,
     safe_action_button,
@@ -36,7 +39,7 @@ from ..ui import (
 )
 
 
-def build_sections(ctx: GuiContext) -> dict[str, Any]:
+def build_sections(ctx: GuiContext) -> dict[str, Section]:
     """Build the calibration content as three sections and hand back their containers.
 
     The SETUP screen shows one section at a time behind a segmented switch, which is how
@@ -104,8 +107,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
             control.on("dblclick", lambda _: reset())
             number.on_value_change(sync_from_number)
             number.on("dblclick", lambda _: reset())
-            ui.button("-", on_click=lambda: nudge(-step)).props("dense flat").classes("w-full")
-            ui.button("+", on_click=lambda: nudge(step)).props("dense flat").classes("w-full")
+            nudge_button("-", lambda: nudge(-step))
+            nudge_button("+", lambda: nudge(step))
             fields[key] = control
             return control
 
@@ -135,8 +138,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
     with ui.column().classes("w-full gap-2"):
         # -- PEN: feeds, Z, pen geometry, profiles -----------------------------------
         sections["pen"] = ui.column().classes("w-full gap-2")
-        with sections["pen"], ui.card().classes("oracle-card compact-card w-full"):
-            ui.label("Motion speed").classes("text-sm font-bold")
+        with sections["pen"], card("Motion speed", compact=True):
             helper_text(
                 "XY speed writes G-code feed rates in mm/min. Acceleration uses the controller's saved FluidNC settings."
             )
@@ -241,7 +243,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
 
         # -- SHEET: layout geometry + organic ----------------------------------------
         sections["sheet"] = ui.column().classes("w-full gap-2")
-        with sections["sheet"], ui.card().classes("oracle-card compact-card w-full"):
+        with sections["sheet"], card(compact=True):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("Layout").classes("text-sm font-bold")
                 ctx.capacity_label = ui.label("-").classes("status-pill text-xs font-bold")
@@ -269,8 +271,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     persist_and_refresh
                 )
             with ui.grid(columns=2).classes("w-full gap-2"):
-                num("sheet_width_mm", "Field W", settings.sheet_width_mm, 1, "Printable field width in mm.")
-                num("sheet_height_mm", "Field H", settings.sheet_height_mm, 1, "Printable field height in mm.")
+                num("sheet_width_mm", "Field W mm", settings.sheet_width_mm, 1, "Printable field width in mm.")
+                num("sheet_height_mm", "Field H mm", settings.sheet_height_mm, 1, "Printable field height in mm.")
                 num(
                     "cell_diameter_mm",
                     "Cell",
@@ -278,11 +280,11 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     1,
                     "Packing cell diameter and grid step base.",
                 )
-                num("gap_mm", "Gap", settings.gap_mm, 0, "Distance between neighboring cell diameters.")
-                num("sheet_margin_mm", "Margin", settings.sheet_margin_mm, 0, "Safe border inside printable field.")
+                num("gap_mm", "Gap mm", settings.gap_mm, 0, "Distance between neighboring cell diameters.")
+                num("sheet_margin_mm", "Margin mm", settings.sheet_margin_mm, 0, "Safe border inside printable field.")
                 num("marker_diameter_mm", "Dot mm", settings.marker_diameter_mm, 0.5, "Printed origin-dot diameter.")
 
-        with sections["sheet"], ui.card().classes("oracle-card compact-card w-full"):
+        with sections["sheet"], card(compact=True):
             with ui.row().classes("items-center gap-2"):
                 fields["organic_enabled"] = ui.switch(
                     "Organic / Voronoi", value=settings.organic_enabled
@@ -329,7 +331,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
         # A plain section now; it used to be an expansion, but inside a segmented switch a
         # second layer of fold-away is exactly the accordion-inside-tabs anti-pattern.
         sections["advanced"] = ui.column().classes("w-full gap-2")
-        with sections["advanced"], ui.card().classes("oracle-card compact-card w-full"):
+        with sections["advanced"], card(compact=True):
             helper_text(
                 "Use these controls for curve sampling, origin filters, and symbol correction after the physical layout is stable."
             )
@@ -344,7 +346,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                     ("load", "G-code load"),
                 ):
                     gcode_labels[key] = mini_metric(label)
-            ui.label("Main detail").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+            micro_label("Main detail")
             num(
                 "sample_step_mm",
                 "Spacing at normal cell size (mm)",
@@ -353,7 +355,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                 "Distance between sampled points for an 80 mm reference cell.",
                 step=0.05,
             )
-            ui.label("Auto-adjust for cell size").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
+            micro_label("Auto-adjust for cell size")
             num(
                 "sample_density_exponent",
                 "Auto density strength",
@@ -363,8 +365,8 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                 step=0.1,
             )
             with ui.row().classes("items-center gap-2"):
-                ui.label("Clamp").classes("text-[10px] font-bold text-[#8f4f2b] uppercase")
-                gcode_labels["limits"] = ui.label("-").classes("text-xs text-[#8f4f2b]")
+                micro_label("Clamp")
+                gcode_labels["limits"] = helper_text("-")
             with ui.grid(columns=2).classes("w-full gap-2"):
                 num(
                     "sample_min_step_mm",
@@ -404,9 +406,9 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
             # unchecking its Print box does not stop it reaching paper.
             helper_text("Preview hides cells on screen only. Print selects claimable job origins; filler always fills.")
             with ui.grid(columns=3).classes("w-full gap-1"):
-                ui.label("Origin").classes("text-[10px] font-bold text-[#8f4f2b]")
-                ui.label("Preview").classes("text-[10px] font-bold text-[#8f4f2b]")
-                ui.label("Print").classes("text-[10px] font-bold text-[#8f4f2b]")
+                micro_label("Origin")
+                micro_label("Preview")
+                micro_label("Print")
                 for origin in ALL_ORIGINS:
                     ui.label(ORIGIN_LABELS[origin]).classes("text-xs")
                     fields[f"show_origin:{origin}"] = (
@@ -489,7 +491,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Any]:
                 picker.on_value_change(lambda e: show_symbol(e.value))
                 show_symbol(picker.value)
 
-    return sections
+    return {name: Section(root=container) for name, container in sections.items()}
 
 
 def _build_z_tune_card(ctx: GuiContext) -> None:
@@ -544,7 +546,7 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
     # with no scrollbar -- so SAVE AS PROFILE was simply invisible below ~1360px.
     with ui.row().classes("w-full items-center gap-2 mt-2 flex-wrap"):
         helper_text("Pen profile")
-        modified_label = ui.label("").classes("text-xs text-[#8f4f2b]")
+        modified_label = helper_text("")
 
         def refresh_modified() -> None:
             current = ctx.settings.pen_profile
@@ -632,6 +634,3 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
     )
 
 
-def build(ctx: GuiContext) -> None:
-    """All sections, stacked and visible -- the pre-segmentation whole, kept for tests."""
-    build_sections(ctx)

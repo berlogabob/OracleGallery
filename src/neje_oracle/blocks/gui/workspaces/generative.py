@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import re
 import time
-from typing import Any
 from xml.parsers import expat
 
 from nicegui import app, ui
@@ -18,7 +17,7 @@ from ....shared.gui_settings import GUI_DEFAULTS
 from .. import ui as oracle
 from ..context import GuiContext
 from ..support import load_gui_settings
-from ..ui import client_timer, helper_text
+from ..ui import card, client_timer, helper_text
 
 STREAM: dict = {"enabled": False, "busy": False}
 _ROUTES_REGISTERED = False
@@ -169,38 +168,19 @@ def stamp_lift_budget(svg_bytes: bytes, budget: int) -> bytes:
     return svg_bytes[: root_name.end()] + b" " + attribute + svg_bytes[root_name.end() :]
 
 
-def build(ctx: GuiContext) -> None:
-    """Legacy stacked form, kept for tests that build this workspace alone.
-
-    The CREATE screen composes the pieces itself: canvas and controls land in different
-    grid tracks there, which a single stacked column cannot express.
-    """
-    with ui.column().classes("w-full gap-2"):
-        build_sketch_canvas()
-        build_sketch_controls(ctx)
-        build_text(ctx)
-        # A texture is a generative source, so it lives in this workspace rather than a tab of its
-        # own. Imported here rather than at module scope: workspaces.texture imports from .image,
-        # and a top-level import would drag the image workspace into every generative-only test.
-        from . import texture as texture_workspace
-
-        texture_workspace.build(ctx)
-
-
 def build_sketch_canvas() -> None:
     """The p5 editor itself. No card: on the CREATE screen the editor is the canvas."""
     oracle.embedded_page("/generative/index.html", element_id="generative-frame")
 
 
-def build_sketch_controls(ctx: GuiContext) -> Any:
+def build_sketch_controls(ctx: GuiContext) -> oracle.Section:
     """Print and stream controls for the sketch. Talk to the iframe by id, not by handle.
 
     Returns the print coroutine so the CREATE screen's shared print strip can dispatch to
     it; the card itself carries no print button there.
     """
-    with ui.card().classes("oracle-card compact-card w-full"):
-        ui.label("Send to plotter").classes("text-sm font-bold")
-        origin_label = ui.label("Origin X/Y: — / — mm (set on SETUP)").classes("text-xs text-[#8f4f2b]")
+    with card("Send to plotter", compact=True):
+        origin_label = helper_text("Origin X/Y: — / — mm (set on SETUP)")
 
         def update_origin_label() -> None:
             origin_x = ctx.fields.get("direct_svg_origin_x_mm")
@@ -242,7 +222,7 @@ def build_sketch_controls(ctx: GuiContext) -> Any:
         # The arm gate: streaming prints real ink unattended, every interval, forever.
         # Arming shows what one frame costs and waits for an explicit ARM -- flicking a
         # switch is how an hour-per-frame stream gets started by accident.
-        with ui.dialog().props("persistent") as arm_dialog, ui.card().classes("oracle-card"):
+        with ui.dialog().props("persistent") as arm_dialog, card():
             oracle.section_title("Arm streaming?")
             helper_text("Every interval, the frame on screen is printed with real ink, unattended.")
             arm_estimate = ui.label("-").classes("text-xs font-bold")
@@ -326,10 +306,10 @@ def build_sketch_controls(ctx: GuiContext) -> Any:
 
         client_timer(3.0, _stream_tick)
 
-        return print_sketch
+        return oracle.Section(print=print_sketch, print_label="PRINT SKETCH")
 
 
-def build_text(ctx: GuiContext, preview_slot: object = None, *, actions: bool = True) -> oracle.RenderCard | None:
+def build_text(ctx: GuiContext, preview_slot: object = None, *, actions: bool = True) -> oracle.Section | None:
     """Single-stroke SHX text: preview, then print through the direct-SVG path."""
     fonts = shx.list_fonts()
     if not fonts:
@@ -380,4 +360,5 @@ def build_text(ctx: GuiContext, preview_slot: object = None, *, actions: bool = 
         actions=actions,
     )
     refresh()
-    return card_handle["handle"]
+    handle = card_handle["handle"]
+    return oracle.Section(refresh=handle.refresh, print=handle.print, print_label="PRINT TEXT")
