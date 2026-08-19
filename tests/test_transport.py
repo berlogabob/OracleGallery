@@ -549,3 +549,45 @@ def test_restart_board_fails_when_controller_never_comes_back(tmp_path: Path, mo
         result = transport.restart_board(reboot_wait_seconds=0.3)
         assert not result.ok
         assert "did not come back" in result.message
+
+
+def test_send_stops_gracefully_mid_stream_when_asked(tmp_path: Path) -> None:
+    """STOP PRINT must land between lines, not at row boundaries.
+
+    Observed live 2026-08-19: the operator pressed STOP PRINT twice during a
+    dense row and the machine drew on for minutes until E-STOP. The stream now
+    consults should_stop per line and raises PrintStopRequested once drained.
+    """
+    from neje_oracle.blocks.fluidnc.transport import PrintStopRequested
+
+    calls = {"n": 0}
+
+    def stop_after_two() -> bool:
+        calls["n"] += 1
+        return calls["n"] > 2
+
+    gcode = "\n".join(f"G1 X{i}" for i in range(20)) + "\n"
+    with FakeFluidNCServer() as server:
+        transport = FluidNCTransport(_settings(tmp_path, server))
+        with pytest.raises(PrintStopRequested):
+            transport.send(gcode=gcode, sheet_id="sheet", dry_run=False, should_stop=stop_after_two)
+        sent = [c for c in server.commands if c.startswith("G1 X")]
+        assert 0 < len(sent) < 20
+
+
+def test_char_count_stream_stops_gracefully_and_drains_outstanding(tmp_path: Path) -> None:
+    from neje_oracle.blocks.fluidnc.transport import PrintStopRequested
+
+    calls = {"n": 0}
+
+    def stop_after_three() -> bool:
+        calls["n"] += 1
+        return calls["n"] > 3
+
+    gcode = "\n".join(f"G1 X{i}" for i in range(50)) + "\n"
+    with FakeCharCountServer() as server:
+        transport = FluidNCTransport(_settings(tmp_path, server, streaming="char_count", ack_timeout_seconds=1.0))
+        with pytest.raises(PrintStopRequested):
+            transport.send(gcode=gcode, sheet_id="sheet", dry_run=False, should_stop=stop_after_three)
+        sent = [c for c in server.commands if c.startswith("G1 X")]
+        assert 0 < len(sent) < 50

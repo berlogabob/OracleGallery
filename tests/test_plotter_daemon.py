@@ -394,7 +394,7 @@ def test_plotter_progress_uses_cell_markers_instead_of_row_fraction(tmp_path: Pa
             self.observed_cell_index = -1
             self.observed_cell_in_row = -1
 
-        def send(self, *, gcode, sheet_id, dry_run, progress_callback):
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback, should_stop=None):
             path = settings.spool_root / f"{sheet_id}.gcode"
             path.write_text(gcode, encoding="utf-8")
             if progress_callback and "row_01" in sheet_id:
@@ -441,7 +441,7 @@ def test_plotter_claims_late_user_job_before_next_row(tmp_path: Path) -> None:
         def __init__(self) -> None:
             self.calls = 0
 
-        def send(self, *, gcode, sheet_id, dry_run, progress_callback):
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback, should_stop=None):
             self.calls += 1
             if progress_callback:
                 total = len(gcode.splitlines())
@@ -497,7 +497,7 @@ def test_plotter_stops_sending_rows_when_operator_pauses_mid_sheet(tmp_path: Pat
         def __init__(self) -> None:
             self.calls = 0
 
-        def send(self, *, gcode, sheet_id, dry_run, progress_callback):
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback, should_stop=None):
             self.calls += 1
             path = settings.spool_root / f"{sheet_id}.gcode"
             path.write_text(gcode, encoding="utf-8")
@@ -904,3 +904,57 @@ def test_daemon_start_survives_a_failing_requeue(tmp_path: Path) -> None:
     daemon._requeue_stale_jobs_on_start()
 
     assert "Could not requeue" in oracle_store.load_component_state("queue").message
+
+
+def test_plotter_pen_up_and_pauses_when_stream_stops_mid_row(tmp_path: Path) -> None:
+    """STOP PRINT mid-stream: transport raises PrintStopRequested (machine already
+    Idle, drained), the daemon must lift the pen without a soft reset and pause."""
+    from neje_oracle.blocks.fluidnc.transport import PrintStopRequested
+    from neje_oracle.shared.models import FluidNCCommandResult
+
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+
+    settings = replace(
+        _settings(tmp_path),
+    )
+    oracle_store = _seeded_oracle_store(
+        tmp_path,
+        sheet_width_mm=80,
+        sheet_height_mm=160,
+        sheet_margin_mm=0,
+        cell_diameter_mm=80,
+        layout_mode="grid",
+    )
+    store = PlotterStore(settings.db_path)
+    oracle_store = OracleRuntimeStore(tmp_path / "runtime" / "oracle.sqlite3")
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
+    remote = FakeRemoteRepository()
+
+    class StoppedMidStreamTransport:
+        def __init__(self) -> None:
+            self.command_batches: list[list[str]] = []
+            self.soft_resets = 0
+
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback, should_stop=None):
+            raise PrintStopRequested(f"print stopped by operator mid-stream during {sheet_id}")
+
+        def send_commands(self, commands, *, timeout_seconds=None):
+            self.command_batches.append(list(commands))
+            return FluidNCCommandResult(ok=True, command=" ; ".join(commands), response_lines=["ok"])
+
+        def soft_reset(self):
+            self.soft_resets += 1
+            return FluidNCCommandResult(ok=True, command="\x18", response_lines=["sent"])
+
+    transport = StoppedMidStreamTransport()
+    daemon = PlotterDaemon(settings, store, remote, transport, oracle_store=oracle_store)  # type: ignore[arg-type]
+
+    daemon.run_cycle()
+
+    assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
+    assert any(any(cmd.startswith("G0 Z") for cmd in batch) for batch in transport.command_batches)
+    assert transport.soft_resets == 0

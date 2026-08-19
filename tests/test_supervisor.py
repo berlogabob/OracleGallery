@@ -84,7 +84,7 @@ class DryTransport:
         self.commands.extend(commands)
         return FluidNCCommandResult(ok=True, command=" ; ".join(commands), response_lines=["ok"] * len(commands))
 
-    def send(self, *, gcode: str, sheet_id: str, dry_run=None, progress_callback=None):
+    def send(self, *, gcode: str, sheet_id: str, dry_run=None, progress_callback=None, should_stop=None):
         path = self.settings.spool_root / f"{sheet_id}.gcode"
         path.write_text(gcode, encoding="utf-8")
         if progress_callback:

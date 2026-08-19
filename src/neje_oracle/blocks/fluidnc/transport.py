@@ -22,6 +22,15 @@ STATUS_RE = re.compile(r"<([^|>]+)(?:\|([^>]*))?>")
 RX_BUFFER = 128
 
 
+class PrintStopRequested(RuntimeError):
+    """Raised by send() when its should_stop callback asked for a graceful stop.
+
+    Raised only after the stream stopped feeding, the outstanding lines were
+    acked, and the controller reported Idle -- the machine is stationary and
+    NOT in Alarm when this reaches the caller. The caller owns the pen-up.
+    """
+
+
 def settings_for_fluidnc_host(settings: PlotterSettings, host: str) -> PlotterSettings:
     return replace(
         settings,
@@ -290,6 +299,7 @@ class FluidNCTransport:
         sheet_id: str,
         dry_run: bool | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
+        should_stop: Callable[[], bool] | None = None,
     ) -> Path:
         prune_spool(self.settings.spool_root, self.settings.spool_retention_days)
         gcode_path = self.settings.spool_root / f"{sheet_id}.gcode"
@@ -312,16 +322,21 @@ class FluidNCTransport:
         with self._connect(self.settings.fluidnc_connect_timeout_seconds) as conn:
             self._drain(conn, timeout_seconds=0.2)
             total = len(commands)
+            stopped_early = False
             if self.settings.fluidnc_streaming == "char_count":
                 if commands:
-                    self._stream_char_counting(
+                    stopped_early = self._stream_char_counting(
                         conn,
                         commands,
                         sheet_id=sheet_id,
                         progress_callback=progress_callback,
+                        should_stop=should_stop,
                     )
             else:
                 for index, line in enumerate(commands, start=1):
+                    if should_stop is not None and should_stop():
+                        stopped_early = True
+                        break
                     result = self._send_regular_command_on_connection(
                         conn,
                         line,
@@ -333,6 +348,9 @@ class FluidNCTransport:
                         progress_callback(index, total)
             if commands:
                 self._wait_until_idle(conn, sheet_id=sheet_id)
+            if stopped_early:
+                # Machine is stationary and Idle; the caller lifts the pen.
+                raise PrintStopRequested(f"print stopped by operator mid-stream during {sheet_id}")
         return gcode_path
 
     def _stream_char_counting(
@@ -342,10 +360,15 @@ class FluidNCTransport:
         *,
         sheet_id: str,
         progress_callback: Callable[[int, int], None] | None,
-    ) -> None:
+        should_stop: Callable[[], bool] | None = None,
+    ) -> bool:
         """GRBL character-counting protocol: keep a sliding window of unacked
         lines whose combined byte size (line + newline) never exceeds
         RX_BUFFER, instead of waiting for "ok" after every single line.
+
+        Returns True when should_stop asked for a graceful stop: no further
+        lines were fed, and every line already in the controller's buffer has
+        been acked (a handful of small moves at most, given RX_BUFFER).
         """
         total = len(lines)
         timeout = self.settings.fluidnc_ack_timeout_seconds
@@ -353,6 +376,7 @@ class FluidNCTransport:
         next_to_send = 0
         acked = 0
         buffer = ""
+        stopping = False
 
         def pending_bytes() -> int:
             return sum(outstanding_bytes)
@@ -369,6 +393,10 @@ class FluidNCTransport:
 
         fill_window()
         while acked < total:
+            if not stopping and should_stop is not None and should_stop():
+                stopping = True
+            if stopping and not outstanding_bytes:
+                return True
             deadline = time.monotonic() + timeout
             response_line: str | None = None
             while time.monotonic() < deadline:
@@ -397,12 +425,14 @@ class FluidNCTransport:
                 acked += 1
                 if progress_callback:
                     progress_callback(acked, total)
-                fill_window()
+                if not stopping:
+                    fill_window()
             elif is_failure_response(response_line):
                 failing_index = acked + 1
                 failing_line = lines[failing_index - 1]
                 raise RuntimeError(f"FluidNC rejected line {failing_index}: {failing_line} :: {response_line}")
             # else: ignore unrelated chatter (e.g. status pushes) and keep waiting
+        return False
 
     def _wait_until_idle(self, conn: socket.socket, *, sheet_id: str) -> None:
         timeout = self.settings.fluidnc_idle_timeout_seconds

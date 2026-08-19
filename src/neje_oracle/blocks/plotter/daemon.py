@@ -4,6 +4,7 @@ import json
 import random
 import threading
 import time
+from collections.abc import Callable
 import xml.etree.ElementTree as ET
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -30,7 +31,7 @@ from ...shared.origin_markers import (
 from ...shared.store import OracleRuntimeStore, PlotterStore
 from ...shared.symbols import default_scale_config_path, default_symbol_root, list_fillable_symbols
 from ..firebase.repository import FirebaseRemoteRepository
-from ..fluidnc.transport import FluidNCTransport
+from ..fluidnc.transport import FluidNCTransport, PrintStopRequested
 from ..gcode.layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
 from ..gcode.sampling import compute_effective_sample_step
 from ..gcode.svg_gcode import generate_sheet_gcode
@@ -333,7 +334,26 @@ class PlotterDaemon:
                         sheet_id=row_id,
                         dry_run=control.dry_run,
                         progress_callback=self._record_gcode_progress,
+                        should_stop=self._stream_stop_check(),
                     )
+                except PrintStopRequested:
+                    note = self._graceful_stop_pen_up(config)
+                    row_payload["status"] = "stopped"
+                    self._replace_manifest_row(manifest_path, manifest, row_index, row_payload)
+                    for job in user_jobs:
+                        error = f"print stopped by operator ({note})"
+                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=error)
+                        self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=error)
+                    if self.oracle_store is not None:
+                        self.oracle_store.set_component(
+                            "print", ComponentStatus.STOPPED, message=f"Print stopped by operator; {note}"
+                        )
+                    self._set_state(
+                        RuntimeStatus.OPERATOR_PAUSED,
+                        f"Print stopped by operator mid-row; {note}",
+                        sheet_id=sheet_id,
+                    )
+                    return
                 except Exception as exc:  # noqa: BLE001
                     # Stop the machine and lift the pen BEFORE recording anything: the
                     # planner is still draining and the nib is on the paper.
@@ -429,6 +449,38 @@ class PlotterDaemon:
             self.oracle_store.set_component(
                 "plotter", ComponentStatus.WARNING, message="Sheet finished; print stopped", heartbeat=True
             )
+
+    def _stream_stop_check(self) -> "Callable[[], bool]":
+        """Line-granular stop signal for transport.send().
+
+        STOP PRINT used to take effect only at row/cell boundaries -- on a dense
+        sheet that meant minutes of "graceful" while the operator hammered the
+        button (observed live 2026-08-19, recovered with E-STOP). The stream now
+        asks this between lines; the sqlite read is throttled to twice a second.
+        """
+        last = {"checked_at": 0.0, "stop": False}
+
+        def should_stop() -> bool:
+            if self.stop_event.is_set():
+                return True
+            now = time.monotonic()
+            if now - last["checked_at"] >= 0.5:
+                last["checked_at"] = now
+                last["stop"] = not self._load_control_state().print_enabled
+            return last["stop"]
+
+        return should_stop
+
+    def _graceful_stop_pen_up(self, config: PlotterRuntimeConfig) -> str:
+        """Pen-up after a mid-stream operator stop. The controller is Idle, not in
+        Alarm, so no soft reset -- a plain lift keeps the position reference."""
+        try:
+            result = self.transport.send_commands(["G21", "G90", f"G0 Z{config.z_up_mm:.3f}"])
+        except Exception as exc:  # noqa: BLE001
+            return f"pen lift failed: {exc}; pen may still be down, check the paper"
+        if not result.ok:
+            return f"pen lift refused: {result.message}; pen may still be down, check the paper"
+        return "pen lifted"
 
     def _abort_recovery(self, config: PlotterRuntimeConfig, reason: str) -> str:
         """Get the pen off the paper after a failed print. Never raises.
@@ -583,7 +635,26 @@ class PlotterDaemon:
                         sheet_id=cell_id,
                         dry_run=control.dry_run,
                         progress_callback=self._record_gcode_progress,
+                        should_stop=self._stream_stop_check(),
                     )
+                except PrintStopRequested:
+                    note = self._graceful_stop_pen_up(config)
+                    cell_payload["status"] = "stopped"
+                    self._replace_manifest_cell(manifest_path, manifest, cell_id, cell_payload)
+                    for job in user_jobs:
+                        error = f"print stopped by operator ({note})"
+                        self.remote.update_plot_job(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=error)
+                        self.store.record_job_status(job.session_id, PlotStatus.FAILED, sheet_id=sheet_id, error=error)
+                    if self.oracle_store is not None:
+                        self.oracle_store.set_component(
+                            "print", ComponentStatus.STOPPED, message=f"Print stopped by operator; {note}"
+                        )
+                    self._set_state(
+                        RuntimeStatus.OPERATOR_PAUSED,
+                        f"Print stopped by operator mid-cell; {note}",
+                        sheet_id=sheet_id,
+                    )
+                    return None
                 except Exception as exc:  # noqa: BLE001
                     # Stop the machine and lift the pen BEFORE recording anything: the
                     # planner is still draining and the nib is on the paper.

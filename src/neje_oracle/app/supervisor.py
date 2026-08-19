@@ -303,11 +303,10 @@ class SupervisorService:
         )
 
     def stop_print(self) -> ComponentState:
-        """Graceful stop: let the current cell finish, then pause before the next one.
-
-        The daemon only re-reads print_enabled at row/cell boundaries, so the in-flight
-        cell always completes -- including its trailing pen-up. Use emergency_stop_fluidnc()
-        when motion must halt immediately instead.
+        """Graceful stop: the stream checks this flag between G-code lines, drains the
+        few moves already in the controller's buffer, lifts the pen and pauses --
+        seconds, not row boundaries. Use emergency_stop_fluidnc() when motion must
+        halt mid-move instead.
         """
         control = self.runtime_store.load_print_control()
         control.print_enabled = False
@@ -316,7 +315,7 @@ class SupervisorService:
         PlotterStore(self.plotter_settings.db_path).save_control_state(control)
         append_log("plotter", "Stop print requested by operator", level="warning", settings=self.settings)
         return self.runtime_store.set_component(
-            "print", ComponentStatus.STOPPED, message="Stop requested; finishing the current cell, then pausing"
+            "print", ComponentStatus.STOPPED, message="Stop requested; draining the last moves, then pen up"
         )
 
     def print_uploaded_svg(self, gui_settings: GuiSettings, *, svg_bytes: bytes, original_name: str) -> ComponentState:
