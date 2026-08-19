@@ -753,8 +753,9 @@ def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest
     asyncio.run(ctx.jog_z_down())
     assert sent == [("Z", -1.0, ctx.settings.z_feed_mm_min)]
 
-    # A jog that would pass the -30 floor is refused, and the ceiling holds at 0.
-    ctx._machine_z = -29.5
+    # A jog that would pass the -25 floor (the servo's travel) is refused, and the
+    # ceiling holds at 0.
+    ctx._machine_z = -24.5
     asyncio.run(ctx.jog_z_down())
     ctx._machine_z = -0.5
     asyncio.run(ctx.jog_z_up())

@@ -61,6 +61,7 @@ def build(ctx: GuiContext) -> None:
                 safe_action_button("UNLOCK", ctx.unlock_alarm)
                 safe_action_button("Resume", ctx.resume_after_hold)
                 ui.element("div").classes("status-spacer")
+                danger_action_button("RESTART BOARD", ctx.restart_board)
                 danger_action_button("RESET / ABORT", ctx.soft_reset)
 
         # Defer the initial async probe until the page event loop is running.

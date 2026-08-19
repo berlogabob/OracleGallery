@@ -1065,6 +1065,14 @@ class GuiContext:
             lambda: self.fluidnc_action("soft reset", self.supervisor.soft_reset_fluidnc),
         )
 
+    def restart_board(self) -> None:
+        self.confirm_action(
+            "RESTART BOARD",
+            "This sends $Bye and reboots FluidNC (about 10 seconds). Use when the board is stuck "
+            "in its fallback config (error:152). Homing is required afterwards.",
+            lambda: self.fluidnc_action("restart board", self.supervisor.restart_fluidnc_board),
+        )
+
     # ---- Mac mini uploader ----------------------------------------------------
 
     async def start_macmini(self) -> None:

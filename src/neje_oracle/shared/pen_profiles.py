@@ -39,6 +39,12 @@ PEN_PROFILE_FIELDS = (
 # Used when assets/pen_profiles.json is missing, so the GUI always has something to
 # select. Deliberately conservative: slower and shallower than the machine can manage,
 # because an over-pressed nib is damaged and an over-fast one just skips.
+#
+# z_down_mm floor is -25.0: the servo's configured travel. "More pressure" via a deeper
+# command (the old -25.5/-26.0 values) is unreachable -- the board's soft limit rejects
+# the move into Alarm, or the servo stalls against its mechanical stop, and stall
+# current is the prime suspect for the ESP32 brownout panics. Real pressure tuning
+# belongs in the servo pulse-range calibration, not past-travel Z targets.
 STARTER_PROFILES: dict[str, dict[str, float]] = {
     "fineliner": {
         "pen_width_mm": 0.3,
@@ -55,7 +61,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "pen_width_mm": 0.5,
         "draw_rate": 1400.0,
         "travel_rate": 5000.0,
-        "z_down_mm": -25.5,
+        "z_down_mm": -25.0,
         "z_up_mm": 0.0,
         "z_feed_mm_min": 800.0,
         "pen_down_dwell_ms": 120.0,
@@ -65,7 +71,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "pen_width_mm": 0.4,
         "draw_rate": 2400.0,
         "travel_rate": 5000.0,
-        "z_down_mm": -26.0,
+        "z_down_mm": -25.0,
         "z_up_mm": 0.0,
         "z_feed_mm_min": 1200.0,
         "pen_down_dwell_ms": 60.0,
@@ -77,7 +83,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "pen_width_mm": 0.8,
         "draw_rate": 2400.0,
         "travel_rate": 5000.0,
-        "z_down_mm": -26.0,
+        "z_down_mm": -25.0,
         "z_up_mm": 0.0,
         "z_feed_mm_min": 1200.0,
         "pen_down_dwell_ms": 0.0,
@@ -97,7 +103,12 @@ def load_pen_profiles(path: Path | None = None) -> dict[str, dict[str, float]]:
             continue
         # Unknown keys are dropped rather than raising: the file is hand-editable, and a
         # stale key from a renamed field must not make every profile unloadable.
-        profiles[str(name)] = {field: float(values[field]) for field in PEN_PROFILE_FIELDS if field in values}
+        loaded = {field: float(values[field]) for field in PEN_PROFILE_FIELDS if field in values}
+        # The file is hand-editable, so a past-travel depth (see STARTER_PROFILES note)
+        # can come back: clamp to the servo's 25mm travel here, once, for every consumer.
+        if "z_down_mm" in loaded:
+            loaded["z_down_mm"] = min(0.0, max(-25.0, loaded["z_down_mm"]))
+        profiles[str(name)] = loaded
     return profiles
 
 

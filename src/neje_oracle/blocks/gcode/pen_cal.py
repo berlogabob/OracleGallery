@@ -45,9 +45,12 @@ LINE_LENGTH_MM = 90.0
 # The Z ladder is the one block that can wreck a nib, so its rungs are a bounded offset
 # around the profile's current pen-down depth, never an absolute sweep.
 Z_LADDER_SPAN_MM = 1.0
-# Hard floor regardless of what is asked for. Deeper than this and the carriage is
-# pressing the pen into the bed rather than the paper.
-Z_ABSOLUTE_FLOOR_MM = -30.0
+# Hard floor regardless of what is asked for: the board's configured servo travel
+# (max_travel_mm: 25). This used to be -30, but anything past -25 either trips the
+# board's soft limit into Alarm or stalls the servo against its mechanical stop --
+# and servo stall current is the prime suspect for the ESP32 brownout panics that
+# leave the controller in its fallback config (error:152).
+Z_ABSOLUTE_FLOOR_MM = -25.0
 
 
 @dataclass(frozen=True)
@@ -155,13 +158,16 @@ def _build_blocks(settings: GuiSettings, ranges: PenCalRanges) -> list[_Block]:
         feed.rows.append((f"{rate:.0f}", _solid_row(left, 0.0), {"draw_rate": rate}))
     blocks.append(feed)
 
-    # Bounded sweep around the current depth, then clamped to the absolute floor.
+    # Bounded sweep around the current depth. The whole ladder must fit inside the
+    # servo's travel (floor..0): a profile parked at the floor used to collapse the
+    # deep rungs onto one clamped depth, wasting the sweep -- shift the centre up
+    # instead, so the ladder always has its full set of distinct rungs.
     z_block = _Block("pen-down Z mm")
-    base_z = float(settings.z_down_mm)
+    base_z = min(-ranges.z_span_mm, max(Z_ABSOLUTE_FLOOR_MM + ranges.z_span_mm, float(settings.z_down_mm)))
     steps = max(2, ranges.z_steps)
     for index in range(steps):
         offset = -ranges.z_span_mm + (2 * ranges.z_span_mm) * index / (steps - 1)
-        depth = max(Z_ABSOLUTE_FLOOR_MM, base_z + offset)
+        depth = base_z + offset
         z_block.rows.append((f"{depth:.2f}", _solid_row(left, 0.0), {"z_down_mm": depth}))
     blocks.append(z_block)
 

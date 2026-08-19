@@ -772,3 +772,115 @@ def test_single_axis_homing_does_not_clear_the_requirement(tmp_path: Path) -> No
     supervisor.home_fluidnc("Z")
 
     assert supervisor.runtime_store.load_plotter_readiness().homing_required is True
+
+
+class FallbackConfigTransport(DryTransport):
+    """Board stuck in the post-panic fallback config until restarted with $Bye."""
+
+    def __init__(self, settings: PlotterSettings) -> None:
+        super().__init__(settings)
+        self.restarted = False
+
+    def read_board_identity(self) -> str:
+        return "MKS TinyBee V1.0 XXYYZ" if self.restarted else "None"
+
+    def restart_board(self, *, reboot_wait_seconds: float = 30.0):
+        self.commands.append("$Bye")
+        self.restarted = True
+        return FluidNCCommandResult(ok=True, command="$Bye", response_lines=["online"])
+
+
+class StuckFallbackTransport(FallbackConfigTransport):
+    """$Bye succeeds but the board keeps reporting the fallback config."""
+
+    def read_board_identity(self) -> str:
+        return "None"
+
+
+def _supervisor_with_transport(tmp_path: Path, transport_cls) -> tuple[SupervisorService, DryTransport]:
+    settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
+    plotter_settings = _plotter_settings(tmp_path)
+    transport = transport_cls(plotter_settings)
+    supervisor = SupervisorService(
+        settings=settings,
+        plotter_settings=plotter_settings,
+        firebase_settings=_firebase_settings(tmp_path),
+        remote_factory=lambda: EmptyRemote(),  # type: ignore[arg-type]
+        transport_factory=lambda resolved: transport,  # type: ignore[arg-type]
+    )
+    return supervisor, transport
+
+
+def test_system_check_auto_restarts_board_out_of_fallback_config(tmp_path: Path) -> None:
+    """The unattended self-heal: fallback config detected -> $Bye -> clean re-check.
+
+    FluidNC skips config.yaml for exactly one boot after a panic, so a software
+    restart recovers the real config without anyone walking to the power switch.
+    """
+    supervisor, transport = _supervisor_with_transport(tmp_path, FallbackConfigTransport)
+
+    result = supervisor.run_system_check(GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0))
+
+    assert "$Bye" in transport.commands
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert not tinybee.detail.get("fallback_config")
+    # The reboot dropped the position reference: printing must wait for a home.
+    assert supervisor.runtime_store.load_plotter_readiness().homing_required
+
+
+def test_system_check_keeps_critical_when_restart_does_not_clear_fallback(tmp_path: Path) -> None:
+    supervisor, transport = _supervisor_with_transport(tmp_path, StuckFallbackTransport)
+
+    result = supervisor.run_system_check(GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0))
+
+    assert transport.commands.count("$Bye") == 1
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.detail.get("fallback_config")
+
+
+class HomeBrownoutTransport(DryTransport):
+    """$H dies with a dropped connection and the board comes back in Alarm.
+
+    The brownout signature: the disconnect used to be treated as "home carried on
+    fine" and recorded as a successful home on a board that had actually reset.
+    """
+
+    def home(self, axis: str | None = None):
+        command = "$H" if axis is None else f"$H={axis.upper()}"
+        self.commands.append(command)
+        return FluidNCCommandResult(ok=False, command=command, error="Connection closed by FluidNC")
+
+    def probe(self, *, timeout_seconds: float = 2.0):
+        return FluidNCProbeResult(
+            http_online=True,
+            telnet_online=True,
+            ok=True,
+            message="fake fluidnc alarm",
+            controller=FluidNCControllerState(state=FluidNCState.ALARM),
+        )
+
+
+def test_homing_disconnect_into_alarm_is_not_recorded_as_homed(tmp_path: Path) -> None:
+    supervisor, _ = _supervisor_with_transport(tmp_path, HomeBrownoutTransport)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(homing_required=True, message="alarm before homing")
+    )
+
+    supervisor.home_fluidnc()
+
+    assert supervisor.runtime_store.load_plotter_readiness().homing_required
+
+
+def test_manual_pen_moves_clamp_to_servo_travel(tmp_path: Path) -> None:
+    """A profile depth past the 25mm servo travel must not reach the board:
+    it trips the soft limit into Alarm or stalls the servo against its stop."""
+    supervisor, transport = _supervisor_with_transport(tmp_path, DryTransport)
+    supervisor.runtime_store.save_plotter_config(
+        PlotterRuntimeConfig(use_z_servo=True, z_down_mm=-40.0, z_up_mm=5.0)
+    )
+
+    supervisor.pen_down_fluidnc()
+    supervisor.pen_up_fluidnc()
+
+    assert any(command.startswith("G1 Z-25.000") for command in transport.commands)
+    assert "G0 Z0.000" in transport.commands

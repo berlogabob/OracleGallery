@@ -128,16 +128,19 @@ class SystemCheckService:
         # the snapshot still looks perfect. Without this the check reports green on a machine
         # that cannot home.
         live_board = self.board_identity_provider() if self.board_identity_provider is not None else None
+        fallback_config = False
         if live_board is not None:
             if "TinyBee" not in live_board or "XXYYZ" not in live_board:
+                fallback_config = True
                 # Count recurrences. error:152 -- the same fallback signature -- appears on
                 # 19 separate days in logs/oracle_supervisor.log, so this is not the
                 # one-off the single diagnosed panic suggests. A trend is worth seeing.
                 history = self.on_fallback_config(live_board) if self.on_fallback_config is not None else ""
                 problems.append(
                     f"controller is running config '{live_board or '<none>'}', not {board or 'the expected board'}; "
-                    "FluidNC has most likely panicked into its built-in default -- power-cycle the board and "
-                    f"confirm $CD reports the real board before printing{history}"
+                    "FluidNC has most likely panicked into its built-in default -- an automatic $Bye restart is "
+                    "attempted; if this message persists, power-cycle the board and confirm $CD reports the real "
+                    f"board before printing{history}"
                 )
             elif board and live_board != board:
                 warnings.append(f"controller board '{live_board}' differs from {config_path.name} '{board}'")
@@ -191,6 +194,9 @@ class SystemCheckService:
             "z_travel_mm": z_travel,
             "problems": problems,
             "warnings": warnings,
+            # Lets the supervisor trigger the automatic $Bye restart without
+            # string-matching the message.
+            "fallback_config": fallback_config,
         }
         if problems:
             return SystemCheck("tinybee hardware", SystemCheckLevel.CRITICAL, "; ".join(problems), detail=detail)

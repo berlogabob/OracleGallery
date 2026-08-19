@@ -16,7 +16,7 @@ from neje_oracle.blocks.fluidnc.transport import (
     settings_for_fluidnc_host,
 )
 from neje_oracle.shared.config import PlotterSettings
-from neje_oracle.shared.models import FluidNCCommandResult, FluidNCState
+from neje_oracle.shared.models import FluidNCCommandResult, FluidNCProbeResult, FluidNCState
 
 
 class FakeFluidNCServer:
@@ -524,3 +524,28 @@ def test_read_board_identity_accepts_dump_without_terminating_ok(tmp_path: Path)
     )
 
     assert transport.read_board_identity() == "MKS TinyBee V1.0 XXYYZ"
+
+
+def test_restart_board_sends_bye_and_waits_for_reconnect(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """$Bye reboots the ESP32; restart_board must poll until the board answers again.
+
+    This is the remote recovery from FluidNC's post-panic fallback config: the panic
+    skip lasts exactly one boot, so a software restart loads the real config without
+    a walk to the power switch (validated on the live board 2026-08-19).
+    """
+    monkeypatch.setattr("neje_oracle.blocks.fluidnc.transport.time.sleep", lambda seconds: None)
+    with FakeFluidNCServer() as server:
+        transport = FluidNCTransport(_settings(tmp_path, server))
+        result = transport.restart_board(reboot_wait_seconds=5.0)
+        assert result.ok
+        assert "$Bye" in server.commands
+
+
+def test_restart_board_fails_when_controller_never_comes_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("neje_oracle.blocks.fluidnc.transport.time.sleep", lambda seconds: None)
+    with FakeFluidNCServer() as server:
+        transport = FluidNCTransport(_settings(tmp_path, server))
+        monkeypatch.setattr(transport, "probe", lambda **kwargs: FluidNCProbeResult())
+        result = transport.restart_board(reboot_wait_seconds=0.3)
+        assert not result.ok
+        assert "did not come back" in result.message

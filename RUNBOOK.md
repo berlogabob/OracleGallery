@@ -704,6 +704,8 @@ If FluidNC WebUI opens but GUI says FluidNC is not ready, check the Telnet side 
 
 If FluidNC state is `Alarm`, inspect the machine physically, then use `UNLOCK ALARM` only when safe.
 
+If every `$` command answers `error:152` ("invalid configuration") and `$CD` reports board `None`, FluidNC panicked and booted its built-in "Default (Test Drive)" config — no motor pins, no limits. The panic skip lasts exactly one boot: the system check restarts the board automatically with `$Bye`, or press `RESTART BOARD` (SETUP → MACHINE, Recovery row). The board is back in ~10 s with the real config; home before printing. A physical power cycle is only needed if the restart does not clear it. The panics correlate with Z-servo moves (brownout suspect): inspect the Z-servo power feed / give the servo its own 5 V supply, and recalibrate the servo pulse range (`scripts/build_z_range_cal.py`) so Z0/−25 sit inside the mechanical range.
+
 If FluidNC state is `Hold`, use `RESUME` only when the tool path is safe to continue.
 
 If a G-code stream fails with `error`, `ALARM`, disconnect, or timeout waiting for `ok`, the GUI disables print. Run `CONNECT`, inspect logs, and generate G-code only if layout needs inspection before starting again.

@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import replace
@@ -17,6 +18,7 @@ import httpx
 from ..blocks.firebase.repository import FirebaseRemoteRepository
 from ..blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
 from ..blocks.gcode.direct_svg import create_direct_svg_print_job_from_gui
+from ..blocks.gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..blocks.plotter.daemon import PlotterDaemon
 from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
 from ..shared.gui_settings import GuiSettings
@@ -194,7 +196,7 @@ class SupervisorService:
     def run_system_check(self, gui_settings: GuiSettings) -> SystemCheckResult:
         mode = gui_settings.mode
         append_log("checks", f"System check started for {mode.value}", settings=self.settings)
-        result = SystemCheckService(
+        service = SystemCheckService(
             supervisor_settings=self.settings,
             plotter_settings=self.plotter_settings,
             uploader_settings=self.uploader_settings,
@@ -203,10 +205,17 @@ class SupervisorService:
             work_offset_provider=self._current_work_offset,
             board_identity_provider=self._live_board_identity,
             on_fallback_config=self._record_fallback_config,
-        ).run(
-            mode=mode,
-            gui_settings=gui_settings,
         )
+        result = service.run(mode=mode, gui_settings=gui_settings)
+        if any(check.detail.get("fallback_config") for check in result.checks):
+            # FluidNC skips config.yaml for exactly one boot after a panic; a $Bye
+            # restart boots the real config again. The machine runs unattended, so
+            # it must heal itself instead of waiting for someone to walk over and
+            # power-cycle it. One attempt only: if the restart does not clear the
+            # fallback, the original CRITICAL check (with its power-cycle advice)
+            # stands and printing stays blocked.
+            if self.recover_fallback_config():
+                result = service.run(mode=mode, gui_settings=gui_settings)
         self.runtime_store.save_system_check_result(result)
         status = ComponentStatus.RUNNING
         level = "info"
@@ -649,8 +658,14 @@ class SupervisorService:
         result = self.transport_factory(self.plotter_settings).home(axis)
         if not result.ok:
             result = _enrich_fluidnc_error(result)
-        if result.ok or _homing_disconnect_is_recoverable(result):
+        if result.ok:
             # Only a full home restores the XY reference; "$H=Z" must not clear the flag.
+            return self._record_homing_result(result, label, full_home=axis is None)
+        if _homing_disconnect_is_recoverable(result) and self._homing_completed_after_disconnect():
+            # A dropped connection mid-home usually means the home carried on fine --
+            # but a board browning out mid-home produces the same disconnect and used
+            # to be recorded as a successful home. Only believe it once the controller
+            # actually reports Idle.
             return self._record_homing_result(result, label, full_home=axis is None)
         return self._record_fluidnc_command(result, label)
 
@@ -669,6 +684,9 @@ class SupervisorService:
         config = self.runtime_store.load_plotter_config()
         if config.use_z_servo or self.plotter_settings.use_z_servo:
             z_up = config.z_up_mm if config.use_z_servo else self.plotter_settings.z_up_mm
+            # Clamp to the servo's travel: a target outside 0..-25 trips the board's
+            # soft limit into Alarm, or stalls the servo against its mechanical stop.
+            z_up = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, z_up))
             command = f"G0 Z{z_up:.3f}"
             result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
             return self._record_fluidnc_command(result, f"Z up servo {command}")
@@ -684,6 +702,7 @@ class SupervisorService:
             # the configured depth and feed. This used to send a hardcoded "G0 Z-25.000",
             # which rapided the servo and ignored z_down_mm entirely.
             z_down = config.z_down_mm if config.use_z_servo else self.plotter_settings.z_down_mm
+            z_down = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, z_down))
             z_feed = config.z_feed_mm_min if config.use_z_servo else self.plotter_settings.z_feed_mm_min
             command = f"G1 Z{z_down:.3f} F{z_feed:.2f}"
             result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
@@ -730,6 +749,65 @@ class SupervisorService:
             )
         result = self.transport_factory(self.plotter_settings).cycle_start()
         return self._record_fluidnc_command(result, "Resume/cycle start")
+
+    def restart_fluidnc_board(self) -> ComponentState:
+        """Manual RESTART BOARD button: $Bye reboot to clear the post-panic fallback config."""
+        if not self._manual_control_allowed("restart board"):
+            return self.runtime_store.load_component_state("fluidnc")
+        return self._record_fluidnc_command(self._restart_board_and_verify(), "Restart board ($Bye)")
+
+    def recover_fallback_config(self) -> bool:
+        """Automatic recovery from FluidNC's post-panic fallback config.
+
+        Called from run_system_check when the live $CD identity shows the built-in
+        default. Unlike the manual path this must not touch print control: pausing
+        the print pipeline would turn an unattended self-heal into a silent stop.
+        """
+        append_log(
+            "plotter",
+            "Fallback config detected; restarting FluidNC with $Bye",
+            level="warning",
+            settings=self.settings,
+        )
+        result = self._restart_board_and_verify()
+        append_log(
+            "plotter",
+            f"Controller restart: {result.message}",
+            level="info" if result.ok else "error",
+            settings=self.settings,
+        )
+        return result.ok
+
+    def _restart_board_and_verify(self) -> FluidNCCommandResult:
+        result = self.transport_factory(self.plotter_settings).restart_board()
+        if not result.ok:
+            return result
+        # The reboot dropped the position reference. G54 survives in flash, so work
+        # zero keeps its state; only homing is forced.
+        readiness = self.runtime_store.load_plotter_readiness()
+        self.runtime_store.save_plotter_readiness(
+            PlotterReadinessState(
+                work_zero_set=readiness.work_zero_set,
+                homing_required=True,
+                message="Controller restarted; home before printing",
+            )
+        )
+        live_board = self._live_board_identity()
+        if live_board is None or "TinyBee" not in live_board or "XXYYZ" not in live_board:
+            return FluidNCCommandResult(
+                ok=False,
+                command=result.command,
+                response_lines=result.response_lines,
+                error=(
+                    f"controller restarted but still reports config '{live_board or '<none>'}'; "
+                    "power-cycle the board"
+                ),
+            )
+        return FluidNCCommandResult(
+            ok=True,
+            command=result.command,
+            response_lines=[f"restarted; board {live_board}; homing required"],
+        )
 
     def soft_reset_fluidnc(self) -> ComponentState:
         result = self.transport_factory(self.plotter_settings).soft_reset()
@@ -973,6 +1051,22 @@ class SupervisorService:
         if count <= 1:
             return ""
         return f" (seen {count} times, first on {str(record.get('first_seen', ''))[:10]})"
+
+    def _homing_completed_after_disconnect(self, *, timeout_seconds: float = 45.0) -> bool:
+        """After a disconnect mid-$H, wait for the controller to prove the home finished."""
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            try:
+                controller = self.probe_fluidnc(scan=False).controller
+            except Exception:  # noqa: BLE001
+                controller = None
+            if controller is not None:
+                if controller.is_idle:
+                    return True
+                if controller.is_alarm:
+                    return False
+            time.sleep(2.0)
+        return False
 
     def _current_work_offset(self) -> tuple[float, float, float] | None:
         """G54 offset from the controller, or None if it cannot be read.
@@ -1255,8 +1349,9 @@ FLUIDNC_ERROR_HELP: tuple[tuple[str, str], ...] = (
     (
         "error:152",
         "FluidNC reports an invalid configuration. This is also what a panicked board looks like: "
-        "it boots a built-in default with no motor pins. Power-cycle the controller, then confirm "
-        "$CD reports the real board before printing.",
+        "it boots a built-in default with no motor pins. The system check restarts it automatically; "
+        "you can also press RESTART BOARD (SETUP - MACHINE) or power-cycle the controller, then "
+        "confirm $CD reports the real board before printing.",
     ),
     (
         "error:162",

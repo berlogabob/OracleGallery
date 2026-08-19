@@ -105,8 +105,18 @@ def test_missing_file_falls_back_to_starters(tmp_path: Path) -> None:
 
 def test_save_load_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "pens.json"
-    save_pen_profiles({"mine": dict.fromkeys(PEN_PROFILE_FIELDS, 1.0)}, path)
-    assert load_pen_profiles(path) == {"mine": dict.fromkeys(PEN_PROFILE_FIELDS, 1.0)}
+    # z_down_mm -1.0 keeps every value inside the load-time travel clamp.
+    save_pen_profiles({"mine": dict.fromkeys(PEN_PROFILE_FIELDS, -1.0)}, path)
+    assert load_pen_profiles(path) == {"mine": dict.fromkeys(PEN_PROFILE_FIELDS, -1.0)}
+
+
+def test_load_clamps_hand_edited_depth_to_servo_travel(tmp_path: Path) -> None:
+    """The file is hand-editable; a past-travel depth must not reach the board."""
+    path = tmp_path / "pens.json"
+    save_pen_profiles({"deep": {"z_down_mm": -26.0}, "high": {"z_down_mm": 1.0}}, path)
+    loaded = load_pen_profiles(path)
+    assert loaded["deep"]["z_down_mm"] == -25.0
+    assert loaded["high"]["z_down_mm"] == 0.0
 
 
 def test_unknown_keys_are_dropped_rather_than_fatal(tmp_path: Path) -> None:
@@ -202,15 +212,22 @@ def test_every_ladder_appears_on_the_sheet() -> None:
 
 
 def test_z_ladder_stays_within_the_safe_span() -> None:
-    """The one block that can wreck a nib: bounded offset, never an absolute sweep."""
+    """The one block that can wreck a nib: bounded offset, never an absolute sweep.
+
+    Only deeper wrecks a nib. A profile parked at the travel floor shifts the whole
+    ladder shallower to keep its rungs distinct, so the deep bound is the hard one:
+    never more than the span past the profile depth, never past the floor.
+    """
     settings = _a4_settings()
     apply_pen_profile(settings, "fineliner")
     gcode, _ = build_pen_cal_gcode(settings)
     depths = [float(m) for m in re.findall(r"^G1 Z(-[\d.]+) F", gcode, re.M)]
 
     assert min(depths) >= settings.z_down_mm - Z_LADDER_SPAN_MM - 1e-9
-    assert max(depths) <= settings.z_down_mm + Z_LADDER_SPAN_MM + 1e-9
+    assert max(depths) <= 0.0
     assert min(depths) >= Z_ABSOLUTE_FLOOR_MM
+    ladder = {d for d in depths}
+    assert len({d for d in ladder if d <= settings.z_down_mm + 2 * Z_LADDER_SPAN_MM}) >= PenCalRanges().z_steps
 
 
 def test_z_ladder_respects_the_absolute_floor() -> None:

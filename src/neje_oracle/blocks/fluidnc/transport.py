@@ -256,6 +256,33 @@ class FluidNCTransport:
     def soft_reset(self) -> FluidNCCommandResult:
         return self.send_realtime(b"\x18")
 
+    def restart_board(self, *, reboot_wait_seconds: float = 30.0) -> FluidNCCommandResult:
+        """Reboot the ESP32 with $Bye and wait for it to come back online.
+
+        FluidNC skips config.yaml for exactly one boot after a panic ("Skipping
+        configuration file due to panic" -> the built-in "Default (Test Drive)"
+        config, error:152 on every $ command). A clean software restart loads the
+        real config again, so a remote $Bye recovers what otherwise needs a walk
+        to the power switch. Measured on the real board 2026-08-19: telnet drops
+        ~6s after $Bye and is back by ~9s.
+
+        The reboot loses the position reference: callers must require homing.
+        """
+        result = self.send_command("$Bye", wait_for_ok=False)
+        if not result.ok:
+            return result
+        time.sleep(2.0)  # let the board actually go down before polling
+        deadline = time.monotonic() + reboot_wait_seconds
+        while time.monotonic() < deadline:
+            probe = self.probe(timeout_seconds=2.0)
+            if probe.online:
+                return FluidNCCommandResult(ok=True, command="$Bye", response_lines=[probe.message])
+        return FluidNCCommandResult(
+            ok=False,
+            command="$Bye",
+            error=f"controller did not come back within {reboot_wait_seconds:.0f}s after $Bye",
+        )
+
     def send(
         self,
         *,
