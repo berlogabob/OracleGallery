@@ -10,6 +10,11 @@
 # was a pre-servo draft whose values would have crashed the machine (Y homing
 # inverted, half scale, and the laser PWM assigned to the pen-servo pin).
 #
+# Servo pulse range recalibrated 2026-08-19 after the servo was remounted (and moved to
+# its own 5V supply): 900-2100 -> 500-1750, tuned live with scripts/z_servo_tune.py and
+# uploaded to the board via WebDAV (curl -T ... http://<board>/flash/TinyBee-06.yaml).
+# The old range commanded the arm past its mechanical stop at the top -- chronic stall.
+#
 # Verified against the physical machine 2026-08-07:
 #   X travel 255 mm, Y travel 440 mm, both home NEGATIVE to mpos 0
 #   steps_per_mm 40 (measured dead-on over 100 mm)
@@ -114,8 +119,8 @@ axes:
       rc_servo:
         pwm_hz: 50
         output_pin: gpio.2
-        min_pulse_us: 900
-        max_pulse_us: 2100
+        min_pulse_us: 500
+        max_pulse_us: 1750
       limit_neg_pin: NO_PIN
       limit_pos_pin: gpio.22:pu:low
       limit_all_pin: NO_PIN
