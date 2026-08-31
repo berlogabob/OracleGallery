@@ -5,7 +5,7 @@ Run in its own terminal:  uv run python scripts/z_servo_tune.py
 Keys are single presses -- no Enter.
 
   up / w     nudge the servo one step    down / s   nudge it the other way
-  + / -      step size x2 / /2 (starts at 10us)
+  + / -      step size up / down the ladder 1 2 5 10 20 50 (starts at 10us)
   T          mark HERE as the TOP        B          mark HERE as the BOTTOM
   t / b / m  go to the marked top / bottom / the middle
   p          position, pulses, marks     h          home Z ($H=Z)
@@ -53,6 +53,12 @@ Z_TOP_MM = 0.0
 Z_BOTTOM_MM = -25.0
 
 ARROWS = {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}
+
+# A ladder, not doubling: an SG90's dead band is 5-10us, so 10 and 20 are the sizes that
+# actually tune anything -- and doubling from 10 can never return to 10 (10 -> 5 -> 2 ->
+# 1 -> 2 -> 4 -> 8 -> 16), which stranded a live tuning session on 2026-08-31.
+STEP_LADDER = (1, 2, 5, 10, 20, 50)
+DEAD_BAND_US = 10
 
 
 def arm_height_mm(l_mm: float, theta_deg: float) -> float:
@@ -167,7 +173,7 @@ def main() -> None:
     top_pulse = read_pulse(MAX_KEY)
     bottom_pulse = read_pulse(MIN_KEY)
     live_pulse = top_pulse
-    step_us = 10
+    step_us = 10  # must stay a STEP_LADDER value
     arm_mm = 0.0
     current_z = Z_TOP_MM
     print(f"board pulses: min={bottom_pulse} max={top_pulse}")
@@ -199,8 +205,10 @@ def main() -> None:
             hold(live_pulse)
             print(f"pulse {live_pulse}us")
         elif key in ("+", "=", "-", "_"):
-            step_us = max(1, min(200, step_us * 2 if key in ("+", "=") else step_us // 2))
-            print(f"step {step_us}us")
+            rung = STEP_LADDER.index(step_us) + (1 if key in ("+", "=") else -1)
+            step_us = STEP_LADDER[max(0, min(len(STEP_LADDER) - 1, rung))]
+            hint = "  (below the SG90 dead band -- may do nothing)" if step_us < DEAD_BAND_US else ""
+            print(f"step {step_us}us{hint}")
         elif key == "T":
             top_pulse = live_pulse
             print(f"TOP marked at {top_pulse}us")
@@ -255,6 +263,17 @@ def selftest() -> None:
     assert pulse_for_z(-12.5, 1750, 500) == 1125
     # A reversed servo marks top below bottom; the interpolation has to follow it.
     assert pulse_for_z(Z_BOTTOM_MM, 500, 1750) == 1750
+    # Every rung must be reachable from every other, in both directions.
+    assert 10 in STEP_LADDER and tuple(sorted(STEP_LADDER)) == STEP_LADDER
+    for start in STEP_LADDER:
+        seen, step = {start}, start
+        for _ in range(len(STEP_LADDER)):
+            step = STEP_LADDER[min(len(STEP_LADDER) - 1, STEP_LADDER.index(step) + 1)]
+            seen.add(step)
+        for _ in range(2 * len(STEP_LADDER)):
+            step = STEP_LADDER[max(0, STEP_LADDER.index(step) - 1)]
+            seen.add(step)
+        assert seen == set(STEP_LADDER), (start, seen)
     print("selftest ok")
 
 
