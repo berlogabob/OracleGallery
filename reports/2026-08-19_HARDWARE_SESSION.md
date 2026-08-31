@@ -47,6 +47,31 @@ The horn was re-seated and the range saved. **The range is deliberately narrow.*
   `T`/`B` mark the ends, and a top mark below a bottom mark is the reversed-servo swap, so
   direction no longer costs a second re-seat.
 
+## STOP PRINT confirmed on hardware (2026-08-31)
+
+Four live stops on a real draw. The machine stops in **well under a second** every time:
+run 2 acked two more G-code lines after the click (113 -> 115 of 874) and went quiet
+0.53 s later. Stops land mid-cell, not at a row boundary, and the board ends Idle with
+the pen up and its position reference intact -- no soft reset, no re-home. `75869e7` does
+what it claims.
+
+**But the GUI status flip lags, and the lag scales with rows completed:**
+
+| rows done at stop | click -> OPERATOR_PAUSED |
+|---|---|
+| 0 | ~3 s |
+| 1 | 38 s |
+| 4 | still `printing` 4 s after the counter froze |
+
+The G-code counter freezes immediately in all cases, so this is reporting lag, not motion.
+The `PrintStopRequested` handler logs nothing between the pen lift and `_set_state`, and it
+calls `_replace_manifest_row`, which rewrites the whole manifest -- longer with every row.
+
+This matters more than it looks: it is exactly the trap from 2026-08-19, where the operator
+pressed STOP twice and reached for E-STOP because the machine looked like it was ignoring
+them. The pen was off the paper the whole time. Fix is to flip the state before the
+bookkeeping, and to log the pen lift so the next stop is measurable.
+
 ## The "HTTP flicker" was probably the probe rate (2026-08-31)
 
 Ten pen-up/pen-down cycles on the new range read `http_online=False` every single time —
@@ -102,7 +127,6 @@ telnet connection and sends `?`, never touching HTTP.
    mid-print check (finding #13 fix, never confirmed on hardware).
 2. Re-capture `z_down_mm` / `z_up_mm` / `z_fix_mm` in the GUI after the servo work (old
    −7/−2 are stale twice over now; with the narrow range they want −25/0).
-3. One live STOP PRINT mid-draw confirmation of `75869e7`.
 4. Firebase end-to-end + stale-job requeue live check (finding #18 fix).
 5. Pen campaign: 15×3 matrix, sheets already in `runtime/physical_tests/`.
 
