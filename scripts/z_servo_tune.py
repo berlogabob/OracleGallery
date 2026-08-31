@@ -1,32 +1,38 @@
-"""Interactive Z-servo range tuner: find the real mechanical top/bottom after remounting.
+"""Interactive Z-servo tuner: drive the servo by hand, mark the two endpoints, save.
 
 Run in its own terminal:  uv run python scripts/z_servo_tune.py
 
-The servo maps min_pulse_us -> Z-25 (bottom) and max_pulse_us -> Z0 (top).
-If the arm grinds at the top, LOWER max_pulse until Z0 sits just inside the
-mechanical range. If the bottom is short/deep, adjust min_pulse the same way.
-Pulse changes apply live to the board (RAM only) -- nothing is saved until you
-copy the final numbers into TinyBee-06.yaml on the board.
+Keys are single presses -- no Enter.
 
-Commands (type, then Enter):
-  t          go to Z0 (top)            b     go to Z-25 (bottom)
-  m          go to Z-12 (middle)       z -7  go to any Z (example)
-  w / s      nudge Z up / down 0.5mm   W / S nudge Z up / down 2mm
-  [ / ]      max_pulse -25 / +25 us (re-seats the TOP)
-  ; / '      min_pulse -25 / +25 us (re-seats the BOTTOM)
-  p          show position + pulses    h     home Z ($H=Z)
-  l 38.5     set the measured arm length (shaft -> pen-holder contact), in mm
-  q          quit and print the final yaml values
+  up / w     nudge the servo one step    down / s   nudge it the other way
+  + / -      step size x2 / /2 (starts at 10us)
+  T          mark HERE as the TOP        B          mark HERE as the BOTTOM
+  t / b / m  go to the marked top / bottom / the middle
+  p          position, pulses, marks     h          home Z ($H=Z)
+  z          type an absolute Z          l          type the measured arm length
+  q          write the marks back and print the yaml values
 
-Geometry: the arm pushes the holder up. Bottom is the arm at 90 deg to the servo body
-(shelf resting on it, hard floor); top is Z home and must keep ~15 deg of margin from
-the dead position where the linkage can lock. Pen height is L*cos(theta), so the whole
-usable stroke is L*(cos15 - cos90) ~= 0.966*L. Set `l <mm>` after measuring and `p`
-reports the expected travel to sanity-check the endpoints against.
+Nudging drives the pulse, not Z: the servo parks at Z0 and the top pulse is moved
+live, so no soft limit is in the way while the horn is loose. Whichever way "up"
+turns out to be, just mark the ends with T and B -- if the top mark lands below
+the bottom mark that IS the min/max swap FluidNC documents for a reversed servo,
+and q prints the two values already in the order the yaml wants them.
+
+Geometry: the arm pushes the holder up. Bottom is the arm at 90 deg to the servo
+body (shelf resting on it, hard floor); top is Z home and must keep ~15 deg of
+margin from the dead position where the linkage can lock. Pen height is
+L*cos(theta), so the usable stroke is L*(cos15 - cos90) ~= 0.966*L. Set the
+measured arm length with `l` and `p` reports the travel to check the ends against.
+
+Nothing here is saved: pulse changes are RAM-only until the numbers q prints are
+copied into TinyBee-06.yaml and uploaded to the board.
 """
 
 from __future__ import annotations
 
+import sys
+import termios
+import tty
 from math import cos, radians
 
 from neje_oracle.blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
@@ -35,11 +41,18 @@ from neje_oracle.shared.config import PlotterSettings
 MIN_KEY = "$/axes/Z/motor0/rc_servo/min_pulse_us"
 MAX_KEY = "$/axes/Z/motor0/rc_servo/max_pulse_us"
 
+# Leash for hand-nudging. Wide enough to find any sane horn seating, narrow enough
+# that a stuck key cannot walk the servo into a stall against its internal stops.
+PULSE_FLOOR_US = 400
+PULSE_CEILING_US = 2600
+
 # The two mechanical endpoints, as angles from the servo's dead position.
 TOP_THETA_DEG = 15.0  # Z0: never 0 deg, or the linkage can cross over and lock.
 BOTTOM_THETA_DEG = 90.0  # Z-25: arm square to the body, shelf resting on it.
 Z_TOP_MM = 0.0
 Z_BOTTOM_MM = -25.0
+
+ARROWS = {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}
 
 
 def arm_height_mm(l_mm: float, theta_deg: float) -> float:
@@ -53,16 +66,48 @@ def theta_for_z(z_mm: float) -> float:
     return TOP_THETA_DEG + span * (BOTTOM_THETA_DEG - TOP_THETA_DEG)
 
 
+def pulse_for_z(z_mm: float, top_pulse: int, bottom_pulse: int) -> int:
+    """The pulse FluidNC holds at a commanded Z, given the two endpoint pulses."""
+    span = (z_mm - Z_TOP_MM) / (Z_BOTTOM_MM - Z_TOP_MM)
+    return round(top_pulse + span * (bottom_pulse - top_pulse))
+
+
 def geometry_report(l_mm: float, z_mm: float) -> str:
     # ponytail: linear pulse<->Z, trig only at design time; revisit if gearbox rework needs real mm linearity
     if l_mm <= 0:
-        return "arm L unset -- measure shaft->holder contact and type: l 38.5"
+        return "arm L unset -- measure shaft->holder contact, press l and type it"
     travel = arm_height_mm(l_mm, TOP_THETA_DEG) - arm_height_mm(l_mm, BOTTOM_THETA_DEG)
     theta = theta_for_z(z_mm)
     return (
         f"L={l_mm:.1f}mm  theta({z_mm:.2f})={theta:.1f}deg  "
         f"height={arm_height_mm(l_mm, theta):.2f}mm  travel(top->bottom)={travel:.2f}mm"
     )
+
+
+def read_key() -> str:
+    """One keypress, no Enter. Arrow keys come back as 'up' / 'down' / 'left' / 'right'.
+
+    cbreak, not raw, so Ctrl-C still raises KeyboardInterrupt -- with a servo on the
+    other end of this loop, the panic key has to keep working.
+    """
+    fd = sys.stdin.fileno()
+    saved = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        char = sys.stdin.read(1)
+        if char == "\x1b":  # an escape sequence; a bare Esc would block here, so don't press it
+            return ARROWS.get(sys.stdin.read(2), "esc")
+        return char
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
+
+
+def prompt(label: str) -> str:
+    """Line input for the two commands that need a number. Terminal is already cooked."""
+    try:
+        return input(label).strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
 
 
 def main() -> None:
@@ -82,80 +127,139 @@ def main() -> None:
     if probe.controller and probe.controller.is_alarm:
         print("unlocking alarm:", t.unlock_alarm().message)
 
-    def read_pulse(key: str) -> str:
+    def read_pulse(key: str) -> int:
         result = t.send_command(key, wait_for_ok=True)
         for line in result.response_lines:
             if "=" in line:
-                return line.split("=", 1)[1].strip()
-        return "?"
+                return int(float(line.split("=", 1)[1].strip()))
+        return 0
 
     def set_pulse(key: str, value: int) -> None:
         result = t.send_command(f"{key}={value}", wait_for_ok=True)
-        print(f"{key.split('/')[-1]} = {value} -> {'ok' if result.ok else result.message}")
+        if not result.ok:
+            print(f"{key.split('/')[-1]}={value} rejected: {result.message}")
 
     def goto(z: float) -> None:
         result = t.send_commands(["G21", "G90", "G54", f"G1 Z{z:.2f} F600"])
-        print(f"Z{z:.2f} -> {'ok' if result.ok else result.message}")
+        if not result.ok:
+            print(f"Z{z:.2f} -> {result.message}")
+
+    def apply_marks() -> None:
+        """Push the marked endpoints back into the live config, in yaml order."""
+        set_pulse(MIN_KEY, bottom_pulse)
+        set_pulse(MAX_KEY, top_pulse)
+
+    def hold(pulse: int) -> None:
+        """Park the servo at an arbitrary pulse: make it the Z0 end and command Z0."""
+        set_pulse(MAX_KEY, pulse)
+        goto(Z_TOP_MM)
 
     def status() -> float:
         p = t.probe(timeout_seconds=2)
         z = p.controller.machine_position[2] if p.controller and p.controller.machine_position else float("nan")
-        print(f"Z={z:.2f}  min_pulse={read_pulse(MIN_KEY)}  max_pulse={read_pulse(MAX_KEY)}  state={p.controller.state.value if p.controller else '?'}")
+        state = p.controller.state.value if p.controller else "?"
+        print(
+            f"Z={z:.2f}  live={live_pulse}us  step={step_us}us  "
+            f"marks: top={top_pulse} bottom={bottom_pulse}  state={state}"
+        )
         return z
 
+    top_pulse = read_pulse(MAX_KEY)
+    bottom_pulse = read_pulse(MIN_KEY)
+    live_pulse = top_pulse
+    step_us = 10
     arm_mm = 0.0
-    current_z = status()
-    print(geometry_report(arm_mm, current_z))
+    current_z = Z_TOP_MM
+    print(f"board pulses: min={bottom_pulse} max={top_pulse}")
+    print("keys: up/down nudge, T/B mark here, t/b/m go, p status, l arm length, q quit")
+
     while True:
         try:
-            cmd = input("tune> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            cmd = "q"
-        if not cmd:
-            continue
-        if cmd == "q":
+            key = read_key()
+        except KeyboardInterrupt:
+            key = "q"
+        if key in ("q", "esc"):
+            apply_marks()
             print("\nFinal values for TinyBee-06.yaml (axes -> z -> motor0 -> rc_servo):")
-            print(f"  min_pulse_us: {read_pulse(MIN_KEY)}")
-            print(f"  max_pulse_us: {read_pulse(MAX_KEY)}")
+            print(f"  min_pulse_us: {bottom_pulse}")
+            print(f"  max_pulse_us: {top_pulse}")
+            if top_pulse < bottom_pulse:
+                print("  (top below bottom: that is the reversed-servo swap, the order above is correct)")
             print(geometry_report(arm_mm, current_z))
             print("NOTE: live values are RAM-only; they reset on reboot until saved to the yaml.")
             return
-        elif cmd == "t":
-            current_z = 0.0; goto(current_z)
-        elif cmd == "b":
-            current_z = -25.0; goto(current_z)
-        elif cmd == "m":
-            current_z = -12.0; goto(current_z)
-        elif cmd.startswith("z"):
+        if key in ("up", "w", "down", "s"):
+            delta = step_us if key in ("up", "w") else -step_us
+            nudged = max(PULSE_FLOOR_US, min(PULSE_CEILING_US, live_pulse + delta))
+            if nudged == live_pulse:
+                print(f"pulse leash: staying inside {PULSE_FLOOR_US}..{PULSE_CEILING_US}us")
+                continue
+            live_pulse = nudged
+            current_z = Z_TOP_MM
+            hold(live_pulse)
+            print(f"pulse {live_pulse}us")
+        elif key in ("+", "=", "-", "_"):
+            step_us = max(1, min(200, step_us * 2 if key in ("+", "=") else step_us // 2))
+            print(f"step {step_us}us")
+        elif key == "T":
+            top_pulse = live_pulse
+            print(f"TOP marked at {top_pulse}us")
+        elif key == "B":
+            bottom_pulse = live_pulse
+            print(f"BOTTOM marked at {bottom_pulse}us")
+        elif key in ("t", "b", "m"):
+            apply_marks()
+            current_z = {"t": Z_TOP_MM, "b": Z_BOTTOM_MM, "m": (Z_TOP_MM + Z_BOTTOM_MM) / 2}[key]
+            # Track where the servo actually ended up, so the next nudge continues from
+            # here instead of snapping back to the last hand-driven pulse.
+            live_pulse = pulse_for_z(current_z, top_pulse, bottom_pulse)
+            goto(current_z)
+            print(f"Z{current_z:.2f}")
+        elif key == "z":
+            raw = prompt("absolute Z mm> ")
             try:
-                current_z = float(cmd[1:].strip()); goto(current_z)
+                current_z = float(raw)
             except ValueError:
-                print("usage: z -7.5")
-        elif cmd in ("w", "s", "W", "S"):
-            step = {"w": 0.5, "s": -0.5, "W": 2.0, "S": -2.0}[cmd]
-            current_z = max(-25.0, min(0.0, current_z + step)); goto(current_z)
-        elif cmd in ("[", "]"):
-            value = int(float(read_pulse(MAX_KEY))) + (25 if cmd == "]" else -25)
-            set_pulse(MAX_KEY, value); goto(current_z)
-        elif cmd in (";", "'"):
-            value = int(float(read_pulse(MIN_KEY))) + (25 if cmd == "'" else -25)
-            set_pulse(MIN_KEY, value); goto(current_z)
-        elif cmd == "p":
-            current_z = status()
-            print(geometry_report(arm_mm, current_z))
-        elif cmd.startswith("l"):
+                print("not a number")
+            else:
+                apply_marks()
+                live_pulse = pulse_for_z(current_z, top_pulse, bottom_pulse)
+                goto(current_z)
+        elif key == "l":
+            raw = prompt("arm length mm (shaft -> holder contact)> ")
             try:
-                arm_mm = float(cmd[1:].strip())
+                arm_mm = float(raw)
             except ValueError:
-                print("usage: l 38.5")
+                print("not a number")
             else:
                 print(geometry_report(arm_mm, current_z))
-        elif cmd == "h":
+        elif key == "p":
+            current_z = status()
+            print(geometry_report(arm_mm, current_z))
+        elif key == "h":
+            apply_marks()
             result = t.home("Z")
             print("home Z ->", "ok" if result.ok else result.message)
         else:
-            print(__doc__.split("Commands", 1)[1])
+            print(__doc__.split("Keys are single presses -- no Enter.", 1)[1].split("Nudging", 1)[0])
+
+
+def selftest() -> None:
+    """uv run python scripts/z_servo_tune.py --selftest -- no board needed."""
+    assert abs(arm_height_mm(40.0, BOTTOM_THETA_DEG)) < 1e-9
+    assert abs(arm_height_mm(40.0, TOP_THETA_DEG) - 38.637) < 0.001
+    assert theta_for_z(Z_TOP_MM) == TOP_THETA_DEG
+    assert theta_for_z(Z_BOTTOM_MM) == BOTTOM_THETA_DEG
+    assert pulse_for_z(Z_TOP_MM, 1750, 500) == 1750
+    assert pulse_for_z(Z_BOTTOM_MM, 1750, 500) == 500
+    assert pulse_for_z(-12.5, 1750, 500) == 1125
+    # A reversed servo marks top below bottom; the interpolation has to follow it.
+    assert pulse_for_z(Z_BOTTOM_MM, 500, 1750) == 1750
+    print("selftest ok")
 
 
 if __name__ == "__main__":
-    main()
+    if "--selftest" in sys.argv:
+        selftest()
+    else:
+        main()
