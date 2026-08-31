@@ -47,6 +47,21 @@ The horn was re-seated and the range saved. **The range is deliberately narrow.*
   `T`/`B` mark the ends, and a top mark below a bottom mark is the reversed-servo swap, so
   direction no longer costs a second re-seat.
 
+## The "HTTP flicker" was probably the probe rate (2026-08-31)
+
+Ten pen-up/pen-down cycles on the new range read `http_online=False` every single time —
+then stayed False at Idle, then recovered on their own once the polling stopped. The cause
+was the test loop, not the board: `FluidNCTransport.probe()` opens a fresh telnet socket
+*and* does an HTTP GET, and calling it ~3x/second exhausts the ESP32's socket pool. At a
+1.5 s cadence the same ten cycles are 10/10 clean, HTTP up throughout, no panic in `$SS`.
+
+This is a candidate explanation for finding #1's "HTTP flickers right after Z moves", which
+shaped the whole Z-servo diagnosis. It does not explain the *panics* — those showed real
+`[MSG:ERR: Showing startup log from previous panic]` in `$SS` and remain unexplained. But
+flicker and panic were being read as one symptom, and at least the flicker half looks
+self-inflicted. The print hot path never had this problem: `_wait_for_idle` reuses one
+telnet connection and sends `?`, never touching HTTP.
+
 ## The Z-servo diagnosis trail (what we now know)
 
 1. **Crashes correlate with Z-servo commands, not load**: board crashed during gentle

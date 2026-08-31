@@ -136,6 +136,15 @@ class FluidNCTransport:
         return self.settings.fluidnc_telnet_port
 
     def probe(self, *, timeout_seconds: float | None = None) -> FluidNCProbeResult:
+        """One health snapshot: an HTTP GET plus a fresh telnet connect, status and $G.
+
+        Do NOT call this in a tight loop. Every probe costs the ESP32 a new socket, and
+        polling faster than about once a second exhausts its pool: http_online starts
+        reading False while the board is perfectly healthy, which looks exactly like the
+        "HTTP flicker after a Z move" that cost a session of Z-servo diagnosis on
+        2026-08-19. Watching motion is what _wait_for_idle is for -- it reuses one
+        connection and sends "?" over telnet, never touching HTTP.
+        """
         timeout = timeout_seconds or self.settings.fluidnc_connect_timeout_seconds
         result = FluidNCProbeResult(
             http_url=self.settings.fluidnc_http_url,
