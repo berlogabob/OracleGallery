@@ -122,10 +122,13 @@ axes:
         # Measured 2026-08-31 with scripts/z_servo_tune.py, after re-seating the horn.
         # These are the WORKING pen-down/pen-up positions, not the mechanical ends: the
         # gearbox cracks audibly near its stops, so the range stays deliberately short
-        # of them. ~240us of the servo's arc, so Z0..Z-25 spans only a couple of mm of
-        # real pen travel -- the Z numbers in the GUI are lift positions, not millimetres.
-        # Widen only after the holder assembly is rebuilt.
-        min_pulse_us: 1820
+        # of them. Only ~130us of the servo's arc, so Z0..Z-25 spans a fraction of a
+        # millimetre of real pen travel -- the Z numbers in the GUI are lift positions,
+        # not millimetres. Widen only after the holder assembly is rebuilt.
+        #
+        # min was 1820 until a test print showed the nib splaying: pen-down was 110us
+        # too deep. Retuned against paper, so this floor is ink quality, not mechanics.
+        min_pulse_us: 1930
         max_pulse_us: 2060
       limit_neg_pin: NO_PIN
       limit_pos_pin: gpio.22:pu:low
