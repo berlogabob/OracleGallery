@@ -3,20 +3,25 @@
 Physical-testing session: two software bugs found and fixed on hardware, the Z-servo
 electrical/mechanical saga diagnosed to root cause, session paused mid-repair.
 
-## ⚠ RESUME POINT (read first)
+## ✅ RESUME POINT — closed 2026-08-31
 
-**The servo horn re-seat was interrupted.** State at pause:
+The horn was re-seated and the range saved. **The range is deliberately narrow.**
 
-- Servo is held at its electrical center: pulse window narrowed to 1495–1505 µs **in RAM
-  only** — a reboot restores the yaml values (min 500 / max 1750).
-- The pen currently parks **below the needed bottom** — the horn is bolted at the wrong
-  angle for the servo's center. Next physical step: unscrew the horn, re-seat it on the
-  spline so the pen sits at **mid-height** while the shaft holds center, avoiding
-  over-center linkage crossings at either end. Then: restore a working pulse range,
-  slow direction check (Z0 = up?), re-tune endpoints with `scripts/z_servo_tune.py`,
-  send the numbers for persisting (WebDAV upload + repo config, procedure below).
-- Board IP changes on every hotspot drop (phone overheats). Last known: `10.249.30.74`
-  (`fluidnc.local` works; `.env` is pinned to the last IP; the tuner auto-discovers).
+- Working pulses: **min 1820 / max 2060 µs** (Z-25 = pen down, Z0 = pen up), measured with
+  `scripts/z_servo_tune.py`, written into `echodraw/hardware/configs/config.yaml`, uploaded
+  by WebDAV (HTTP 201) and verified across a reboot. Direction is correct as marked — no
+  min/max swap needed. `$H=Z` homes clean, no fallback config, no panic in `$SS`.
+- These are the **working pen-up/pen-down positions, not the mechanical ends**. The gearbox
+  cracks audibly near its stops, so the operator stopped short of them on purpose. ~240 µs of
+  the servo's arc, so the full Z-25..Z0 command span is only a couple of mm of real pen
+  travel: the GUI's Z numbers are lift positions now, not millimetres.
+- **Consequence for pen-fix**: there is no travel left below pen-down, so the `GO TO FIX`
+  position cannot sit under it. `z_fix_mm` is parked at the bottom (= pen-down) until the
+  holder is rebuilt.
+- **Deferred, owner: operator** — redesign the pen-holder assembly and gearbox. That is what
+  buys back the full 15°..90° arm sweep, real millimetre travel, and a usable pen-fix clamp.
+- Board IP still changes on every hotspot drop; `.env` is repinned to `10.131.66.74` and the
+  tuner auto-discovers.
 
 ## Fixes shipped and field-verified (commits)
 
@@ -34,6 +39,13 @@ electrical/mechanical saga diagnosed to root cause, session paused mid-repair.
   the live retry at 16:22 ended in a clean operator-paused state.
 - `c45c5ec` — **Z-servo live range tuner** (`scripts/z_servo_tune.py`) + recalibrated
   pulse range in `echodraw/hardware/configs/config.yaml`.
+- `c32001f` — **pen-fix, the third saved Z position**: `z_fix_mm` through GuiSettings, the
+  runtime config, a CALIBRATE input, `SET AS PEN-FIX` and `GO TO FIX`. Built for a clamp
+  position below pen-down; the narrow safe range means it has nowhere to go yet.
+- `954db9b` — **tuner drives the pulse on single keypresses**: the old Z-based nudge was
+  silently refused at Z0 (already at the soft limit) — exactly where the horn needs seating.
+  `T`/`B` mark the ends, and a top mark below a bottom mark is the reversed-servo swap, so
+  direction no longer costs a second re-seat.
 
 ## The Z-servo diagnosis trail (what we now know)
 
@@ -61,7 +73,8 @@ electrical/mechanical saga diagnosed to root cause, session paused mid-repair.
 
 ## Hardware to-do (owner: operator)
 
-- Finish the horn re-seat + endpoint retune (resume point above).
+- Redesign the pen-holder assembly / gearbox — it cracks near the mechanical stops, which is
+  what forced the narrow pulse range above.
 - The spring on the pen mechanism steals lift torque — reconsider or weaken if lift
   stays marginal after retune.
 - If crashes persist after the servo is mechanically sane and separately powered,
@@ -72,8 +85,8 @@ electrical/mechanical saga diagnosed to root cause, session paused mid-repair.
 
 1. Six smoke plots, one per CREATE source (closes parked defect B9) + tab-switch
    mid-print check (finding #13 fix, never confirmed on hardware).
-2. Re-capture `z_down_mm` / `z_up_mm` in the GUI after the servo work (old −7/−2 are
-   stale twice over now).
+2. Re-capture `z_down_mm` / `z_up_mm` / `z_fix_mm` in the GUI after the servo work (old
+   −7/−2 are stale twice over now; with the narrow range they want −25/0).
 3. One live STOP PRINT mid-draw confirmation of `75869e7`.
 4. Firebase end-to-end + stale-job requeue live check (finding #18 fix).
 5. Pen campaign: 15×3 matrix, sheets already in `runtime/physical_tests/`.
