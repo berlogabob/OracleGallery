@@ -709,6 +709,24 @@ class SupervisorService:
         result = self.transport_factory(self.plotter_settings).pen_down()
         return self._record_fluidnc_command(result, f"Pen down {self.plotter_settings.pen_down_command}")
 
+    def pen_fix_fluidnc(self) -> ComponentState:
+        """Move Z to the pen-fix position: the holder clamps the pen against a plate.
+
+        A fed G1 like pen-down, not a rapid -- this parks ~1mm off the hard mechanical
+        floor and a rapid overshoot there stalls the servo against the shelf. Servo-only:
+        the Z tune card that owns the button is hidden when use_z_servo is off.
+        """
+        if not self._manual_control_allowed("pen fix"):
+            return self.runtime_store.load_component_state("fluidnc")
+        config = self.runtime_store.load_plotter_config()
+        if not (config.use_z_servo or self.plotter_settings.use_z_servo):
+            return self.runtime_store.load_component_state("fluidnc")
+        z_fix = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, config.z_fix_mm))
+        z_feed = config.z_feed_mm_min if config.use_z_servo else self.plotter_settings.z_feed_mm_min
+        command = f"G1 Z{z_fix:.3f} F{z_feed:.2f}"
+        result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
+        return self._record_fluidnc_command(result, f"Z fix servo {command}")
+
     def unlock_fluidnc_alarm(self) -> ComponentState:
         if not self._manual_control_allowed("unlock alarm"):
             return self.runtime_store.load_component_state("fluidnc")

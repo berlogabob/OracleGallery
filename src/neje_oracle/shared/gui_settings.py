@@ -40,6 +40,7 @@ class GuiDefaults(TypedDict):
     xy_acceleration_mm_s2: float
     z_down_mm: float
     z_up_mm: float
+    z_fix_mm: float
     z_feed_mm_min: float
     pen_width_mm: float
     pen_down_dwell_ms: float
@@ -100,6 +101,7 @@ type NumericGuiDefaultKey = Literal[
     "xy_acceleration_mm_s2",
     "z_down_mm",
     "z_up_mm",
+    "z_fix_mm",
     "z_feed_mm_min",
     "pen_width_mm",
     "pen_down_dwell_ms",
@@ -157,6 +159,9 @@ GUI_DEFAULTS: GuiDefaults = {
     "xy_acceleration_mm_s2": 1000.0,
     "z_down_mm": -25.0,
     "z_up_mm": 0.0,
+    # Pen-fix: ~1mm above the mechanical bottom, where the holder clamps a pen
+    # against a calibration plate. Operator-only position; never emitted in print G-code.
+    "z_fix_mm": -24.0,
     "z_feed_mm_min": 1000.0,
     "pen_width_mm": 0.3,
     "pen_down_dwell_ms": 0.0,
@@ -232,6 +237,7 @@ class GuiSettings:
     xy_acceleration_mm_s2: float = GUI_DEFAULTS["xy_acceleration_mm_s2"]
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
+    z_fix_mm: float = GUI_DEFAULTS["z_fix_mm"]
     z_feed_mm_min: float = 1000.0
     # Nib calibration: the width of the emitted SVG stroke, and how many passes trace
     # needs to fill a bold line. halftone's min_ink_mm is NOT wired to this yet — it keeps
@@ -343,6 +349,7 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
             use_z_servo=plotter_settings.use_z_servo,
             z_down_mm=settings.z_down_mm,
             z_up_mm=settings.z_up_mm,
+            z_fix_mm=settings.z_fix_mm,
             z_feed_mm_min=settings.z_feed_mm_min,
             pen_down_dwell_ms=settings.pen_down_dwell_ms,
             work_zero_command=plotter_settings.work_zero_command,

@@ -210,6 +210,7 @@ class GuiContext:
         settings.xy_acceleration_mm_s2 = _field_or_default(fields, "xy_acceleration_mm_s2")
         settings.z_down_mm = _field_or_default(fields, "z_down_mm")
         settings.z_up_mm = _field_or_default(fields, "z_up_mm")
+        settings.z_fix_mm = _field_or_default(fields, "z_fix_mm")
         settings.z_feed_mm_min = _field_or_default(fields, "z_feed_mm_min")
         # Pen profile fields. pen_width_mm existed on GuiSettings long before it was
         # pulled here, which is why it had no working GUI control: a widget missing from
@@ -1019,6 +1020,15 @@ class GuiContext:
         control.value = round(self._machine_z, 3)
         self.persist_and_refresh()
         ui.notify(f"{field_key} = {float(control.value):g} mm - SAVE AS PROFILE to keep it.", color="positive")
+
+    async def goto_fix(self) -> None:
+        """Move to the saved pen-fix position so the holder clamps against the plate."""
+        await self.fluidnc_action(
+            "pen fix",
+            self.supervisor.pen_fix_fluidnc,
+            refresh_probe=True,
+            success_message="At pen-fix",
+        )
 
     async def pen_up(self) -> None:
         await self.fluidnc_action(

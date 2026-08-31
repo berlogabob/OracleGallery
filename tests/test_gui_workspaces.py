@@ -94,6 +94,7 @@ def test_calibration_workspace_builds_and_populates_layout_and_scale_fields(monk
         "xy_acceleration_mm_s2",
         "z_up_mm",
         "z_down_mm",
+        "z_fix_mm",
         "z_feed_mm_min",
         "z_step",
     }

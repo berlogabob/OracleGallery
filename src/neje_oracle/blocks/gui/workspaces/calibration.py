@@ -202,6 +202,17 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                 )
                 number_control(
                     fields,
+                    "z_fix_mm",
+                    label="Pen-fix Z (mm)",
+                    value=settings.z_fix_mm,
+                    default=-24,
+                    min_value=Z_ABSOLUTE_FLOOR_MM,
+                    width_class="w-full",
+                    tooltip="Setup-only height where the holder clamps the pen against a calibration plate, ~1mm off the mechanical bottom. Never emitted in print G-code.",
+                    on_change=persist_and_refresh,
+                )
+                number_control(
+                    fields,
                     "z_feed_mm_min",
                     label="Z mm/min",
                     value=settings.z_feed_mm_min,
@@ -529,6 +540,12 @@ def _build_z_tune_card(ctx: GuiContext) -> None:
             )
             safe_action_button("SET AS PEN-UP", lambda: ctx.capture_z("z_up_mm")).tooltip(
                 "Current machine Z becomes Pen-up Z (mm)"
+            )
+            safe_action_button("SET AS PEN-FIX", lambda: ctx.capture_z("z_fix_mm")).tooltip(
+                "Current machine Z becomes Pen-fix Z (mm) -- where the holder clamps the pen"
+            )
+            safe_action_button("GO TO FIX", ctx.goto_fix).tooltip(
+                "Move to the saved Pen-fix Z. Put the calibration plate down first; keep the canvas clear."
             )
 
 

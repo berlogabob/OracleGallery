@@ -15,16 +15,54 @@ Commands (type, then Enter):
   [ / ]      max_pulse -25 / +25 us (re-seats the TOP)
   ; / '      min_pulse -25 / +25 us (re-seats the BOTTOM)
   p          show position + pulses    h     home Z ($H=Z)
+  l 38.5     set the measured arm length (shaft -> pen-holder contact), in mm
   q          quit and print the final yaml values
+
+Geometry: the arm pushes the holder up. Bottom is the arm at 90 deg to the servo body
+(shelf resting on it, hard floor); top is Z home and must keep ~15 deg of margin from
+the dead position where the linkage can lock. Pen height is L*cos(theta), so the whole
+usable stroke is L*(cos15 - cos90) ~= 0.966*L. Set `l <mm>` after measuring and `p`
+reports the expected travel to sanity-check the endpoints against.
 """
 
 from __future__ import annotations
+
+from math import cos, radians
 
 from neje_oracle.blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
 from neje_oracle.shared.config import PlotterSettings
 
 MIN_KEY = "$/axes/Z/motor0/rc_servo/min_pulse_us"
 MAX_KEY = "$/axes/Z/motor0/rc_servo/max_pulse_us"
+
+# The two mechanical endpoints, as angles from the servo's dead position.
+TOP_THETA_DEG = 15.0  # Z0: never 0 deg, or the linkage can cross over and lock.
+BOTTOM_THETA_DEG = 90.0  # Z-25: arm square to the body, shelf resting on it.
+Z_TOP_MM = 0.0
+Z_BOTTOM_MM = -25.0
+
+
+def arm_height_mm(l_mm: float, theta_deg: float) -> float:
+    """Pen height above the bottom stop for an arm of length l_mm at theta from dead."""
+    return l_mm * cos(radians(theta_deg))
+
+
+def theta_for_z(z_mm: float) -> float:
+    """Angle at a commanded Z. FluidNC interpolates pulse (hence angle) linearly in Z."""
+    span = (z_mm - Z_TOP_MM) / (Z_BOTTOM_MM - Z_TOP_MM)
+    return TOP_THETA_DEG + span * (BOTTOM_THETA_DEG - TOP_THETA_DEG)
+
+
+def geometry_report(l_mm: float, z_mm: float) -> str:
+    # ponytail: linear pulse<->Z, trig only at design time; revisit if gearbox rework needs real mm linearity
+    if l_mm <= 0:
+        return "arm L unset -- measure shaft->holder contact and type: l 38.5"
+    travel = arm_height_mm(l_mm, TOP_THETA_DEG) - arm_height_mm(l_mm, BOTTOM_THETA_DEG)
+    theta = theta_for_z(z_mm)
+    return (
+        f"L={l_mm:.1f}mm  theta({z_mm:.2f})={theta:.1f}deg  "
+        f"height={arm_height_mm(l_mm, theta):.2f}mm  travel(top->bottom)={travel:.2f}mm"
+    )
 
 
 def main() -> None:
@@ -65,7 +103,9 @@ def main() -> None:
         print(f"Z={z:.2f}  min_pulse={read_pulse(MIN_KEY)}  max_pulse={read_pulse(MAX_KEY)}  state={p.controller.state.value if p.controller else '?'}")
         return z
 
+    arm_mm = 0.0
     current_z = status()
+    print(geometry_report(arm_mm, current_z))
     while True:
         try:
             cmd = input("tune> ").strip()
@@ -77,6 +117,7 @@ def main() -> None:
             print("\nFinal values for TinyBee-06.yaml (axes -> z -> motor0 -> rc_servo):")
             print(f"  min_pulse_us: {read_pulse(MIN_KEY)}")
             print(f"  max_pulse_us: {read_pulse(MAX_KEY)}")
+            print(geometry_report(arm_mm, current_z))
             print("NOTE: live values are RAM-only; they reset on reboot until saved to the yaml.")
             return
         elif cmd == "t":
@@ -101,6 +142,14 @@ def main() -> None:
             set_pulse(MIN_KEY, value); goto(current_z)
         elif cmd == "p":
             current_z = status()
+            print(geometry_report(arm_mm, current_z))
+        elif cmd.startswith("l"):
+            try:
+                arm_mm = float(cmd[1:].strip())
+            except ValueError:
+                print("usage: l 38.5")
+            else:
+                print(geometry_report(arm_mm, current_z))
         elif cmd == "h":
             result = t.home("Z")
             print("home Z ->", "ok" if result.ok else result.message)

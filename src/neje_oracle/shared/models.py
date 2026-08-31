@@ -411,6 +411,7 @@ class PlotterRuntimeConfig:
     use_z_servo: bool = True
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
+    z_fix_mm: float = -24.0
     z_feed_mm_min: float = 1000.0
     pen_down_dwell_ms: float = 0.0
     work_zero_command: str = "G10 L20 P1 X0 Y0"
@@ -448,6 +449,7 @@ class PlotterRuntimeConfig:
             "use_z_servo": self.use_z_servo,
             "z_down_mm": self.z_down_mm,
             "z_up_mm": self.z_up_mm,
+            "z_fix_mm": self.z_fix_mm,
             "z_feed_mm_min": self.z_feed_mm_min,
             "pen_down_dwell_ms": self.pen_down_dwell_ms,
             "work_zero_command": self.work_zero_command,
@@ -486,6 +488,7 @@ class PlotterRuntimeConfig:
             use_z_servo=bool(payload.get("use_z_servo", True)),
             z_down_mm=float(payload.get("z_down_mm", -25.0)),
             z_up_mm=float(payload.get("z_up_mm", 0.0)),
+            z_fix_mm=float(payload.get("z_fix_mm", -24.0)),
             z_feed_mm_min=float(payload.get("z_feed_mm_min", 1000.0)),
             pen_down_dwell_ms=float(payload.get("pen_down_dwell_ms", 0.0)),
             work_zero_command=str(payload.get("work_zero_command", "G10 L20 P1 X0 Y0")),

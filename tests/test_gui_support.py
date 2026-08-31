@@ -78,6 +78,18 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     assert reloaded.layout_mode == "grid"
 
 
+def test_z_fix_mm_round_trips(tmp_path: Path) -> None:
+    # The three Z positions are captured live on hardware; a field that silently resets
+    # on reload means re-doing the servo tuning session.
+    settings_path = tmp_path / "runtime" / "gui_settings.json"
+    settings = load_gui_settings(settings_path)
+    assert settings.z_fix_mm == GUI_DEFAULTS["z_fix_mm"] == -24.0
+    settings.z_fix_mm = -23.75
+    save_gui_settings(settings, settings_path)
+
+    assert load_gui_settings(settings_path).z_fix_mm == -23.75
+
+
 def test_gui_settings_preserves_saved_cell_streaming(tmp_path: Path) -> None:
     settings_path = tmp_path / "runtime" / "gui_settings.json"
     settings_path.parent.mkdir(parents=True)
