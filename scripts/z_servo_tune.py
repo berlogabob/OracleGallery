@@ -10,7 +10,13 @@ Keys are single presses -- no Enter.
   t / b / m  go to the marked top / bottom / the middle
   p          position, pulses, marks     h          home Z ($H=Z)
   z          type an absolute Z          l          type the measured arm length
+  f          type the feed (mm/min)      c          cycle bottom<->top N times, timed
   q          write the marks back and print the yaml values
+
+Speed: `f` sets the F word every move uses (600 to start), `c` runs N full cycles at it
+and prints each one's wall time, then holds at the BOTTOM for a second so you can
+listen. A buzz at the bottom is the servo stalling on its hard floor: stop, back the
+bottom mark off, and only then go back up the feed ladder. Ctrl-C aborts a run.
 
 Nudging drives the pulse, not Z: the servo parks at Z0 and the top pulse is moved
 live, so no soft limit is in the way while the horn is loose. Whichever way "up"
@@ -32,6 +38,7 @@ from __future__ import annotations
 
 import sys
 import termios
+import time
 import tty
 from math import cos, radians
 
@@ -59,6 +66,14 @@ ARROWS = {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}
 # 1 -> 2 -> 4 -> 8 -> 16), which stranded a live tuning session on 2026-08-31.
 STEP_LADDER = (1, 2, 5, 10, 20, 50)
 DEAD_BAND_US = 10
+
+# Feed leash. The yaml caps Z at max_rate 10000; below 100 a full stroke takes 15 s.
+FEED_FLOOR = 100
+FEED_CEILING = 10000
+
+
+def clamp_feed(value: float) -> int:
+    return int(max(FEED_FLOOR, min(FEED_CEILING, value)))
 
 
 def arm_height_mm(l_mm: float, theta_deg: float) -> float:
@@ -132,6 +147,9 @@ def main() -> None:
     print(probe.message)
     if probe.controller and probe.controller.is_alarm:
         print("unlocking alarm:", t.unlock_alarm().message)
+    # $MD from an earlier session leaves the servo with no signal and the board still
+    # reporting Idle; $ME is harmless when already enabled.
+    t.send_command("$ME", wait_for_ok=True)
 
     def read_pulse(key: str) -> int:
         result = t.send_command(key, wait_for_ok=True)
@@ -146,7 +164,7 @@ def main() -> None:
             print(f"{key.split('/')[-1]}={value} rejected: {result.message}")
 
     def goto(z: float) -> None:
-        result = t.send_commands(["G21", "G90", "G54", f"G1 Z{z:.2f} F600"])
+        result = t.send_commands(["G21", "G90", "G54", f"G1 Z{z:.2f} F{feed_mm_min}"])
         if not result.ok:
             print(f"Z{z:.2f} -> {result.message}")
 
@@ -174,10 +192,11 @@ def main() -> None:
     bottom_pulse = read_pulse(MIN_KEY)
     live_pulse = top_pulse
     step_us = 10  # must stay a STEP_LADDER value
+    feed_mm_min = 600
     arm_mm = 0.0
     current_z = Z_TOP_MM
     print(f"board pulses: min={bottom_pulse} max={top_pulse}")
-    print("keys: up/down nudge, T/B mark here, t/b/m go, p status, l arm length, q quit")
+    print("keys: up/down nudge, T/B mark here, t/b/m go, f feed, c cycle, p status, l arm length, q quit")
 
     while True:
         try:
@@ -191,6 +210,7 @@ def main() -> None:
             print(f"  max_pulse_us: {top_pulse}")
             if top_pulse < bottom_pulse:
                 print("  (top below bottom: that is the reversed-servo swap, the order above is correct)")
+            print(f"Feed used: F{feed_mm_min} -> z_feed_mm_min in the GUI / NEJE_PLOTTER_Z_FEED_MM_MIN in .env")
             print(geometry_report(arm_mm, current_z))
             print("NOTE: live values are RAM-only; they reset on reboot until saved to the yaml.")
             return
@@ -207,7 +227,7 @@ def main() -> None:
         elif key in ("+", "=", "-", "_"):
             rung = STEP_LADDER.index(step_us) + (1 if key in ("+", "=") else -1)
             step_us = STEP_LADDER[max(0, min(len(STEP_LADDER) - 1, rung))]
-            hint = "  (below the SG90 dead band -- may do nothing)" if step_us < DEAD_BAND_US else ""
+            hint = "  (below the servo dead band -- may do nothing)" if step_us < DEAD_BAND_US else ""
             print(f"step {step_us}us{hint}")
         elif key == "T":
             top_pulse = live_pulse
@@ -233,6 +253,38 @@ def main() -> None:
                 apply_marks()
                 live_pulse = pulse_for_z(current_z, top_pulse, bottom_pulse)
                 goto(current_z)
+        elif key == "f":
+            raw = prompt(f"feed mm/min ({FEED_FLOOR}..{FEED_CEILING})> ")
+            try:
+                feed_mm_min = clamp_feed(float(raw))
+            except ValueError:
+                print("not a number")
+            else:
+                print(f"feed F{feed_mm_min}")
+        elif key == "c":
+            raw = prompt("cycles [10]> ")
+            try:
+                cycles = int(raw) if raw else 10
+            except ValueError:
+                print("not a number")
+                continue
+            apply_marks()
+            print(f"{cycles} cycles at F{feed_mm_min} -- Ctrl-C to abort, pen ends up")
+            try:
+                for i in range(1, cycles + 1):
+                    started = time.perf_counter()
+                    goto(Z_BOTTOM_MM)
+                    goto(Z_TOP_MM)
+                    print(f"cycle {i}: {time.perf_counter() - started:.2f} s")
+                goto(Z_BOTTOM_MM)
+                print("holding at the bottom -- listen for a buzz")
+                time.sleep(1.0)
+            except KeyboardInterrupt:
+                print("\naborted")
+            goto(Z_TOP_MM)
+            current_z = Z_TOP_MM
+            live_pulse = top_pulse
+            status()
         elif key == "l":
             raw = prompt("arm length mm (shaft -> holder contact)> ")
             try:
@@ -265,6 +317,7 @@ def selftest() -> None:
     assert pulse_for_z(Z_BOTTOM_MM, 500, 1750) == 1750
     # Every rung must be reachable from every other, in both directions.
     assert 10 in STEP_LADDER and tuple(sorted(STEP_LADDER)) == STEP_LADDER
+    assert (clamp_feed(5), clamp_feed(600.7), clamp_feed(99999)) == (FEED_FLOOR, 600, FEED_CEILING)
     for start in STEP_LADDER:
         seen, step = {start}, start
         for _ in range(len(STEP_LADDER)):

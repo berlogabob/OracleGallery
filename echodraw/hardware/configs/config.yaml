@@ -119,17 +119,16 @@ axes:
       rc_servo:
         pwm_hz: 50
         output_pin: gpio.2
-        # Measured 2026-08-31 with scripts/z_servo_tune.py, after re-seating the horn.
-        # These are the WORKING pen-down/pen-up positions, not the mechanical ends: the
-        # gearbox cracks audibly near its stops, so the range stays deliberately short
-        # of them. Only ~130us of the servo's arc, so Z0..Z-25 spans a fraction of a
-        # millimetre of real pen travel -- the Z numbers in the GUI are lift positions,
-        # not millimetres. Widen only after the holder assembly is rebuilt.
-        #
-        # min was 1820 until a test print showed the nib splaying: pen-down was 110us
-        # too deep. Retuned against paper, so this floor is ink quality, not mechanics.
-        min_pulse_us: 1930
-        max_pulse_us: 2060
+        # Miuzei MZ996 (MG996R clone, metal gear, ~11us/deg) on its own 5V USB-A
+        # supply, common GND. Measured 2026-09-09 with scripts/z_servo_tune.py, horn
+        # left as fitted: top (Z0, pen up) 2100us, bottom (Z-25, pen down) 2400us,
+        # 6.8 mm of real pen travel between them. Pulse rises as the pen goes DOWN, so
+        # min > max: that is FluidNC's reversed-servo mapping, not a typo. Both ends
+        # confirmed silent (no stall) at F600..F10000, 10 cycles per rung. The Z
+        # numbers in the GUI are still lift positions, not millimetres: 25 Z units
+        # span 6.8 mm, ~0.27 mm per unit.
+        min_pulse_us: 2400
+        max_pulse_us: 2100
       limit_neg_pin: NO_PIN
       limit_pos_pin: gpio.22:pu:low
       limit_all_pin: NO_PIN
