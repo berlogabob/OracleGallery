@@ -841,9 +841,7 @@ def build_sections(
         SHEET_STATE["svg"] = ""
         handle = sheet_card_handle.get("handle")
         if handle is not None:
-            handle.svg = ""
-            handle.preview.content = ""
-            handle.preview.update()
+            handle.invalidate()
         if sheet_info is None:
             return
         capacity = _sheet_capacity()

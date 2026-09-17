@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import inspect
 import io
+import math
 from dataclasses import fields as dataclass_fields
 
 import pytest
@@ -30,13 +31,13 @@ from PIL import Image, ImageDraw
 
 from neje_oracle.blocks.gui import screens
 from neje_oracle.blocks.gui.context import GuiContext
-from neje_oracle.blocks.gui.support import plot_minutes_for
+from neje_oracle.blocks.gui.support import estimate_svg_seconds
 from neje_oracle.blocks.gui.workspaces import calibration, connection, generative, work
 from neje_oracle.blocks.gui.workspaces import image as image_workspace
 from neje_oracle.blocks.gui.workspaces import tests as tests_workspace
 from neje_oracle.blocks.gui.workspaces import texture as texture_workspace
 from neje_oracle.blocks.imaging.modes import MODES, image_to_polylines, polylines_to_svg
-from neje_oracle.blocks.imaging.modes import plot_minutes as modes_plot_minutes
+from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.models import SystemMode
 from neje_oracle.shared.origin_markers import ALL_ORIGINS
@@ -454,30 +455,43 @@ def test_pen_width_floors_the_fader() -> None:
     assert image_workspace.quality_cell_mm("dither", "max", 0.05) == 0.40
 
 
-def test_plot_estimate_counts_pen_lift_time() -> None:
-    """The estimate used to count XY only and under-reported dot modes by ~10x."""
-    settings = GuiSettings(draw_rate=1800.0, travel_rate=5000.0, z_down_mm=-25.0, z_up_mm=0.0, z_feed_mm_min=1000.0)
-    kwargs = {"strokes": 488, "draw_mm": 2000.0, "travel_mm": 2700.0}
+def _trapezoid_seconds(length_mm: float, feed_mm_min: float, accel_mm_s2: float) -> float:
+    """Time for an isolated move that starts and ends at rest -- the textbook case gcode.estimate replays."""
+    vmax = feed_mm_min / 60.0
+    ramp_mm = vmax * vmax / (2 * accel_mm_s2)
+    if 2 * ramp_mm <= length_mm:
+        return 2 * vmax / accel_mm_s2 + (length_mm - 2 * ramp_mm) / vmax
+    peak = math.sqrt(accel_mm_s2 * length_mm)  # triangle profile: never reaches vmax
+    return 2 * peak / accel_mm_s2
 
-    xy, pen = plot_minutes_for(settings, use_z_servo=True, **kwargs)
-    assert xy == pytest.approx(1.65, abs=0.05)
-    # 488 strokes x (25 mm down at 1000 + 25 mm up at 5000). This term was missing entirely.
-    assert pen == pytest.approx(14.6, abs=0.1)
 
-    # A laser-style M3/M5 pen has no Z round trip, so the old number was right there.
-    assert plot_minutes_for(settings, use_z_servo=False, **kwargs) == (xy, 0.0)
+def test_plot_estimate_replays_the_actual_gcode() -> None:
+    """The estimate must come from simulating print gcode, not draw_mm / draw_rate arithmetic.
 
-    # The estimator itself now lives beside travel_length_mm in the imaging block and takes
-    # plain floats, so it no longer drags the GUI settings shape into blocks/imaging.
-    assert modes_plot_minutes(
-        draw_rate=1800.0,
-        travel_rate=5000.0,
-        z_down_mm=-25.0,
-        z_up_mm=0.0,
-        z_feed_mm_min=1000.0,
-        use_z_servo=True,
-        **kwargs,
-    ) == (xy, pen)
+    Length/feed division under-reported a 76 min print as 20 min: at real acceleration a
+    move is bounded by ramp-up and corner speed, not by F. A single 100 mm draw plus the
+    print path's mandatory return-to-home leg are both isolated G0/G1 moves under the same
+    xy_acceleration_mm_s2, so each is the classic accelerate/(cruise)/decelerate trapezoid.
+    """
+    settings = GuiSettings(xy_acceleration_mm_s2=100.0, direct_svg_origin_x_mm=0.0, direct_svg_origin_y_mm=0.0)
+    plotter_settings = PlotterSettings(use_z_servo=True)
+    svg_bytes = (
+        b"<svg xmlns='http://www.w3.org/2000/svg' width='100mm' height='10mm' viewBox='0 0 100 10'>"
+        b"<path d='M 0,0 L 100,0' stroke='black' fill='none'/>"
+        b"</svg>"
+    )
+
+    xy_seconds, pen_seconds = estimate_svg_seconds(settings, plotter_settings, svg_bytes)
+
+    # The draw starts exactly at the machine's home position (origin 0,0, path start 0,0),
+    # so the print path's leading travel move is zero-length and drops out; only the draw
+    # itself and the unconditional "G0 X0 Y0" return-home leg (at the board's rapid rate)
+    # remain to account for.
+    draw_feed = min(settings.draw_rate, 8000.0)
+    expected_xy_seconds = _trapezoid_seconds(100.0, draw_feed, 100.0) + _trapezoid_seconds(100.0, 8000.0, 100.0)
+    assert xy_seconds == pytest.approx(expected_xy_seconds, rel=0.05)
+    # The pen-down/pen-up Z round trip this line costs is separate from XY time entirely.
+    assert pen_seconds > 0
 
 
 def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pytest.MonkeyPatch) -> None:

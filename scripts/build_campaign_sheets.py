@@ -33,8 +33,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from neje_oracle.blocks.gcode.svg_gcode import svg_to_polylines_mm  # noqa: E402
-from neje_oracle.blocks.gui.support import load_gui_settings, plot_minutes_for  # noqa: E402
+from neje_oracle.blocks.gcode.estimate import estimate, limits_for  # noqa: E402
+from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode, svg_to_polylines_mm  # noqa: E402
+from neje_oracle.blocks.gui.support import load_gui_settings  # noqa: E402
 from neje_oracle.blocks.gui.workspaces.generative import sketch_canvas_mm  # noqa: E402
 from neje_oracle.blocks.imaging.modes import (  # noqa: E402
     Polylines,
@@ -216,22 +217,34 @@ def build_sheets(pen: str, out_dir: Path | None = None, settings=None) -> dict[s
     ]
     sheets[f"12_liftbudget_{pen}.svg"] = _assemble(budget_cells, width_mm, height_mm, f"12 LIFT BUDGET {pen}", font)
 
+    plotter_settings = PlotterSettings()
     stats: dict[str, dict] = {}
     for filename, (polylines, counts) in sheets.items():
         _check_bounds(polylines, width_mm, height_mm, filename)
-        (out / filename).write_text(polylines_to_svg(polylines, width_mm=width_mm, height_mm=height_mm, pen_width_mm=pen_w))
+        svg_path = out / filename
+        svg_path.write_text(polylines_to_svg(polylines, width_mm=width_mm, height_mm=height_mm, pen_width_mm=pen_w))
         draw_mm, travel_mm = travel_length_mm(polylines)
-        xy_minutes, pen_minutes = plot_minutes_for(
-            settings,
-            strokes=len(polylines),
-            draw_mm=draw_mm,
-            travel_mm=travel_mm,
-            use_z_servo=PlotterSettings().use_z_servo,
+        # Re-read through the same gcode generator the direct-print path uses, so the
+        # reported cost is a replayed print, not length/feed arithmetic that ignores
+        # acceleration and corner speed.
+        gcode = generate_absolute_svg_gcode(
+            svg_path,
+            sample_step_mm=1.0,
+            travel_rate=settings.travel_rate,
+            draw_rate=settings.draw_rate,
+            xy_acceleration_mm_s2=settings.xy_acceleration_mm_s2,
+            pen_up_command=plotter_settings.pen_up_command,
+            pen_down_command=plotter_settings.pen_down_command,
+            use_z_servo=plotter_settings.use_z_servo,
+            z_down_mm=settings.z_down_mm,
+            z_up_mm=settings.z_up_mm,
+            z_feed_mm_min=settings.z_feed_mm_min,
         )
+        xy_seconds, pen_seconds = estimate(gcode, limits_for(settings))
         stats[filename] = {
             "strokes": len(polylines),
             "cells": counts,
-            "minutes": round(xy_minutes + pen_minutes, 1),
+            "minutes": round((xy_seconds + pen_seconds) / 60, 1),
             "draw_m": round(draw_mm / 1000, 2),
             "travel_m": round(travel_mm / 1000, 2),
             "seed": GENERATOR_SEED,

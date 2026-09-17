@@ -12,6 +12,7 @@ card 28, section title 30, dense-outlined controls 34, action rows 25.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import tempfile
 from collections.abc import Callable
@@ -20,11 +21,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from nicegui import ui
+from nicegui import background_tasks, run, ui
 
 from ..gcode.svg_gcode import svg_to_polylines_mm
 from ..imaging.modes import Polylines, polylines_to_svg, travel_length_mm, travel_preview_svg
-from .support import plot_minutes_for
+from .support import estimate_svg_seconds
 
 # --- actions --------------------------------------------------------------------
 # Three intents, three styles. The prior audit raised DS-BTN-1 (5 differently styled
@@ -241,7 +242,7 @@ def client_timer(interval: float, callback: Callable[[], Any], *, once: bool = F
 
 # --- render + print --------------------------------------------------------------
 # Three workspaces each carried their own copy of: render -> polylines_to_svg -> travel
-# preview -> travel_length_mm -> plot_minutes -> format a cost string. Same fifty lines, three
+# preview -> travel_length_mm -> estimate_svg_seconds -> format a cost string. Same fifty lines, three
 # slightly different cost sentences, and one of them reached into a sibling workspace to
 # borrow the estimator. It lives here because ui.py is a design-system STYLE_OWNER: every
 # .classes() and ui.card() absorbed from a workspace is deleted from the ratchet counts rather
@@ -287,11 +288,23 @@ class RenderCard:
         # And the travel switch, so a workspace can persist the operator's choice. Without
         # this the helper could restore the setting but never observe a change to it.
         self.travel: Any = None
+        # Name of the last successful render, so print does not re-run render() just for it.
+        self.name = ""
         self._refresh: Callable[[], None] = lambda: None
         self._print: Callable[[], Any] = lambda: None
+        self._drop_in_flight: Callable[[], None] = lambda: None
 
     def refresh(self) -> None:
         self._refresh()
+
+    def invalidate(self) -> None:
+        """Knobs changed: clear the printable bytes, and discard a render still running on
+        the old knobs -- landing late, it would quietly re-arm PRINT with stale geometry."""
+        self._drop_in_flight()
+        self.svg = ""
+        if self.preview is not None:
+            self.preview.content = ""
+            self.preview.update()
 
     async def print(self) -> Any:
         return await self._print()
@@ -360,51 +373,93 @@ def render_card(
         if preview_slot is None:
             preview = preview_pane()
 
-        def refresh() -> None:
+        # A render is seconds of CPU: 3.5 s for a 200 mm trace at max quality, plus the G-code
+        # replay for the estimate. Run on the event loop it froze the page past NiceGUI's
+        # reconnect timeout, and the operator saw "disconnected" -- once per keystroke in a
+        # size field. So the work runs in a thread, and edits that land while one is running
+        # collapse into a single re-run with the latest values.
+        pending = {"busy": False, "dirty": False}
+
+        def compute() -> tuple[Render, str, str, str] | Exception:
+            """Everything slow, nothing that touches the page. Safe to run off the loop."""
             try:
                 result = render()
+                svg = polylines_to_svg(
+                    result.polylines,
+                    width_mm=result.width_mm,
+                    height_mm=result.height_mm,
+                    pen_width_mm=ctx.settings.pen_width_mm,
+                )
+                shown = (
+                    travel_preview_svg(result.polylines, width_mm=result.width_mm, height_mm=result.height_mm)
+                    if travel.value
+                    else svg
+                )
+                draw_mm, travel_mm = travel_length_mm(result.polylines)
+                # Replays the print path's own G-code, so this is the time the print will
+                # actually take -- not length/feed arithmetic that ignores acceleration.
+                xy_seconds, pen_seconds = estimate_svg_seconds(
+                    ctx.settings, ctx.supervisor.plotter_settings, svg.encode("utf-8")
+                )
             except (ValueError, OSError) as exc:
+                return exc
+            text = cost_line(
+                result.polylines, draw_mm=draw_mm, travel_mm=travel_mm, minutes=(xy_seconds / 60, pen_seconds / 60)
+            )
+            return result, svg, shown, text + (cost_suffix(result) if cost_suffix else "")
+
+        def apply(outcome: tuple[Render, str, str, str] | Exception) -> None:
+            if isinstance(outcome, Exception):
                 handle.svg = ""
                 if on_render is not None:
                     on_render("")
                 preview.content = ""
                 preview.update()
-                cost.set_text(str(exc))
+                cost.set_text(str(outcome))
                 return
-            handle.svg = polylines_to_svg(
-                result.polylines,
-                width_mm=result.width_mm,
-                height_mm=result.height_mm,
-                pen_width_mm=ctx.settings.pen_width_mm,
-            )
+            result, svg, shown, text = outcome
+            handle.name = result.name
+            handle.svg = svg
             # Lets a workspace keep mirroring the printable bytes into its own state, which
             # is what existing callers and their tests already read.
             if on_render is not None:
-                on_render(handle.svg)
-            preview.content = (
-                travel_preview_svg(result.polylines, width_mm=result.width_mm, height_mm=result.height_mm)
-                if travel.value
-                else handle.svg
-            )
+                on_render(svg)
+            preview.content = shown
             preview.update()
-            draw_mm, travel_mm = travel_length_mm(result.polylines)
-            minutes = plot_minutes_for(
-                ctx.settings,
-                strokes=len(result.polylines),
-                draw_mm=draw_mm,
-                travel_mm=travel_mm,
-                use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
-            )
-            text = cost_line(result.polylines, draw_mm=draw_mm, travel_mm=travel_mm, minutes=minutes)
-            cost.set_text(text + (cost_suffix(result) if cost_suffix else ""))
+            cost.set_text(text)
+
+        async def refresh_in_background() -> None:
+            pending["busy"] = True
+            try:
+                while True:
+                    pending["dirty"] = False
+                    outcome = await run.io_bound(compute)
+                    if not pending["dirty"]:  # stale results are dropped, not flashed
+                        apply(outcome)
+                        return
+            finally:
+                pending["busy"] = False
+
+        def refresh() -> None:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:  # no event loop: tests and scripts get the result inline
+                apply(compute())
+                return
+            if pending["busy"]:
+                pending["dirty"] = True
+                return
+            background_tasks.create(refresh_in_background(), name="render_card.refresh")
 
         async def do_print() -> Any:
-            if not handle.svg:
-                refresh()
+            # A refresh still running means handle.svg belongs to the previous knob values;
+            # printing it would put the old size on paper. Wait for the current values instead.
+            if pending["busy"] or not handle.svg:
+                apply(await run.io_bound(compute))
             if not handle.svg:
                 ui.notify("Nothing to print yet.", color="warning")
                 return False
-            return await ctx.print_svg_payload(handle.svg.encode("utf-8"), f"{render().name}.svg")
+            return await ctx.print_svg_payload(handle.svg.encode("utf-8"), f"{handle.name}.svg")
 
         travel.on_value_change(lambda _: refresh())
         # actions=False is the CREATE screen: one shared print strip dispatches on the
@@ -417,6 +472,7 @@ def render_card(
     handle.preview = preview
     handle.travel = travel
     handle._refresh = refresh
+    handle._drop_in_flight = lambda: pending.update(dirty=pending["busy"])
     handle._print = do_print
     return handle
 
@@ -435,13 +491,11 @@ def svg_cost_line(ctx: Any, svg_bytes: bytes) -> str:
     finally:
         path.unlink(missing_ok=True)
     draw_mm, travel_mm = travel_length_mm(polylines)
-    minutes = plot_minutes_for(
-        ctx.settings,
-        strokes=len(polylines),
-        draw_mm=draw_mm,
-        travel_mm=travel_mm,
-        use_z_servo=ctx.supervisor.plotter_settings.use_z_servo,
-    )
+    try:
+        xy_seconds, pen_seconds = estimate_svg_seconds(ctx.settings, ctx.supervisor.plotter_settings, svg_bytes)
+    except ValueError as exc:
+        return f"One frame: {exc}"
+    minutes = (xy_seconds / 60, pen_seconds / 60)
     return "One frame: " + cost_line(polylines, draw_mm=draw_mm, travel_mm=travel_mm, minutes=minutes)
 
 

@@ -591,3 +591,31 @@ def test_char_count_stream_stops_gracefully_and_drains_outstanding(tmp_path: Pat
             transport.send(gcode=gcode, sheet_id="sheet", dry_run=False, should_stop=stop_after_three)
         sent = [c for c in server.commands if c.startswith("G1 X")]
         assert 0 < len(sent) < 50
+
+
+def test_send_keeps_the_mac_awake_only_while_streaming(monkeypatch):
+    from neje_oracle.blocks.fluidnc import transport as transport_module
+
+    launched: list[list[str]] = []
+
+    class FakeCaffeinate:
+        terminated = False
+
+        def __init__(self, args):
+            launched.append(args)
+
+        def terminate(self):
+            FakeCaffeinate.terminated = True
+
+    monkeypatch.setattr(transport_module.shutil, "which", lambda name: "/usr/bin/caffeinate")
+    monkeypatch.setattr(transport_module.subprocess, "Popen", FakeCaffeinate)
+    with transport_module._keep_awake():
+        assert launched and launched[0][:2] == ["/usr/bin/caffeinate", "-i"]
+        assert not FakeCaffeinate.terminated
+    assert FakeCaffeinate.terminated
+
+    monkeypatch.setattr(transport_module.shutil, "which", lambda name: None)
+    launched.clear()
+    with transport_module._keep_awake():
+        pass
+    assert not launched

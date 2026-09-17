@@ -62,8 +62,8 @@ DEAD_TAB_STRINGS = 0  # reached target: no operator-facing text names a deleted 
 _TAB = re.compile(r"ui\.tab\(")
 _PRINT_CALL = re.compile(r"print_svg_payload|print_generative_svg|print_uploaded_svg|print_svg\(")
 _SEND_BUTTON = re.compile(r'id="send-btn"')
-_COST_CALL = re.compile(r"plot_minutes_for\(|plot_minutes\(")
-_ESTIMATOR_DEF = re.compile(r"def plot_minutes")
+_COST_CALL = re.compile(r"estimate_svg_seconds\(")
+_ESTIMATOR_DEF = re.compile(r"def estimate_svg_seconds")
 _STATE_DICT = re.compile(r"(?m)^(STATE|SHEET_STATE|MOTIF_STATE|LATEST|STREAM)\b")
 _EMBEDDED_PAGE = re.compile(r"embedded_page\(.*height_px|height_px=")
 

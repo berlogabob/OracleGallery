@@ -173,7 +173,11 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                     default=float(GUI_DEFAULTS["xy_acceleration_mm_s2"]),
                     min_value=0,
                     width_class="w-full",
-                    tooltip="Recorded in manifests only. Print G-code uses the controller's saved acceleration settings.",
+                    tooltip=(
+                        "Must match the controller's saved X/Y acceleration -- used for plot-time estimates. "
+                        "Print G-code always uses the controller's own saved acceleration; this setting does not "
+                        "change the board."
+                    ),
                     on_change=persist_and_refresh,
                 )
                 number_control(

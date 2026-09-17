@@ -15,6 +15,7 @@ import functools
 import subprocess
 import time
 from collections.abc import Callable
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -22,7 +23,7 @@ from nicegui import run, ui
 
 from ...app.supervisor import SupervisorService
 from ...shared import telemetry
-from ...shared.models import ComponentStatus, SystemCheckLevel, SystemMode
+from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from .modes import mode_policy
@@ -51,6 +52,22 @@ from .ui import card, danger_action_button, helper_text, notify_if_connected, sa
 # The three screens. Anything else -- including the seven module-named tabs these replaced --
 # falls back to PRINT, which is where an operator should land anyway.
 VALID_WORKSPACES = {"print", "create", "setup"}
+
+
+def _format_eta_suffix(status: dict[str, Any]) -> str:
+    """The trailing "~N min left, done ~HH:MM" once there is a usable live estimate, else "".
+
+    eta_seconds is the *simulated* time left in the G-code currently streaming, not wall
+    clock -- see gcode.estimate.line_times. It only means something while the machine is
+    actually printing: a leftover estimate from the last job would be read as live, so
+    this also gates on `status` still being RuntimeStatus.PRINTING's wire value.
+    """
+    eta_seconds = status.get("eta_seconds")
+    if eta_seconds is None or status.get("status") != RuntimeStatus.PRINTING.value:
+        return ""
+    minutes = max(0, round(float(eta_seconds) / 60.0))
+    done_at = (datetime.now() + timedelta(seconds=float(eta_seconds))).strftime("%H:%M")
+    return f" | ~{minutes} min left, done ~{done_at}"
 
 
 _T = TypeVar("_T")
@@ -559,6 +576,7 @@ class GuiContext:
                     f"row {current_row}/{status.get('row_count', 0)} | cell {current_cell_in_row}/{row_cell_count} | "
                     f"{status.get('gcode_lines_sent', 0)}/{status.get('gcode_lines_total', 0)} G-code lines | "
                     f"{total}/{layout_capacity(self.settings)} cells in last sheet"
+                    f"{_format_eta_suffix(status)}"
                 )
             else:
                 # Say what this actually is. Geometry, ring counts and the user/filler mix

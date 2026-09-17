@@ -838,7 +838,7 @@ def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
     assert loaded.sample_density_exponent == 1.5
     assert loaded.sample_min_step_mm == 0.1
     assert loaded.sample_max_step_mm == 5.0
-    assert loaded.xy_acceleration_mm_s2 == 1000.0
+    assert loaded.xy_acceleration_mm_s2 == 100.0
     assert loaded.streaming_mode == "row"
 
 
@@ -883,7 +883,7 @@ def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
     assert config.sample_density_exponent == 1.5
     assert config.sample_min_step_mm == 0.1
     assert config.sample_max_step_mm == 5.0
-    assert config.xy_acceleration_mm_s2 == 1000.0
+    assert config.xy_acceleration_mm_s2 == 100.0
     assert config.streaming_mode == "cell"
 
 
@@ -925,7 +925,7 @@ def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
     assert "sample_max_step_mm" in payload
     assert "effective_sample_step_mm" in payload
     assert payload["streaming_mode"] == settings.streaming_mode
-    assert payload["xy_acceleration_mm_s2"] == 1000.0
+    assert payload["xy_acceleration_mm_s2"] == 100.0
     assert payload["organic_enabled"] is True
     assert payload["organic_cell_size_mm"] == 6.0
     assert payload["organic_rotation_ramp"] == 1.0

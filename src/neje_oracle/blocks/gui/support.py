@@ -6,6 +6,7 @@ import contextlib
 import inspect
 import json
 import os
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -27,7 +28,7 @@ from ...shared.gui_settings import (
     gui_settings_to_plotter_config as gui_settings_to_plotter_config,
 )
 from ...shared.store import OracleRuntimeStore, PlotterStore
-from ..imaging.modes import plot_minutes as modes_plot_minutes
+from ..gcode.estimate import estimate, limits_for
 from ...shared.symbols import (
     default_idle_root as default_idle_root,
 )
@@ -44,6 +45,7 @@ from ...shared.symbols import (
     list_fillable_symbols as list_fillable_symbols,
 )
 from ..gcode.direct_svg import DirectSvgPrintJob as DirectSvgPrintJob
+from ..gcode.direct_svg import build_svg_gcode
 from ..gcode.direct_svg import create_direct_svg_print_job_from_gui as create_direct_svg_print_job_from_gui
 from ..gcode.dry_run import generate_dry_run_sheet as generate_dry_run_sheet
 from ..gcode.pen_cal import generate_pen_cal_sheet as generate_pen_cal_sheet
@@ -134,6 +136,8 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
             "cells_completed": 0,
             "rows_completed": 0,
             "sheet_progress_percent": 0.0,
+            "eta_seconds": None,
+            "print_started_at": "",
             "updated_at": "",
             "latest_manifest": str(latest_manifest) if latest_manifest else "",
             "user_count": item_counts["user"],
@@ -155,6 +159,8 @@ def read_plotter_status(db_path: Path | None = None, spool_root: Path | None = N
         "gcode_lines_sent": state.gcode_lines_sent,
         "gcode_lines_total": state.gcode_lines_total,
         "gcode_progress_percent": state.gcode_progress_percent,
+        "eta_seconds": state.eta_seconds,
+        "print_started_at": state.print_started_at,
         "current_row_index": state.current_row_index,
         "row_count": state.row_count,
         "current_cell_index": state.current_cell_index,
@@ -178,31 +184,32 @@ def latest_spool_manifest(spool_root: Path) -> Path | None:
     return manifests[0] if manifests else None
 
 
-def plot_minutes_for(
-    settings: GuiSettings, *, strokes: int, draw_mm: float, travel_mm: float, use_z_servo: bool
+def estimate_svg_seconds(
+    settings: GuiSettings, plotter_settings: PlotterSettings, svg_bytes: bytes
 ) -> tuple[float, float]:
-    """Cost a plot from GUI settings. The one place that unpacks them for the estimator.
+    """(xy_seconds, pen_seconds) for the G-code the print path would actually send for this SVG.
 
-    modes.plot_minutes takes plain floats so the imaging block stays ignorant of the GUI
-    settings shape; this is the adapter, and it lives on the GUI side where that shape is
-    already known. Three call sites used to repeat the unpack, one of them by importing
-    across from a sibling workspace module.
+    Length/feed arithmetic under-reported a 76 min print as 20 min: at the board's real
+    acceleration a short segment never reaches its feed, so time is set by acceleration and
+    corner speed, not by F. This builds the exact G-code create_direct_svg_print_job_from_gui
+    builds -- same helper, same arguments, so the two cannot drift -- and replays it through
+    gcode.estimate's FluidNC planner simulation.
 
-    use_z_servo stays a parameter rather than being read from PlotterSettings() here: callers
-    pass the supervisor's live value, and quietly substituting a fresh default would change
-    the estimate on any machine configured away from it.
+    plotter_settings stays a parameter rather than a fresh PlotterSettings() here: callers
+    pass the supervisor's live value, and quietly substituting a default would change the
+    estimate on any machine configured away from it.
+
+    Raises ValueError exactly when generate_absolute_svg_gcode does, e.g. an SVG that exceeds
+    the operator's configured sheet; callers show that message in place of a cost line.
     """
-    return modes_plot_minutes(
-        strokes=strokes,
-        draw_mm=draw_mm,
-        travel_mm=travel_mm,
-        draw_rate=settings.draw_rate,
-        travel_rate=settings.travel_rate,
-        z_down_mm=settings.z_down_mm,
-        z_up_mm=settings.z_up_mm,
-        z_feed_mm_min=settings.z_feed_mm_min,
-        use_z_servo=use_z_servo,
-    )
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as handle:
+        handle.write(svg_bytes)
+        path = Path(handle.name)
+    try:
+        gcode, _ = build_svg_gcode(path, settings, plotter_settings)
+    finally:
+        path.unlink(missing_ok=True)
+    return estimate(gcode, limits_for(settings))
 
 
 def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:

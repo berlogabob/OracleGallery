@@ -97,3 +97,40 @@ def test_cost_line_only_mentions_pen_lifts_when_they_matter() -> None:
     assert "pen lifts" not in quiet
     assert "15 min pen lifts" in loud
     assert "~17 min" in loud
+
+
+def test_refresh_renders_off_the_event_loop_and_coalesces_edits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A size field fires once per keystroke. On the loop, each 3 s render froze the page
+    long enough for the browser to drop it; queued, ten spinner clicks were ten renders."""
+    import asyncio
+    import threading
+    import time
+
+    ctx = _ctx(monkeypatch)
+    loop_thread = threading.get_ident()
+    calls: list[int] = []
+
+    def slow() -> oracle.Render:
+        calls.append(threading.get_ident())
+        time.sleep(0.2)
+        return _render()
+
+    with ui.column():
+        card = oracle.render_card(ctx, title="Probe", render=slow, travel_default=False)
+
+    async def edit_three_times() -> None:
+        from nicegui import core
+
+        monkeypatch.setattr(core, "loop", asyncio.get_running_loop())  # what ui.run sets up
+        for _ in range(3):
+            card.refresh()
+            await asyncio.sleep(0.01)
+        while not card.svg or len(calls) < 2:
+            await asyncio.sleep(0.05)
+        await asyncio.sleep(0.3)
+
+    asyncio.run(edit_three_times())
+
+    assert loop_thread not in calls, "render ran on the event loop"
+    assert len(calls) == 2, "three edits during one render should collapse into one re-run"
+    assert card.svg

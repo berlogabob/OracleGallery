@@ -22,6 +22,55 @@ class DirectSvgPrintJob:
     effective_sample_step_mm: float
 
 
+def build_svg_gcode(
+    svg_path: Path,
+    settings: GuiSettings,
+    plotter_settings: PlotterSettings,
+    *,
+    title: str = "direct SVG",
+) -> tuple[str, float]:
+    """(gcode, effective_sample_step_mm) for `svg_path` under `settings`, as the print path builds it.
+
+    The print job below and the GUI's plot-time estimate (ui.py) both call this, so the long
+    argument list to generate_absolute_svg_gcode lives in exactly one place -- the two paths
+    cannot silently drift apart on a rate, a bound, or an origin.
+    """
+    config = gui_settings_to_plotter_config(settings)
+    effective_step = compute_effective_sample_step(
+        sample_step_mm=config.sample_step_mm,
+        cell_diameter_mm=config.cell_diameter_mm,
+        sample_reference_cell_mm=config.sample_reference_cell_mm,
+        sample_density_exponent=config.sample_density_exponent,
+        sample_min_step_mm=config.sample_min_step_mm,
+        sample_max_step_mm=config.sample_max_step_mm,
+    )
+    gcode = generate_absolute_svg_gcode(
+        svg_path,
+        sample_step_mm=effective_step,
+        travel_rate=config.travel_rate,
+        draw_rate=config.draw_rate,
+        xy_acceleration_mm_s2=config.xy_acceleration_mm_s2,
+        pen_up_command=plotter_settings.pen_up_command,
+        pen_down_command=plotter_settings.pen_down_command,
+        title=title,
+        return_home=True,
+        use_z_servo=plotter_settings.use_z_servo,
+        z_down_mm=config.z_down_mm,
+        z_up_mm=config.z_up_mm,
+        z_feed_mm_min=config.z_feed_mm_min,
+        pen_down_dwell_ms=config.pen_down_dwell_ms,
+        origin_x_mm=settings.direct_svg_origin_x_mm,
+        origin_y_mm=settings.direct_svg_origin_y_mm,
+        keep_non_negative=True,
+        # Bound against the operator's configured sheet, not the PlotterSettings default.
+        # These used to read resolved_plotter_settings, so a 200x200 sheet was validated
+        # against 250x440 and oversized art was accepted.
+        max_x_mm=config.sheet_width_mm,
+        max_y_mm=config.sheet_height_mm,
+    )
+    return gcode, effective_step
+
+
 def create_direct_svg_print_job_from_gui(
     settings: GuiSettings,
     *,
@@ -40,39 +89,7 @@ def create_direct_svg_print_job_from_gui(
     svg_file = destination / f"{sheet_id}_{_safe_upload_stem(original_name)}.svg"
     svg_file.write_text(svg_text, encoding="utf-8")
 
-    config = gui_settings_to_plotter_config(settings)
-    effective_step = compute_effective_sample_step(
-        sample_step_mm=config.sample_step_mm,
-        cell_diameter_mm=config.cell_diameter_mm,
-        sample_reference_cell_mm=config.sample_reference_cell_mm,
-        sample_density_exponent=config.sample_density_exponent,
-        sample_min_step_mm=config.sample_min_step_mm,
-        sample_max_step_mm=config.sample_max_step_mm,
-    )
-    gcode = generate_absolute_svg_gcode(
-        svg_file,
-        sample_step_mm=effective_step,
-        travel_rate=config.travel_rate,
-        draw_rate=config.draw_rate,
-        xy_acceleration_mm_s2=config.xy_acceleration_mm_s2,
-        pen_up_command=resolved_plotter_settings.pen_up_command,
-        pen_down_command=resolved_plotter_settings.pen_down_command,
-        title=f"direct SVG {label}",
-        return_home=True,
-        use_z_servo=resolved_plotter_settings.use_z_servo,
-        z_down_mm=config.z_down_mm,
-        z_up_mm=config.z_up_mm,
-        z_feed_mm_min=config.z_feed_mm_min,
-        pen_down_dwell_ms=config.pen_down_dwell_ms,
-        origin_x_mm=settings.direct_svg_origin_x_mm,
-        origin_y_mm=settings.direct_svg_origin_y_mm,
-        keep_non_negative=True,
-        # Bound against the operator's configured sheet, not the PlotterSettings default.
-        # These used to read resolved_plotter_settings, so a 200x200 sheet was validated
-        # against 250x440 and oversized art was accepted.
-        max_x_mm=config.sheet_width_mm,
-        max_y_mm=config.sheet_height_mm,
-    )
+    gcode, effective_step = build_svg_gcode(svg_file, settings, resolved_plotter_settings, title=f"direct SVG {label}")
     return DirectSvgPrintJob(
         sheet_id=sheet_id,
         svg_path=svg_file,

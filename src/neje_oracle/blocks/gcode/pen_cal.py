@@ -27,7 +27,7 @@ from typing import Any
 from ...shared.config import PlotterSettings, ensure_dir
 from ...shared.gui_settings import GuiSettings
 from ..text import shx
-from .svg_gcode import _dwell_command, _pen_down_command, _pen_up_command, _xy_acceleration_comment
+from .svg_gcode import _draw_feed, _dwell_command, _pen_down_command, _pen_up_command, _xy_acceleration_comment
 
 Polylines = list[list[tuple[float, float]]]
 
@@ -300,6 +300,7 @@ def _emit(
         z_feed_mm_min=settings.z_feed_mm_min,
     )
     dwell = _dwell_command(dwell_ms)
+    draw_feed = _draw_feed(draw_rate, use_z_servo=plotter.use_z_servo)
 
     lines.append(f"G1 F{draw_rate:.2f}")
     for polyline in polylines:
@@ -308,8 +309,8 @@ def _emit(
         lines.append(pen_down)
         if dwell is not None:
             lines.append(dwell)
-        for x, y in polyline[1:]:
-            lines.append(f"G1 X{x + origin_x:.3f} Y{y + origin_y:.3f}")
+        for index, (x, y) in enumerate(polyline[1:]):
+            lines.append(f"G1 X{x + origin_x:.3f} Y{y + origin_y:.3f}{draw_feed if index == 0 else ''}")
         lines.append(pen_up)
 
 

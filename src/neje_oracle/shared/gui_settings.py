@@ -156,7 +156,10 @@ GUI_DEFAULTS: GuiDefaults = {
     "streaming_mode": "row",
     "travel_rate": 5000.0,
     "draw_rate": 1800.0,
-    "xy_acceleration_mm_s2": 1000.0,
+    # Must match the controller's saved X/Y acceleration (echodraw/hardware/configs/config.yaml,
+    # axes X/Y acceleration_mm_per_sec2: 100) -- estimate.py's limits_for(settings) uses this
+    # value to predict plot time, and print G-code does not change the board's own setting.
+    "xy_acceleration_mm_s2": 100.0,
     "z_down_mm": -25.0,
     "z_up_mm": 0.0,
     # Pen-fix: ~1mm above the mechanical bottom, where the holder clamps a pen
@@ -299,7 +302,14 @@ class GuiSettings:
 
 
 def _repair_xy_acceleration(value: float) -> float:
-    if 0.0 < value < 100.0:
+    # Guards against a near-zero garbage value surviving a bad save/migration (0 itself is
+    # legitimate -- it means "no comment, use the controller's saved acceleration", see
+    # svg_gcode._xy_acceleration_comment). The threshold used to be 100 because the old
+    # default was 1000 (10% of it); now the real, legitimate value IS 100 -- the controller's
+    # own acceleration -- so a value like 50 or 80 is a plausible measurement, not corruption,
+    # and must not be clobbered back up to the default. Scaled to the same 10%-of-default
+    # ratio against the new 100 default.
+    if 0.0 < value < 10.0:
         return GUI_DEFAULTS["xy_acceleration_mm_s2"]
     return value
 

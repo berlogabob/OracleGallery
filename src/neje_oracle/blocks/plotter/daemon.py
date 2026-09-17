@@ -32,6 +32,7 @@ from ...shared.store import OracleRuntimeStore, PlotterStore
 from ...shared.symbols import default_scale_config_path, default_symbol_root, list_fillable_symbols
 from ..firebase.repository import FirebaseRemoteRepository
 from ..fluidnc.transport import FluidNCTransport, PrintStopRequested
+from ..gcode.estimate import limits_for, line_times
 from ..gcode.layout import build_sheet_layout, calculate_layout_capacity, group_layout_rows
 from ..gcode.sampling import compute_effective_sample_step
 from ..gcode.svg_gcode import generate_sheet_gcode
@@ -49,6 +50,51 @@ from ..symbols.svg_normalizer import (
 # A sheet takes minutes, so anything claimed for an hour without finishing is a casualty
 # of an interrupted run rather than work in progress.
 STALE_PLOT_JOB_AFTER = timedelta(hours=1)
+
+
+def remaining_seconds(times: list[float], lines_sent: int) -> float:
+    """Seconds left in a `gcode.estimate.line_times` simulation after `lines_sent` items.
+
+    Pure and index-based on purpose: `times[i]` is the cumulative time through item i, so
+    this is just "total - elapsed so far", clamped to a sane range. Callers map whatever
+    they count (raw file lines, filtered commands) onto this index before calling it --
+    see `sendable_line_indices` and `gcode_stream_eta_seconds`.
+    """
+    if not times:
+        return 0.0
+    lines_sent = max(0, min(lines_sent, len(times)))
+    elapsed = times[lines_sent - 1] if lines_sent > 0 else 0.0
+    return max(0.0, times[-1] - elapsed)
+
+
+def _sendable_line(line: str) -> bool:
+    # Mirrors FluidNCTransport's own `_should_send_line`: blank lines and full-line
+    # comments never reach the board, so they never advance the transport's sent count.
+    stripped = line.strip()
+    return bool(stripped and not stripped.startswith(";"))
+
+
+def sendable_line_indices(gcode: str) -> list[int]:
+    """Raw `gcode.splitlines()` index of every line the transport actually sends, in order.
+
+    `line_times` is indexed by raw line; `progress_callback` counts only sent lines. This
+    is the map from one to the other: the transport's Nth sent line is raw line
+    `sendable_line_indices(gcode)[N - 1]`.
+    """
+    return [index for index, line in enumerate(gcode.splitlines()) if _sendable_line(line)]
+
+
+def gcode_stream_eta_seconds(times: list[float], sent_indices: list[int], sent: int) -> float | None:
+    """Seconds left in the stream this `times`/`sent_indices` pair describes, or None.
+
+    `sent` is however many lines the transport says it has sent (its own count, which may
+    include a dry-run's unfiltered total -- clamped below rather than trusted).
+    """
+    if not times or not sent_indices:
+        return None
+    sent = max(0, min(sent, len(sent_indices)))
+    raw_lines_done = sent_indices[sent - 1] + 1 if sent > 0 else 0
+    return remaining_seconds(times, raw_lines_done)
 
 
 class PlotterDaemon:
@@ -73,6 +119,11 @@ class PlotterDaemon:
         self._current_row_cell_markers: list[tuple[int, int, int]] = []
         self._cells_completed_before_row = 0
         self._sheet_total_cells = 0
+        # Set once per streamed blob (a row or a cell, depending on streaming_mode) by
+        # `_begin_gcode_stream_eta`, then read on every `_record_gcode_progress` callback
+        # so the simulation runs once per blob instead of once per line.
+        self._stream_line_times: list[float] = []
+        self._stream_sent_indices: list[int] = []
         ensure_dir(self.settings.placeholder_root)
         ensure_dir(self.settings.spool_root)
 
@@ -131,6 +182,7 @@ class PlotterDaemon:
             with self.state_lock:
                 self.runtime_state.status = RuntimeStatus.OPERATOR_PAUSED
                 self.runtime_state.message = "Print is stopped by operator. Press START PRINT to enable the next sheet."
+                self.runtime_state.eta_seconds = None
                 self.runtime_state.updated_at = datetime.now(tz=UTC)
                 self.store.save_runtime_state(self.runtime_state)
             return
@@ -138,6 +190,8 @@ class PlotterDaemon:
         with self.state_lock:
             self.runtime_state.status = RuntimeStatus.PREPARING
             self.runtime_state.message = "Preparing next sheet"
+            self.runtime_state.eta_seconds = None
+            self.runtime_state.print_started_at = datetime.now(tz=UTC).isoformat()
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
@@ -303,6 +357,7 @@ class PlotterDaemon:
                 self._current_row_cell_markers = self._build_cell_progress_markers(row_gcode, active_placements)
                 self._cells_completed_before_row = cells_completed
                 self._sheet_total_cells = sum(len(row) for row in layout_rows)
+                self._begin_gcode_stream_eta(row_gcode, config)
                 self._set_state(
                     RuntimeStatus.PRINTING,
                     f"Streaming row {row_index}/{len(layout_rows)} of {sheet_id}",
@@ -318,6 +373,7 @@ class PlotterDaemon:
                     cells_completed=cells_completed,
                     rows_completed=rows_printed,
                     sheet_progress_percent=(rows_printed / len(layout_rows)) * 100.0,
+                    eta_seconds=remaining_seconds(self._stream_line_times, 0) if self._stream_line_times else None,
                 )
                 row_payload = self._manifest_row_payload(
                     row_index=row_index,
@@ -443,6 +499,7 @@ class PlotterDaemon:
             self.runtime_state.cells_completed = cells_completed
             self.runtime_state.rows_completed = rows_printed
             self.runtime_state.sheet_progress_percent = 100.0
+            self.runtime_state.eta_seconds = None
             self.runtime_state.updated_at = datetime.now(tz=UTC)
             self.store.save_runtime_state(self.runtime_state)
         if self.oracle_store is not None:
@@ -604,6 +661,7 @@ class PlotterDaemon:
                 self._current_row_cell_markers = self._build_cell_progress_markers(cell_gcode, [placement])
                 self._cells_completed_before_row = cells_completed
                 self._sheet_total_cells = total_cells
+                self._begin_gcode_stream_eta(cell_gcode, config)
                 self._set_state(
                     RuntimeStatus.PRINTING,
                     f"Streaming cell {placement.index + 1}/{total_cells} of {sheet_id}",
@@ -619,6 +677,7 @@ class PlotterDaemon:
                     cells_completed=cells_completed,
                     rows_completed=rows_printed,
                     sheet_progress_percent=(cells_completed / total_cells) * 100.0 if total_cells else 0.0,
+                    eta_seconds=remaining_seconds(self._stream_line_times, 0) if self._stream_line_times else None,
                 )
                 cell_payload = self._manifest_cell_payload(
                     row_index=row_index,
@@ -971,6 +1030,19 @@ class PlotterDaemon:
                 command_count += 1
         return markers
 
+    def _begin_gcode_stream_eta(self, gcode: str, config: PlotterRuntimeConfig) -> None:
+        """Simulate the blob about to be streamed, once, before `transport.send` starts.
+
+        `_record_gcode_progress` fires on every "ok" (hundreds to thousands of times per
+        row/cell); replaying the planner there instead of here was measured at ~0.2s for
+        45k lines and would have made that the cost of every single callback.
+        """
+        try:
+            self._stream_line_times = line_times(gcode, limits_for(config))
+        except Exception:  # noqa: BLE001 -- eta is a nicety; a bad line must not block the print
+            self._stream_line_times = []
+        self._stream_sent_indices = sendable_line_indices(gcode)
+
     def _load_plotter_config(self) -> PlotterRuntimeConfig:
         # The operator's GUI settings are the only source of geometry. This used to build a
         # 28-field default out of PlotterSettings first, which was never used in production
@@ -1005,10 +1077,17 @@ class PlotterDaemon:
         row_cell_count: int | None = None,
         cells_completed: int | None = None,
         sheet_progress_percent: float | None = None,
+        eta_seconds: float | None = None,
     ) -> None:
         with self.state_lock:
             self.runtime_state.status = status
             self.runtime_state.message = message
+            # Unlike the fields above, always assigned rather than guarded by `is not
+            # None`: every `_set_state` call is a phase transition (a new stream starting,
+            # a sheet finishing, an error), and an estimate is only valid for the stream it
+            # was computed for. Callers starting a stream pass the freshly-simulated value;
+            # everyone else takes the default and clears it.
+            self.runtime_state.eta_seconds = eta_seconds
             if sheet_id:
                 self.runtime_state.current_sheet_id = sheet_id
             if gcode_lines_sent is not None:
@@ -1053,6 +1132,9 @@ class PlotterDaemon:
             self.runtime_state.gcode_lines_sent = sent
             self.runtime_state.gcode_lines_total = total
             self.runtime_state.gcode_progress_percent = percent
+            self.runtime_state.eta_seconds = gcode_stream_eta_seconds(
+                self._stream_line_times, self._stream_sent_indices, sent
+            )
             row_label = ""
             if self.runtime_state.row_count:
                 row_label = f"row {self.runtime_state.current_row_index}/{self.runtime_state.row_count}: "

@@ -20,8 +20,28 @@ def _plotter_settings(tmp_path: Path) -> PlotterSettings:
 
 
 def _write_tinybee_config(
-    path: Path, *, x_travel: float = 255.0, y_travel: float = 440.0, z_travel: float = 25.0
+    path: Path,
+    *,
+    x_travel: float = 255.0,
+    y_travel: float = 440.0,
+    z_travel: float = 25.0,
+    x_acceleration: float | None = None,
+    y_acceleration: float | None = None,
 ) -> None:
+    config_items = [
+        {"id": "/board", "value": "MKS TinyBee V1.0 XXYYZ"},
+        {"id": "/axes/X/max_travel_mm", "value": f"{x_travel:.3f}"},
+        {"id": "/axes/Y/max_travel_mm", "value": f"{y_travel:.3f}"},
+        {"id": "/axes/Z/max_travel_mm", "value": f"{z_travel:.3f}"},
+        {"id": "/axes/X/homing/allow_single_axis", "value": "1"},
+        {"id": "/axes/Y/homing/allow_single_axis", "value": "1"},
+        {"id": "/axes/Z/homing/allow_single_axis", "value": "1"},
+        {"id": "/axes/Z/motor0/rc_servo/pwm_hz", "value": "50"},
+    ]
+    if x_acceleration is not None:
+        config_items.append({"id": "/axes/X/acceleration_mm_per_sec2", "value": f"{x_acceleration:.3f}"})
+    if y_acceleration is not None:
+        config_items.append({"id": "/axes/Y/acceleration_mm_per_sec2", "value": f"{y_acceleration:.3f}"})
     settings = {
         "Flash": {
             "Settings": [
@@ -29,18 +49,7 @@ def _write_tinybee_config(
                 {"id": "Telnet/Port", "value": "23"},
             ]
         },
-        "Running": {
-            "Config": [
-                {"id": "/board", "value": "MKS TinyBee V1.0 XXYYZ"},
-                {"id": "/axes/X/max_travel_mm", "value": f"{x_travel:.3f}"},
-                {"id": "/axes/Y/max_travel_mm", "value": f"{y_travel:.3f}"},
-                {"id": "/axes/Z/max_travel_mm", "value": f"{z_travel:.3f}"},
-                {"id": "/axes/X/homing/allow_single_axis", "value": "1"},
-                {"id": "/axes/Y/homing/allow_single_axis", "value": "1"},
-                {"id": "/axes/Z/homing/allow_single_axis", "value": "1"},
-                {"id": "/axes/Z/motor0/rc_servo/pwm_hz", "value": "50"},
-            ]
-        },
+        "Running": {"Config": config_items},
     }
     path.write_text(json.dumps(settings), encoding="utf-8")
 
@@ -247,3 +256,60 @@ def test_tinybee_check_tolerates_unreachable_controller(tmp_path: Path) -> None:
 
     tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
     assert tinybee.level != SystemCheckLevel.CRITICAL
+
+
+def test_tinybee_check_warns_when_gui_acceleration_does_not_match_controller(tmp_path: Path) -> None:
+    """The GUI's xy_acceleration_mm_s2 feeds estimate.py's limits_for() -- a stale value must warn."""
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, x_acceleration=100.0, y_acceleration=100.0)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0, xy_acceleration_mm_s2=1000.0)
+
+    result = _service(tmp_path, settings, board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ").run(
+        mode=SystemMode.TEST, gui_settings=gui_settings
+    )
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.WARNING
+    assert "Controller X acceleration 100" in tinybee.message
+    assert "GUI setting 1000" in tinybee.message
+    assert "set Acceleration to 100" in tinybee.message
+    assert tinybee.detail is not None
+    assert tinybee.detail["x_acceleration_mm_s2"] == 100.0
+    assert tinybee.detail["y_acceleration_mm_s2"] == 100.0
+    assert tinybee.detail["gui_xy_acceleration_mm_s2"] == 1000.0
+
+
+def test_tinybee_check_does_not_warn_when_gui_acceleration_matches_controller(tmp_path: Path) -> None:
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, x_acceleration=100.0, y_acceleration=100.0)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0, xy_acceleration_mm_s2=100.0)
+
+    result = _service(tmp_path, settings, board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ").run(
+        mode=SystemMode.TEST, gui_settings=gui_settings
+    )
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.OK
+    assert "acceleration" not in tinybee.message.lower()
+
+
+def test_tinybee_check_does_not_warn_when_controller_acceleration_unavailable(tmp_path: Path) -> None:
+    """The checked-in JSON snapshot may not carry live acceleration keys -- no data, no warning."""
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0, xy_acceleration_mm_s2=1000.0)
+
+    result = _service(tmp_path, settings, board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ").run(
+        mode=SystemMode.TEST, gui_settings=gui_settings
+    )
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.OK
+    assert tinybee.detail is not None
+    assert tinybee.detail["x_acceleration_mm_s2"] is None
+    assert tinybee.detail["y_acceleration_mm_s2"] is None
+
+
+def test_gui_settings_xy_acceleration_default_matches_controller() -> None:
+    """The controller (echodraw/hardware/configs/config.yaml, axes X/Y) runs 100 mm/s^2."""
+    assert GuiSettings().xy_acceleration_mm_s2 == 100.0

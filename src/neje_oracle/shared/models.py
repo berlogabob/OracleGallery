@@ -187,6 +187,12 @@ class PlotterRuntimeState:
     cells_completed: int = 0
     rows_completed: int = 0
     sheet_progress_percent: float = 0.0
+    # Simulated seconds left in the G-code currently streaming (gcode.estimate.line_times
+    # replayed against the transport's own sent-line count), not wall-clock elapsed time.
+    # None outside of an active stream so the GUI knows to hide it rather than show a stale
+    # number from the last print.
+    eta_seconds: float | None = None
+    print_started_at: str = ""
     updated_at: datetime = field(default_factory=utcnow)
 
     def to_dict(self) -> dict[str, Any]:
@@ -207,6 +213,8 @@ class PlotterRuntimeState:
             "cells_completed": self.cells_completed,
             "rows_completed": self.rows_completed,
             "sheet_progress_percent": self.sheet_progress_percent,
+            "eta_seconds": self.eta_seconds,
+            "print_started_at": self.print_started_at,
             "updated_at": self.updated_at.isoformat(),
         }
 
@@ -234,6 +242,10 @@ class PlotterRuntimeState:
             cells_completed=int(payload.get("cells_completed", 0)),
             rows_completed=int(payload.get("rows_completed", 0)),
             sheet_progress_percent=float(payload.get("sheet_progress_percent", 0.0)),
+            # Rows stored before eta_seconds/print_started_at existed have neither key; both
+            # default the same way the dataclass would for a fresh instance.
+            eta_seconds=(float(payload["eta_seconds"]) if payload.get("eta_seconds") is not None else None),
+            print_started_at=str(payload.get("print_started_at", "")),
             updated_at=datetime.fromisoformat(payload["updated_at"]) if payload.get("updated_at") else utcnow(),
         )
 

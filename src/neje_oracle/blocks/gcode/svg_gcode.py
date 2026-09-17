@@ -86,6 +86,7 @@ def generate_sheet_gcode(
         pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min
     )
     dwell = _dwell_command(pen_down_dwell_ms)
+    draw_feed = _draw_feed(draw_rate, use_z_servo=use_z_servo)
     lines = [
         f"; Neje Oracle {title}",
         f"; effective draw feed F{draw_rate:.2f} mm/min",
@@ -103,15 +104,15 @@ def generate_sheet_gcode(
         lines.append(f"; cell-start {current_cell_index}/{total_cells}")
         if include_rings:
             for ring in _ring_polylines(placement, item.source_kind):
-                _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
+                _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed)
         if include_markers:
             for marker in _marker_polylines(item, placement, marker_diameter_mm=marker_diameter_mm):
-                _append_polyline_gcode(lines, marker, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
+                _append_polyline_gcode(lines, marker, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed)
         metadata = read_normalized_svg_metadata(item.svg_path)
         if metadata.normalized and metadata.scale > 1.0:
             lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")
         for polyline in _svg_to_polylines(item.svg_path, placement, sample_step_mm, cell_diameter_mm):
-            _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
+            _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed)
         lines.append(f"; cell-end {current_cell_index}/{total_cells}")
         current_cell_index += 1
 
@@ -148,6 +149,7 @@ def generate_absolute_svg_gcode(
         pen_down_command, use_z_servo=use_z_servo, z_down_mm=z_down_mm, z_feed_mm_min=z_feed_mm_min
     )
     dwell = _dwell_command(pen_down_dwell_ms)
+    draw_feed = _draw_feed(draw_rate, use_z_servo=use_z_servo)
     polylines = svg_to_polylines_mm(svg_path, sample_step_mm)
     safety_shift_x = 0.0
     safety_shift_y = 0.0
@@ -183,7 +185,7 @@ def generate_absolute_svg_gcode(
     ]
 
     for polyline in polylines:
-        _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up, dwell=dwell)
+        _append_polyline_gcode(lines, polyline, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed)
 
     lines.append(pen_up)
     if return_home:
@@ -225,15 +227,27 @@ def _append_polyline_gcode(
     pen_down: str,
     pen_up: str,
     dwell: str | None = None,
+    draw_feed: str = "",
 ) -> None:
     start_x, start_y = polyline[0]
     lines.append(f"G0 X{start_x:.3f} Y{start_y:.3f}")
     lines.append(pen_down)
     if dwell is not None:
         lines.append(dwell)
-    for x, y in polyline[1:]:
-        lines.append(f"G1 X{x:.3f} Y{y:.3f}")
+    for index, (x, y) in enumerate(polyline[1:]):
+        lines.append(f"G1 X{x:.3f} Y{y:.3f}{draw_feed if index == 0 else ''}")
     lines.append(pen_up)
+
+
+def _draw_feed(draw_rate: float, *, use_z_servo: bool) -> str:
+    """F word for the first draw move of a stroke.
+
+    The servo pen-down is `G1 Z.. F<z_feed>`, and F is modal: without this every draw
+    move after it ran at the Z feed (10000, capped by the board to 8000) and draw_rate
+    did nothing. On the word of the first move rather than its own line, because each
+    line is a network round trip.
+    """
+    return f" F{draw_rate:.2f}" if use_z_servo else ""
 
 
 def _ring_polylines(placement: SheetPlacement, source_kind: str) -> list[list[tuple[float, float]]]:

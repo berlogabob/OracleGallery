@@ -179,6 +179,26 @@ class SystemCheckService:
             )
         if abs(z_travel - 25.0) > 0.5:
             warnings.append(f"Z travel is {z_travel:.1f}mm; expected 25mm servo travel")
+
+        # The plot-time estimator (blocks/gcode/estimate.py, limits_for()) uses the GUI's
+        # xy_acceleration_mm_s2 as a stand-in for the controller's own acceleration -- G-code
+        # never changes the board's setting, so a stale GUI value just makes every estimate
+        # wrong, silently. Only warn when the controller actually reports a value; a raw JSON
+        # snapshot without live acceleration keys must not warn on nothing.
+        x_accel_raw = values.get("/axes/X/acceleration_mm_per_sec2")
+        y_accel_raw = values.get("/axes/Y/acceleration_mm_per_sec2")
+        x_accel = _float_value(x_accel_raw, 0.0) if x_accel_raw not in (None, "") else None
+        y_accel = _float_value(y_accel_raw, 0.0) if y_accel_raw not in (None, "") else None
+        gui_accel = gui_settings.xy_acceleration_mm_s2
+        for axis_name, controller_accel in (("X", x_accel), ("Y", y_accel)):
+            if controller_accel is None or controller_accel <= 0:
+                continue
+            if abs(controller_accel - gui_accel) > 0.1 * controller_accel:
+                warnings.append(
+                    f"Controller {axis_name} acceleration {controller_accel:.0f} mm/s^2 but GUI setting "
+                    f"{gui_accel:.0f} -- time estimates will be wrong; set Acceleration to {controller_accel:.0f}"
+                )
+
         for axis in ("X", "Y", "Z"):
             if values.get(f"/axes/{axis}/homing/allow_single_axis") != "1":
                 problems.append(f"{axis} single-axis homing is disabled")
@@ -192,6 +212,9 @@ class SystemCheckService:
             "x_travel_mm": x_travel,
             "y_travel_mm": y_travel,
             "z_travel_mm": z_travel,
+            "x_acceleration_mm_s2": x_accel,
+            "y_acceleration_mm_s2": y_accel,
+            "gui_xy_acceleration_mm_s2": gui_accel,
             "problems": problems,
             "warnings": warnings,
             # Lets the supervisor trigger the automatic $Bye restart without

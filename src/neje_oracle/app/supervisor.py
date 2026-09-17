@@ -18,8 +18,9 @@ import httpx
 from ..blocks.firebase.repository import FirebaseRemoteRepository
 from ..blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
 from ..blocks.gcode.direct_svg import create_direct_svg_print_job_from_gui
+from ..blocks.gcode.estimate import limits_for, line_times
 from ..blocks.gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
-from ..blocks.plotter.daemon import PlotterDaemon
+from ..blocks.plotter.daemon import PlotterDaemon, gcode_stream_eta_seconds, remaining_seconds, sendable_line_indices
 from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
 from ..shared.gui_settings import GuiSettings
 from ..shared.logging import append_log
@@ -360,9 +361,15 @@ class SupervisorService:
             )
 
         plotter_store = PlotterStore(self.plotter_settings.db_path)
-        total_lines = len(
-            [line for line in job.gcode.splitlines() if line.strip() and not line.lstrip().startswith(";")]
-        )
+        sent_indices = sendable_line_indices(job.gcode)
+        total_lines = len(sent_indices)
+        # Simulated once before the first line goes out (~0.2s for 45k lines) so
+        # record_progress only has to look up an index, not re-run the planner per line.
+        try:
+            stream_times = line_times(job.gcode, limits_for(gui_settings))
+        except Exception:  # noqa: BLE001 -- eta is a nicety; a bad line must not block the print
+            stream_times = []
+        started_at = datetime.now(tz=UTC).isoformat()
 
         def record_progress(sent: int, total: int) -> None:
             percent = (sent / total * 100.0) if total else 0.0
@@ -380,6 +387,8 @@ class SupervisorService:
                     current_cell_in_row=1,
                     row_cell_count=1,
                     sheet_progress_percent=percent,
+                    eta_seconds=gcode_stream_eta_seconds(stream_times, sent_indices, sent),
+                    print_started_at=started_at,
                 )
             )
 
@@ -391,6 +400,8 @@ class SupervisorService:
                 gcode_lines_total=total_lines,
                 row_count=1,
                 row_cell_count=1,
+                eta_seconds=remaining_seconds(stream_times, 0) if stream_times else None,
+                print_started_at=started_at,
             )
         )
         self.runtime_store.set_component(

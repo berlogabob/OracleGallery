@@ -26,8 +26,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from neje_oracle.blocks.gcode.svg_gcode import svg_to_polylines_mm  # noqa: E402
-from neje_oracle.blocks.gui.support import load_gui_settings, plot_minutes_for  # noqa: E402
+from neje_oracle.blocks.gcode.estimate import estimate, limits_for  # noqa: E402
+from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode, svg_to_polylines_mm  # noqa: E402
+from neje_oracle.blocks.gui.support import load_gui_settings  # noqa: E402
 from neje_oracle.blocks.gui.workspaces.generative import sketch_canvas_mm  # noqa: E402
 from neje_oracle.blocks.imaging.modes import travel_length_mm  # noqa: E402
 from neje_oracle.blocks.patterns import bank  # noqa: E402
@@ -78,13 +79,24 @@ def main() -> int:
     # cost of the file as it will actually be plotted -- not of the shapes we just built.
     polylines = svg_to_polylines_mm(OUTPUT, 1.0)
     draw_mm, travel_mm = travel_length_mm(polylines)
-    xy_minutes, pen_minutes = plot_minutes_for(
-        settings,
-        strokes=len(polylines),
-        draw_mm=draw_mm,
-        travel_mm=travel_mm,
-        use_z_servo=PlotterSettings().use_z_servo,
+    plotter_settings = PlotterSettings()
+    # And through the same gcode generator, replayed by gcode.estimate -- length/feed
+    # arithmetic ignores acceleration and corner speed, which is what actually sets the time.
+    gcode = generate_absolute_svg_gcode(
+        OUTPUT,
+        sample_step_mm=1.0,
+        travel_rate=settings.travel_rate,
+        draw_rate=settings.draw_rate,
+        xy_acceleration_mm_s2=settings.xy_acceleration_mm_s2,
+        pen_up_command=plotter_settings.pen_up_command,
+        pen_down_command=plotter_settings.pen_down_command,
+        use_z_servo=plotter_settings.use_z_servo,
+        z_down_mm=settings.z_down_mm,
+        z_up_mm=settings.z_up_mm,
+        z_feed_mm_min=settings.z_feed_mm_min,
     )
+    xy_seconds, pen_seconds = estimate(gcode, limits_for(settings))
+    xy_minutes, pen_minutes = xy_seconds / 60, pen_seconds / 60
 
     print(f"wrote {OUTPUT.relative_to(REPO_ROOT)}")
     print(

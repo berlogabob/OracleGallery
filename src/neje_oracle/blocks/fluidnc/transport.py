@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import socket
+import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from dataclasses import replace
 from ipaddress import ip_network
 from pathlib import Path
@@ -120,6 +124,24 @@ def prune_spool(spool_root: Path, retention_days: int) -> int:
         except OSError:
             continue
     return removed
+
+
+@contextmanager
+def _keep_awake() -> Iterator[None]:
+    """Hold off idle sleep while G-code streams.
+
+    The sender waits for an ok per line, so a Mac that idle-sleeps stops the plot mid-sheet:
+    on 2026-09-17 a 5 h sheet died at 43% with "Timed out waiting for ok". `-w` ties the
+    assertion to this process, so a crash cannot leave the Mac unable to sleep. Closing the
+    lid still sleeps a laptop on battery; nothing here can prevent that.
+    """
+    caffeinate = shutil.which("caffeinate")  # macOS only; elsewhere this is a no-op
+    process = subprocess.Popen([caffeinate, "-i", "-w", str(os.getpid())]) if caffeinate else None
+    try:
+        yield
+    finally:
+        if process is not None:
+            process.terminate()
 
 
 class FluidNCTransport:
@@ -328,7 +350,7 @@ class FluidNCTransport:
         if not probe.controller.is_idle:
             raise RuntimeError(f"FluidNC is not idle: {probe.controller.state.value}")
 
-        with self._connect(self.settings.fluidnc_connect_timeout_seconds) as conn:
+        with _keep_awake(), self._connect(self.settings.fluidnc_connect_timeout_seconds) as conn:
             self._drain(conn, timeout_seconds=0.2)
             total = len(commands)
             stopped_early = False
