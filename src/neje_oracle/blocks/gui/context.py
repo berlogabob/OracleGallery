@@ -23,9 +23,10 @@ from nicegui import run, ui
 
 from ...app.supervisor import SupervisorService
 from ...shared import telemetry
+from ...shared.config import ensure_dir
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
-from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
+from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
 from .modes import mode_policy
 from .support import (
     GUI_DEFAULTS,
@@ -442,6 +443,73 @@ class GuiContext:
             return
         ui.notify(f"Pen calibration G-code: {output['gcode']}", color="positive")
         self.refresh_status()
+
+    async def _print_sheet(self, build: Any, *, label: str, building: str) -> None:
+        """Build a calibration sheet, then stream it. The generate buttons' missing half.
+
+        A sheet was generated into the spool and there the trail ended: nothing in the app
+        could send a .gcode file, so the operator had to stream it by hand. Building here
+        rather than printing whatever is in the spool means the sheet always matches the
+        settings on screen.
+        """
+        self.pull_settings_from_fields()
+        self._save_settings()
+        ui.notify(f"{building}...", color="info")
+        try:
+            output = await self._blocking(build, self.settings)
+        except Exception as exc:  # noqa: BLE001 -- a sheet that will not fit the bed raises, and that is normal
+            ui.notify(f"{building} failed: {exc}", color="negative")
+            return
+        state = await self._blocking(
+            self.supervisor.print_gcode_file, Path(output["gcode"]), label=label, gui_settings=self.settings
+        )
+        ui.notify(
+            state.message if state.status == ComponentStatus.STOPPED else (state.last_error or state.message),
+            color="positive" if state.status == ComponentStatus.STOPPED else "warning",
+        )
+        self.refresh_status()
+        self.refresh_logs()
+
+    def print_pen_cal(self) -> None:
+        self.confirm_action(
+            "PRINT PEN CAL SHEET",
+            "Builds the ladder sheet for the fitted pen and plots it now. Needs work zero set and an Idle machine.",
+            lambda: self._print_sheet(
+                generate_pen_cal_sheet, label=f"pen cal {self.settings.pen_profile or 'unsaved'}", building="Pen cal"
+            ),
+        )
+
+    def print_z_range(self) -> None:
+        self.confirm_action(
+            "PRINT Z RANGE SHEET",
+            "Sweeps pen-down depth from 0 to -12mm and then tests pen-up clearance. Use after a "
+            "mechanics change, on a sheet you do not mind losing.",
+            lambda: self._print_sheet(generate_z_range_sheet, label="z range", building="Z range sheet"),
+        )
+
+    async def trace_outline(self) -> None:
+        """Walk the paper's border, and the artwork's, with the pen up.
+
+        The cheapest possible answer to "does it fit, and is the origin right" -- a minute
+        of travel against the hours a sheet takes.
+        """
+        self.pull_settings_from_fields()
+        self._save_settings()
+        svg_bytes = self.uploaded_svg["bytes"] or None
+        gcode = outline_gcode(self.settings, self.supervisor.plotter_settings, svg_bytes=svg_bytes)
+        path = self.supervisor.plotter_settings.spool_root / "outline_trace.gcode"
+        ensure_dir(path.parent)
+        path.write_text(gcode, encoding="utf-8")
+        ui.notify("Tracing the outline, pen up...", color="info")
+        state = await self._blocking(
+            self.supervisor.print_gcode_file, path, label="outline trace", gui_settings=self.settings
+        )
+        ui.notify(
+            state.message if state.status == ComponentStatus.STOPPED else (state.last_error or state.message),
+            color="positive" if state.status == ComponentStatus.STOPPED else "warning",
+        )
+        self.refresh_status()
+        self.refresh_logs()
 
     # ---- preview & status -----------------------------------------------------
 

@@ -22,8 +22,10 @@ from neje_oracle.shared.pen_profiles import (
     STARTER_PROFILES,
     apply_pen_profile,
     capture_pen_profile,
+    delete_pen_profile,
     load_pen_profiles,
     profile_matches,
+    rename_pen_profile,
     save_pen_profiles,
 )
 
@@ -127,19 +129,81 @@ def test_unknown_keys_are_dropped_rather_than_fatal(tmp_path: Path) -> None:
 
 
 def test_shipped_profiles_are_complete() -> None:
-    """assets/pen_profiles.json ships with the app; a missing field would read as 0."""
-    for name, values in load_pen_profiles().items():
+    """Every starter carries every field; a missing one would read as 0 on apply."""
+    for name, values in STARTER_PROFILES.items():
         assert set(values) == set(PEN_PROFILE_FIELDS), name
 
 
-def test_shipped_json_matches_the_python_fallback() -> None:
-    """The same profiles (fineliner, gel, ballpoint, textile) are defined twice:
-    STARTER_PROFILES and the tracked JSON.
+def test_the_starters_are_the_shipped_set(tmp_path: Path) -> None:
+    """There is one definition of 'gel' now.
 
-    The file was generated from the dict, so they agree today. This is what makes them
-    fail the suite rather than silently drift into two different answers for 'gel'.
+    The four pens used to be spelled out twice, in STARTER_PROFILES and a tracked
+    assets/pen_profiles.json, kept honest only by a byte-equality test. The file is now the
+    operator's own measurements, written on first save, and absent until then.
     """
-    assert load_pen_profiles() == STARTER_PROFILES
+    assert load_pen_profiles(tmp_path / "never_saved.json") == STARTER_PROFILES
+
+
+def test_a_z_target_from_a_hand_edited_file_is_clamped(tmp_path: Path) -> None:
+    """z_fix_mm parks the pen about a millimetre off the mechanical end, so it gets the
+    same clamp z_down_mm has: past-travel either trips the soft limit or stalls the servo."""
+    path = tmp_path / "pens.json"
+    save_pen_profiles({"deep": {"z_fix_mm": -40.0}, "high": {"z_fix_mm": 5.0}}, path)
+    loaded = load_pen_profiles(path)
+    assert loaded["deep"]["z_fix_mm"] == -25.0
+    assert loaded["high"]["z_fix_mm"] == 0.0
+
+
+def test_the_pen_fix_position_travels_with_the_pen(tmp_path: Path) -> None:
+    """It is captured by SET AS PEN-FIX in the same card as the rest, and it is a property
+    of how this pen sits in the holder -- it used to be left behind on every pen switch."""
+    path = tmp_path / "pens.json"
+    settings = GuiSettings(z_fix_mm=-12.5)
+    save_pen_profiles({"mine": capture_pen_profile(settings)}, path)
+
+    other = GuiSettings(z_fix_mm=0.0)
+    apply_pen_profile(other, "mine", load_pen_profiles(path))
+
+    assert other.z_fix_mm == -12.5
+
+
+def test_delete_keeps_the_last_profile(tmp_path: Path) -> None:
+    """An empty picker would leave no way back to a known-good pen."""
+    path = tmp_path / "pens.json"
+    save_pen_profiles({"only": dict(STARTER_PROFILES["gel"])}, path)
+    profiles = load_pen_profiles(path)
+
+    with pytest.raises(ValueError, match="only pen profile"):
+        delete_pen_profile("only", profiles)
+
+
+def test_delete_removes_one_and_leaves_the_rest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "pens.json"
+    monkeypatch.setattr("neje_oracle.shared.pen_profiles.PROFILE_PATH", path)
+    save_pen_profiles({name: dict(values) for name, values in STARTER_PROFILES.items()}, path)
+
+    remaining = delete_pen_profile("gel", load_pen_profiles(path))
+
+    assert "gel" not in remaining
+    assert set(remaining) == set(STARTER_PROFILES) - {"gel"}
+    assert load_pen_profiles(path) == remaining
+
+
+def test_rename_moves_the_values_and_refuses_an_existing_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Landing on an existing name would overwrite another pen's measurements, and the
+    only other copy of those numbers is on paper."""
+    path = tmp_path / "pens.json"
+    monkeypatch.setattr("neje_oracle.shared.pen_profiles.PROFILE_PATH", path)
+    save_pen_profiles({name: dict(values) for name, values in STARTER_PROFILES.items()}, path)
+    profiles = load_pen_profiles(path)
+
+    renamed = rename_pen_profile("gel", "gel 0.5 black", profiles)
+
+    assert "gel" not in renamed
+    assert renamed["gel 0.5 black"] == STARTER_PROFILES["gel"]
+    with pytest.raises(ValueError, match="already exists"):
+        rename_pen_profile("fineliner", "ballpoint", renamed)
+    assert load_pen_profiles(path) == renamed
 
 
 # --- applying and capturing ----------------------------------------------------

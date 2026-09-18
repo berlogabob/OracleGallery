@@ -319,31 +319,43 @@ class SupervisorService:
             "print", ComponentStatus.STOPPED, message="Stop requested; draining the last moves, then pen up"
         )
 
-    def print_uploaded_svg(self, gui_settings: GuiSettings, *, svg_bytes: bytes, original_name: str) -> ComponentState:
+    def _print_preflight(self, gui_settings: GuiSettings, *, action: str, what: str) -> ComponentState | None:
+        """The gate every direct print passes, or the state that says why it may not.
+
+        Checks, work zero and an Idle controller are the same requirements whatever the
+        lines are: a calibration sheet drives the pen over the paper exactly as a drawing
+        does, so it earns the same refusals rather than a second, laxer path.
+        """
         gui_settings.apply_system_mode()
         system_check = self.run_system_check(gui_settings)
         if system_check.has_critical:
-            message = self._system_check_block_message(system_check, "PRINT SVG")
-            append_log("plotter", f"Uploaded SVG print blocked: {message}", level="warning", settings=self.settings)
+            message = self._system_check_block_message(system_check, action)
+            append_log("plotter", f"{what} print blocked: {message}", level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message=message)
         readiness = self.runtime_store.load_plotter_readiness()
         if not readiness.work_zero_set:
-            message = "Set work zero before PRINT SVG"
-            append_log("plotter", f"Uploaded SVG print blocked: {message}", level="warning", settings=self.settings)
+            message = f"Set work zero before {action}"
+            append_log("plotter", f"{what} print blocked: {message}", level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message=message)
         probe = self.probe_fluidnc()
         self.check_fluidnc(probe)
         if not probe.online:
-            message = f"FluidNC is offline; cannot print SVG directly: {probe.message}"
+            message = f"FluidNC is offline; cannot print directly: {probe.message}"
             append_log("plotter", message, level="warning", settings=self.settings)
             return self.runtime_store.set_component(
                 "print", ComponentStatus.WARNING, message=message, last_error=probe.last_error
             )
         if not probe.controller.is_idle:
             state = probe.controller.state.value
-            message = f"FluidNC is {state}; wait for Idle before PRINT SVG"
+            message = f"FluidNC is {state}; wait for Idle before {action}"
             append_log("plotter", message, level="warning", settings=self.settings)
             return self.runtime_store.set_component("print", ComponentStatus.WARNING, message=message)
+        return None
+
+    def print_uploaded_svg(self, gui_settings: GuiSettings, *, svg_bytes: bytes, original_name: str) -> ComponentState:
+        blocked = self._print_preflight(gui_settings, action="PRINT SVG", what="Uploaded SVG")
+        if blocked is not None:
+            return blocked
 
         try:
             job = create_direct_svg_print_job_from_gui(
@@ -360,13 +372,56 @@ class SupervisorService:
                 "print", ComponentStatus.ERROR, message=message, last_error=str(exc)
             )
 
+        return self._stream_gcode(job.gcode, sheet_id=job.sheet_id, label=job.label, gui_settings=gui_settings)
+
+    def print_gcode_file(self, path: Path, *, label: str, gui_settings: GuiSettings) -> ComponentState:
+        """Stream a G-code file the machine can already run, as the calibration sheets are.
+
+        pen_cal writes its ladders as G-code rather than SVG because an SVG cannot carry a
+        per-stroke feed or Z. That left them unprintable from the app: the only print path
+        took SVG, so the operator had to stream the spool file by hand. This is the missing
+        half, and it is the SVG path's own streaming step with the SVG part removed.
+        """
+        blocked = self._print_preflight(gui_settings, action="PRINT SHEET", what="G-code sheet")
+        if blocked is not None:
+            return blocked
+        try:
+            gcode = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            # A missing spool file is an ordinary outcome -- the sheet is generated first,
+            # and generation can have failed or been pruned -- so it reads as a state the
+            # operator sees, not a traceback.
+            message = f"Cannot read G-code {path.name}: {exc}"
+            append_log("plotter", message, level="error", settings=self.settings)
+            return self.runtime_store.set_component(
+                "print", ComponentStatus.ERROR, message=message, last_error=str(exc)
+            )
+        return self._stream_gcode(
+            gcode, sheet_id=path.stem, label=label, gui_settings=gui_settings, kind="G-code sheet"
+        )
+
+    def _stream_gcode(
+        self,
+        gcode: str,
+        *,
+        sheet_id: str,
+        label: str,
+        gui_settings: GuiSettings,
+        kind: str = "Uploaded SVG",
+    ) -> ComponentState:
+        """Send one G-code document, reporting progress, ETA and the outcome.
+
+        Shared by the uploaded-SVG print and the calibration sheets: the probe, the runtime
+        state a screen reads, the planner-simulated time left and the plot_jobs row are the
+        same work whatever produced the lines. `kind` is only the noun in the messages.
+        """
         plotter_store = PlotterStore(self.plotter_settings.db_path)
-        sent_indices = sendable_line_indices(job.gcode)
+        sent_indices = sendable_line_indices(gcode)
         total_lines = len(sent_indices)
         # Simulated once before the first line goes out (~0.2s for 45k lines) so
         # record_progress only has to look up an index, not re-run the planner per line.
         try:
-            stream_times = line_times(job.gcode, limits_for(gui_settings))
+            stream_times = line_times(gcode, limits_for(gui_settings))
         except Exception:  # noqa: BLE001 -- eta is a nicety; a bad line must not block the print
             stream_times = []
         started_at = datetime.now(tz=UTC).isoformat()
@@ -376,8 +431,8 @@ class SupervisorService:
             plotter_store.save_runtime_state(
                 PlotterRuntimeState(
                     status=RuntimeStatus.PRINTING,
-                    message=f"Printing uploaded SVG {job.label}: {sent}/{total} lines",
-                    current_sheet_id=job.sheet_id,
+                    message=f"Printing {kind} {label}: {sent}/{total} lines",
+                    current_sheet_id=sheet_id,
                     gcode_lines_sent=sent,
                     gcode_lines_total=total,
                     gcode_progress_percent=percent,
@@ -395,8 +450,8 @@ class SupervisorService:
         plotter_store.save_runtime_state(
             PlotterRuntimeState(
                 status=RuntimeStatus.PRINTING,
-                message=f"Printing uploaded SVG {job.label}",
-                current_sheet_id=job.sheet_id,
+                message=f"Printing {kind} {label}",
+                current_sheet_id=sheet_id,
                 gcode_lines_total=total_lines,
                 row_count=1,
                 row_cell_count=1,
@@ -405,29 +460,29 @@ class SupervisorService:
             )
         )
         self.runtime_store.set_component(
-            "print", ComponentStatus.RUNNING, message=f"Printing uploaded SVG: {job.label}", heartbeat=True
+            "print", ComponentStatus.RUNNING, message=f"Printing {kind}: {label}", heartbeat=True
         )
         try:
             gcode_path = self.transport_factory(self.plotter_settings).send(
-                gcode=job.gcode,
-                sheet_id=job.sheet_id,
+                gcode=gcode,
+                sheet_id=sheet_id,
                 dry_run=False,
                 progress_callback=record_progress,
             )
         except Exception as exc:  # noqa: BLE001
-            message = f"Uploaded SVG print failed: {exc}"
+            message = f"{kind} print failed: {exc}"
             plotter_store.save_runtime_state(
                 PlotterRuntimeState(
                     status=RuntimeStatus.ERROR,
                     message=message,
-                    current_sheet_id=job.sheet_id,
+                    current_sheet_id=sheet_id,
                     gcode_lines_total=total_lines,
                 )
             )
             # Direct SVG is how every test sheet and calibration print goes out, and it
             # used to write no plot_jobs row at all -- so a failed print left nothing
             # durable to read afterwards. runtime_state holds only the most recent run.
-            plotter_store.record_job_status(job.sheet_id, PlotStatus.FAILED, sheet_id=job.sheet_id, error=str(exc))
+            plotter_store.record_job_status(sheet_id, PlotStatus.FAILED, sheet_id=sheet_id, error=str(exc))
             append_log("plotter", message, level="error", settings=self.settings)
             return self.runtime_store.set_component(
                 "print", ComponentStatus.ERROR, message=message, last_error=str(exc)
@@ -436,8 +491,8 @@ class SupervisorService:
         plotter_store.save_runtime_state(
             PlotterRuntimeState(
                 status=RuntimeStatus.OPERATOR_PAUSED,
-                message=f"Uploaded SVG finished: {job.label}",
-                current_sheet_id=job.sheet_id,
+                message=f"{kind} finished: {label}",
+                current_sheet_id=sheet_id,
                 last_sheet_path=str(gcode_path),
                 gcode_lines_sent=total_lines,
                 gcode_lines_total=total_lines,
@@ -452,11 +507,9 @@ class SupervisorService:
                 sheet_progress_percent=100.0,
             )
         )
-        plotter_store.record_job_status(job.sheet_id, PlotStatus.PRINTED, sheet_id=job.sheet_id)
-        append_log("plotter", f"Uploaded SVG printed directly: {job.label} -> {gcode_path}", settings=self.settings)
-        return self.runtime_store.set_component(
-            "print", ComponentStatus.STOPPED, message=f"Uploaded SVG printed: {job.label}"
-        )
+        plotter_store.record_job_status(sheet_id, PlotStatus.PRINTED, sheet_id=sheet_id)
+        append_log("plotter", f"{kind} printed directly: {label} -> {gcode_path}", settings=self.settings)
+        return self.runtime_store.set_component("print", ComponentStatus.STOPPED, message=f"{kind} printed: {label}")
 
     def start_plotter(self, config: PlotterRuntimeConfig | None = None) -> ComponentState:
         with self._lock:
@@ -827,8 +880,7 @@ class SupervisorService:
                 command=result.command,
                 response_lines=result.response_lines,
                 error=(
-                    f"controller restarted but still reports config '{live_board or '<none>'}'; "
-                    "power-cycle the board"
+                    f"controller restarted but still reports config '{live_board or '<none>'}'; power-cycle the board"
                 ),
             )
         return FluidNCCommandResult(

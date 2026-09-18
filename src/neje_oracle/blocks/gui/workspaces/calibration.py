@@ -17,8 +17,10 @@ from ....shared.pen_profiles import (
     PEN_PROFILE_FIELDS,
     apply_pen_profile,
     capture_pen_profile,
+    delete_pen_profile,
     load_pen_profiles,
     profile_matches,
+    rename_pen_profile,
     save_pen_profiles,
 )
 from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
@@ -27,6 +29,7 @@ from ..support import GUI_DEFAULTS
 from ..ui import (
     Section,
     card,
+    danger_action_button,
     helper_text,
     micro_label,
     mini_metric,
@@ -636,7 +639,62 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
             refresh_modified()
             ui.notify(f"Saved pen profile '{name}'", color="positive")
 
+        def rename_current() -> None:
+            current = ctx.settings.pen_profile
+            name = str(name_input.value or "").strip()
+            if not current:
+                ui.notify("Select the fitted pen before renaming", color="warning")
+                return
+            try:
+                renamed = rename_pen_profile(current, name, profiles)
+            except ValueError as exc:
+                ui.notify(str(exc), color="warning")
+                return
+            profiles.clear()
+            profiles.update(renamed)
+            ctx.settings.pen_profile = name
+            ctx.persist_and_refresh()
+            profile_select.options = sorted(profiles)
+            profile_select.value = name
+            profile_select.update()
+            refresh_modified()
+            ui.notify(f"Renamed to '{name}'", color="positive")
+
+        def delete_current() -> None:
+            current = ctx.settings.pen_profile
+            if not current:
+                ui.notify("Select the fitted pen before deleting", color="warning")
+                return
+            try:
+                remaining = delete_pen_profile(current, profiles)
+            except ValueError as exc:
+                ui.notify(str(exc), color="warning")
+                return
+            profiles.clear()
+            profiles.update(remaining)
+            # The live values stay exactly as they are -- they simply stop claiming to be
+            # that pen. Nothing about the fitted instrument changed by deleting a label.
+            ctx.settings.pen_profile = ""
+            ctx.persist_and_refresh()
+            profile_select.options = sorted(profiles)
+            profile_select.value = None
+            profile_select.update()
+            refresh_modified()
+            ui.notify(f"Deleted pen profile '{current}'", color="positive")
+
         primary_action_button("SAVE AS PROFILE", lambda: save_current())
+        safe_action_button("RENAME", lambda: rename_current())
+        # Behind a confirm: the numbers in a profile cost a printed sheet and a read-off to
+        # find, and nothing else in the app holds a copy of them.
+        danger_action_button(
+            "DELETE",
+            lambda: ctx.confirm_action(
+                "DELETE PEN PROFILE",
+                f"Deletes '{ctx.settings.pen_profile}' from the pen library. The fitted pen's live "
+                "settings stay as they are. This cannot be undone.",
+                delete_current,
+            ),
+        )
 
     # Subscribe to the pen controls rather than polling on a timer. The 2s ui.timer this
     # replaces kept firing after its slot was torn down on client disconnect -- one browser
@@ -653,5 +711,3 @@ def _build_pen_profile_row(ctx: GuiContext) -> None:
         "Shipped values are starting points, not measurements. Print the pen calibration sheet "
         "(Pen calibration, below), read the best rung off each ladder, then save the result here."
     )
-
-

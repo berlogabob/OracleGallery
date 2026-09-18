@@ -22,6 +22,10 @@ from .config import _repo_root
 if TYPE_CHECKING:
     from .gui_settings import GuiSettings
 
+# Written on the first SAVE AS PROFILE, not shipped: STARTER_PROFILES below is the set the
+# app ships with, and this file is the operator's own measurements layered over it. It used
+# to be tracked with the same four pens spelled out a second time, kept honest only by a
+# drift test.
 PROFILE_PATH = _repo_root() / "assets" / "pen_profiles.json"
 
 # The instrument-dependent subset of GuiSettings. Adding a field here makes it part of
@@ -32,12 +36,20 @@ PEN_PROFILE_FIELDS = (
     "travel_rate",
     "z_down_mm",
     "z_up_mm",
+    "z_fix_mm",
     "z_feed_mm_min",
     "pen_down_dwell_ms",
 )
 
-# Used when assets/pen_profiles.json is missing, so the GUI always has something to
-# select. Deliberately conservative: slower and shallower than the machine can manage,
+# Fields whose value is a Z target: clamped to the servo's travel on load, because the
+# file is hand-editable and a past-travel target either trips the board's soft limit into
+# Alarm or stalls the servo against its stop. z_fix_mm is one of them -- the pen-fix
+# position sits about a millimetre off the mechanical end, with no room to spare.
+_Z_TARGET_FIELDS = ("z_down_mm", "z_fix_mm")
+_Z_TRAVEL_FLOOR_MM = -25.0
+
+# The shipped set, used until the operator saves their own, so the GUI always has
+# something to select. Deliberately conservative: slower and shallower than the machine can manage,
 # because an over-pressed nib is damaged and an over-fast one just skips.
 #
 # z_down_mm floor is -25.0: the servo's configured travel. "More pressure" via a deeper
@@ -52,6 +64,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "travel_rate": 5000.0,
         "z_down_mm": -25.0,
         "z_up_mm": 0.0,
+        "z_fix_mm": -25.0,
         "z_feed_mm_min": 1000.0,
         "pen_down_dwell_ms": 0.0,
     },
@@ -63,6 +76,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "travel_rate": 5000.0,
         "z_down_mm": -25.0,
         "z_up_mm": 0.0,
+        "z_fix_mm": -25.0,
         "z_feed_mm_min": 800.0,
         "pen_down_dwell_ms": 120.0,
     },
@@ -73,6 +87,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "travel_rate": 5000.0,
         "z_down_mm": -25.0,
         "z_up_mm": 0.0,
+        "z_fix_mm": -25.0,
         "z_feed_mm_min": 1200.0,
         "pen_down_dwell_ms": 60.0,
     },
@@ -85,6 +100,7 @@ STARTER_PROFILES: dict[str, dict[str, float]] = {
         "travel_rate": 5000.0,
         "z_down_mm": -25.0,
         "z_up_mm": 0.0,
+        "z_fix_mm": -25.0,
         "z_feed_mm_min": 1200.0,
         "pen_down_dwell_ms": 0.0,
     },
@@ -105,9 +121,11 @@ def load_pen_profiles(path: Path | None = None) -> dict[str, dict[str, float]]:
         # stale key from a renamed field must not make every profile unloadable.
         loaded = {field: float(values[field]) for field in PEN_PROFILE_FIELDS if field in values}
         # The file is hand-editable, so a past-travel depth (see STARTER_PROFILES note)
-        # can come back: clamp to the servo's 25mm travel here, once, for every consumer.
-        if "z_down_mm" in loaded:
-            loaded["z_down_mm"] = min(0.0, max(-25.0, loaded["z_down_mm"]))
+        # can come back: clamp every Z target to the servo's travel here, once, for every
+        # consumer.
+        for z_field in _Z_TARGET_FIELDS:
+            if z_field in loaded:
+                loaded[z_field] = min(0.0, max(_Z_TRAVEL_FLOOR_MM, loaded[z_field]))
         profiles[str(name)] = loaded
     return profiles
 
@@ -164,3 +182,42 @@ def profile_matches(settings: GuiSettings, name: str, profiles: dict[str, dict[s
         for field, value in values.items()
         if field in PEN_PROFILE_FIELDS
     )
+
+
+def delete_pen_profile(name: str, profiles: dict[str, dict[str, float]] | None = None) -> dict[str, dict[str, float]]:
+    """Remove a profile and write the file. Returns what remains.
+
+    Refuses the last one: an empty picker would leave the operator with no way back to a
+    known-good pen, and the values a profile holds cost a printed sheet to find.
+    """
+    available = profiles if profiles is not None else load_pen_profiles()
+    if name not in available:
+        known = ", ".join(sorted(available)) or "(none)"
+        raise ValueError(f"unknown pen profile {name!r}; known profiles: {known}")
+    if len(available) <= 1:
+        raise ValueError(f"{name!r} is the only pen profile; keep at least one")
+    remaining = {key: values for key, values in available.items() if key != name}
+    save_pen_profiles(remaining)
+    return remaining
+
+
+def rename_pen_profile(
+    old: str, new: str, profiles: dict[str, dict[str, float]] | None = None
+) -> dict[str, dict[str, float]]:
+    """Move a profile's values to a new name in one write.
+
+    Refuses to land on an existing name: that would overwrite another pen's measurements
+    with this one's, silently, and the only copy of those numbers is on paper.
+    """
+    available = profiles if profiles is not None else load_pen_profiles()
+    new = new.strip()
+    if old not in available:
+        known = ", ".join(sorted(available)) or "(none)"
+        raise ValueError(f"unknown pen profile {old!r}; known profiles: {known}")
+    if not new:
+        raise ValueError("name the profile before renaming")
+    if new in available and new != old:
+        raise ValueError(f"pen profile {new!r} already exists; pick another name")
+    renamed = {(new if key == old else key): values for key, values in available.items()}
+    save_pen_profiles(renamed)
+    return renamed

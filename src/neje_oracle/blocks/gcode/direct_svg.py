@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,7 +10,7 @@ from pathlib import Path
 from ...shared.config import PlotterSettings, ensure_dir
 from ...shared.gui_settings import GuiSettings, gui_settings_to_plotter_config
 from .sampling import compute_effective_sample_step
-from .svg_gcode import generate_absolute_svg_gcode
+from .svg_gcode import generate_absolute_svg_gcode, svg_to_polylines_mm
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,35 @@ class DirectSvgPrintJob:
     label: str
     gcode: str
     effective_sample_step_mm: float
+
+
+def effective_sample_step(settings: GuiSettings) -> float:
+    """The step the print path samples an SVG at, given the operator's sampling knobs.
+
+    Split out because the outline trace (gcode/pen_cal.outline_gcode) has to read the same
+    geometry the print will send: sampled coarser, a curve's extent shrinks, and an outline
+    that says the art fits would not be evidence that the print does.
+    """
+    config = gui_settings_to_plotter_config(settings)
+    return compute_effective_sample_step(
+        sample_step_mm=config.sample_step_mm,
+        cell_diameter_mm=config.cell_diameter_mm,
+        sample_reference_cell_mm=config.sample_reference_cell_mm,
+        sample_density_exponent=config.sample_density_exponent,
+        sample_min_step_mm=config.sample_min_step_mm,
+        sample_max_step_mm=config.sample_max_step_mm,
+    )
+
+
+def build_svg_polylines(settings: GuiSettings, svg_bytes: bytes) -> list[list[tuple[float, float]]]:
+    """The drawing in mm, before any origin shift, sampled as the print path samples it."""
+    with tempfile.NamedTemporaryFile(suffix=".svg", delete=False) as handle:
+        handle.write(svg_bytes)
+        path = Path(handle.name)
+    try:
+        return svg_to_polylines_mm(path, effective_sample_step(settings))
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def build_svg_gcode(
@@ -36,14 +66,7 @@ def build_svg_gcode(
     cannot silently drift apart on a rate, a bound, or an origin.
     """
     config = gui_settings_to_plotter_config(settings)
-    effective_step = compute_effective_sample_step(
-        sample_step_mm=config.sample_step_mm,
-        cell_diameter_mm=config.cell_diameter_mm,
-        sample_reference_cell_mm=config.sample_reference_cell_mm,
-        sample_density_exponent=config.sample_density_exponent,
-        sample_min_step_mm=config.sample_min_step_mm,
-        sample_max_step_mm=config.sample_max_step_mm,
-    )
+    effective_step = effective_sample_step(settings)
     gcode = generate_absolute_svg_gcode(
         svg_path,
         sample_step_mm=effective_step,

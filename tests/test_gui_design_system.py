@@ -48,7 +48,7 @@ STYLE_OWNERS = {"ui.py", "tokens.py", "styles.py"}
 # un-migrated surface. The rail also removed a duplicated motion panel from two
 # workspaces, and the status bar removed the permanent warning banner.
 MAX_RAW_CLASSES = (
-    166  # +1: the state chip's OFFLINE override is a second classes(replace=...) swap, not un-migrated styling
+    165  # -1: the TESTS workspace's calibration rows are toolbar() now, one fewer than the rows they replaced
 )
 MAX_RAW_HEX = 26  # -16: the last #8f4f2b uses are gone; what remains is preview.py's SVG sheet palette
 MAX_RAW_CARDS = 0  # target reached: every card composes ui.card()

@@ -4,9 +4,18 @@ from __future__ import annotations
 
 from nicegui import ui
 
+from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
-from ..ui import card, file_upload, helper_text, number_control, primary_action_button, safe_action_button
+from ..ui import (
+    card,
+    file_upload,
+    helper_text,
+    number_control,
+    primary_action_button,
+    safe_action_button,
+    toolbar,
+)
 
 
 def build(ctx: GuiContext) -> None:
@@ -27,11 +36,29 @@ def build(ctx: GuiContext) -> None:
                 "by row. Read the best rung off each ladder, type it into Motion speed, then SAVE AS PROFILE."
             )
             helper_text(
-                "The Z ladder stays within +/-1mm of the current pen-down depth (never past -30mm); "
-                "written to the spool as pen_cal_<profile>.gcode."
+                f"The Z ladder stays within +/-1mm of the current pen-down depth (never past "
+                f"{Z_ABSOLUTE_FLOOR_MM:g}mm); written to the spool as pen_cal_<profile>.gcode."
             )
-            with ui.row().classes("items-center gap-2"):
+            with toolbar():
                 safe_action_button("GENERATE PEN CAL G-CODE", ctx.generate_pen_cal)
+                primary_action_button("PRINT PEN CAL", ctx.print_pen_cal)
+            ui.separator()
+            helper_text(
+                "Z range: sweeps pen-down depth from 0 to -12mm, then checks pen-up clearance by "
+                "leaving a gap a dragging pen would mark. Use after a mechanics change, on a sheet "
+                "you do not mind losing."
+            )
+            with toolbar():
+                primary_action_button("PRINT Z RANGE", ctx.print_z_range)
+
+        with card("Outline trace", compact=True):
+            helper_text(
+                "Walks the printable field, and the loaded SVG's own bounds, with the pen up. "
+                "A minute of travel answers whether the drawing fits and whether the origin is "
+                "where you think it is -- before hours of plotting say otherwise."
+            )
+            with toolbar():
+                primary_action_button("TRACE OUTLINE", ctx.trace_outline)
 
         with card("SVG test draw", compact=True):
             helper_text(

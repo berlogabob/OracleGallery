@@ -107,7 +107,9 @@ def generate_sheet_gcode(
                 _append_polyline_gcode(lines, ring, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed)
         if include_markers:
             for marker in _marker_polylines(item, placement, marker_diameter_mm=marker_diameter_mm):
-                _append_polyline_gcode(lines, marker, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed)
+                _append_polyline_gcode(
+                    lines, marker, pen_down=pen_down, pen_up=pen_up, dwell=dwell, draw_feed=draw_feed
+                )
         metadata = read_normalized_svg_metadata(item.svg_path)
         if metadata.normalized and metadata.scale > 1.0:
             lines.append(f"; warning normalized overscale {metadata.scale:.3f} may cross cell boundaries")

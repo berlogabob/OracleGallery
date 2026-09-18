@@ -477,7 +477,10 @@ Manual verification: upload one session folder with SVG/TXT/READY, then confirm 
 
 Different instruments want different numbers. A profile is a named bundle of exactly the
 instrument-dependent settings — `pen_width_mm`, `draw_rate`, `travel_rate`, `z_down_mm`,
-`z_up_mm`, `z_feed_mm_min`, `pen_down_dwell_ms` — stored in `assets/pen_profiles.json`.
+`z_up_mm`, `z_fix_mm`, `z_feed_mm_min`, `pen_down_dwell_ms`. The four shipped profiles live
+in the code (`shared/pen_profiles.py`); `assets/pen_profiles.json` appears on the first
+SAVE AS PROFILE and holds your own measurements from then on. RENAME and DELETE sit beside
+it; DELETE keeps the last profile and asks first.
 Sheet size, layout and sampling are deliberately not in a profile: those belong to the
 machine and the job, so swapping pens must not disturb them.
 

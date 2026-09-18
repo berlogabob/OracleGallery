@@ -461,3 +461,84 @@ def generate_pen_cal_sheet(
     gcode_path.write_text(gcode, encoding="utf-8")
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return {"gcode": gcode_path, "manifest": manifest_path}
+
+
+def outline_gcode(
+    settings: GuiSettings,
+    plotter: PlotterSettings | None = None,
+    *,
+    svg_bytes: bytes | None = None,
+) -> str:
+    """Walk the paper's border, and the artwork's, with the pen UP.
+
+    A sheet here runs for hours -- one ran five -- and until now nothing answered "does the
+    drawing fit, and is the origin where I think it is" before those hours were spent. The
+    head tracing the two rectangles answers both while the operator watches, and costs a
+    minute.
+
+    The pen never goes down: a single fed Z would put ink on the sheet the operator is about
+    to print on, which is the one outcome that would make this worse than not checking.
+    """
+    plotter = plotter or PlotterSettings()
+    pen_up = _pen_up_command(plotter.pen_up_command, use_z_servo=plotter.use_z_servo, z_up_mm=settings.z_up_mm)
+    origin_x = settings.direct_svg_origin_x_mm
+    origin_y = settings.direct_svg_origin_y_mm
+    margin = settings.sheet_margin_mm
+    lines = [
+        "; Neje Oracle outline trace -- pen stays up, nothing is drawn",
+        "G21",
+        "G90",
+        f"G0 F{settings.travel_rate:.2f}",
+        pen_up,
+    ]
+
+    field = _rectangle(
+        origin_x + margin,
+        origin_y + margin,
+        settings.sheet_width_mm - margin,
+        settings.sheet_height_mm - margin,
+    )
+    lines.append("; printable field")
+    lines.extend(_rapid_path(field))
+
+    if svg_bytes is not None:
+        bounds = _svg_bounds_mm(settings, svg_bytes)
+        if bounds is not None:
+            # Sampled at the step the print path itself uses, so this is the extent of the
+            # G-code that will actually be sent, not of some other reading of the file.
+            x0, y0, x1, y1 = bounds
+            lines.append("; artwork bounds")
+            lines.extend(_rapid_path(_rectangle(x0 + origin_x, y0 + origin_y, x1 + origin_x, y1 + origin_y)))
+
+    lines.append("G0 X0 Y0")
+    return "\n".join(lines) + "\n"
+
+
+def _rectangle(x0: float, y0: float, x1: float, y1: float) -> list[tuple[float, float]]:
+    return [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
+
+
+def _rapid_path(points: list[tuple[float, float]]) -> list[str]:
+    return [f"G0 X{x:.3f} Y{y:.3f}" for x, y in points]
+
+
+def _svg_bounds_mm(settings: GuiSettings, svg_bytes: bytes) -> tuple[float, float, float, float] | None:
+    """The drawing's extent in mm, or None when the SVG holds nothing drawable."""
+    from .direct_svg import build_svg_polylines  # noqa: PLC0415 -- direct_svg imports this module
+
+    try:
+        polylines = build_svg_polylines(settings, svg_bytes)
+    except ValueError:
+        # An SVG with nothing drawable raises on the print path, and that refusal belongs
+        # there. Here it just means there is no second rectangle to show: the operator still
+        # gets the paper's own outline, which is most of the answer.
+        return None
+    points = [point for polyline in polylines for point in polyline]
+    if not points:
+        return None
+    return (
+        min(x for x, _ in points),
+        min(y for _, y in points),
+        max(x for x, _ in points),
+        max(y for _, y in points),
+    )
