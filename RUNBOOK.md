@@ -594,6 +594,35 @@ In the order things actually go wrong:
 7. **Plot time against the script's estimate.** Much longer points at stroke ordering:
    pen-up moves leave no ink, so wasted travel is only measurable as time.
 
+## 9c. Finishing an Interrupted Sheet
+
+A sheet can run five hours, and the streamer is a laptop. A sleeping Mac, a dropped
+hotspot or a crash ends the stream mid-plot; the board finishes the line it holds and sits
+Idle, so the paper and the position are still good. Two scripts pick the sheet back up.
+
+**Planned pause.** While `scripts/resume_print.py` is streaming:
+
+    touch logs/STOP_RESUME
+
+It stops at the next line boundary, lifts the pen, and writes the exact line back into the
+resume-point file. Continue later with:
+
+    uv run python scripts/resume_print.py logs/<sheet>_resume_point.json
+
+Leave the board powered so it keeps its homing and its position. After a power cycle, run
+`$H` first: work coordinates equal machine coordinates here, so homing restores them.
+
+**Unplanned stop**, where nothing recorded the line:
+
+    uv run python scripts/recover_print_point.py spool/<sheet>.gcode <line the run began at> --out logs/point.json
+
+It reads the board's position, matches it against the file to find the exact line executed,
+lifts the pen and writes the resume point. The saved progress state is only accurate to its
+200-line write interval, and replaying 200 lines means strokes drawn twice in ink.
+
+The pen must not move in the holder and the paper must not shift between the stop and the
+resume, or the two halves will not line up.
+
 ## 9b. Pen and Mode Campaign
 
 The RAW-artifacts branch added modes (`stipple`, `squiggle`), mode knobs (wave
