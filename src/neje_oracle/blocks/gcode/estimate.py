@@ -32,18 +32,23 @@ class MachineLimits:
     junction_deviation_mm: float = 0.01
 
 
+# What the machine in this workshop runs; the default for anything that does not pass its own.
+BOARD_LIMITS = MachineLimits()
+
+
 def limits_for(settings: Any) -> MachineLimits:
     # ponytail: only XY acceleration is a knob; rates and Z are the board's constants. Make
     # them settings the day the board config changes.
     return MachineLimits(xy_acceleration_mm_s2=float(settings.xy_acceleration_mm_s2))
 
 
-def line_times(gcode: str, limits: MachineLimits = MachineLimits()) -> list[float]:
+def line_times(gcode: str, limits: MachineLimits | None = None) -> list[float]:
     """Cumulative seconds at the end of each line: `result[i]` is when line i finishes.
 
     Indexed like `gcode.splitlines()`, so a streamer that knows how many lines were sent
     can read the remaining time as `result[-1] - result[sent - 1]`.
     """
+    limits = limits or BOARD_LIMITS
     lines = gcode.splitlines()
     moves = _parse(lines, limits)
     ends = _move_seconds(moves, limits.junction_deviation_mm)
@@ -58,8 +63,9 @@ def line_times(gcode: str, limits: MachineLimits = MachineLimits()) -> list[floa
     return cumulative
 
 
-def estimate(gcode: str, limits: MachineLimits = MachineLimits()) -> tuple[float, float]:
+def estimate(gcode: str, limits: MachineLimits | None = None) -> tuple[float, float]:
     """(xy_seconds, pen_seconds). Pen = Z-only moves and G4 dwells, the pen-lift cost."""
+    limits = limits or BOARD_LIMITS
     moves = _parse(gcode.splitlines(), limits)
     seconds = _move_seconds(moves, limits.junction_deviation_mm)
     xy = sum(s for move, s in zip(moves, seconds, strict=True) if not move.pen)

@@ -9,13 +9,18 @@ from typing import Any
 from nicegui import ui
 
 from ....blocks.imaging.art import ascii as art_ascii
+from ....blocks.imaging.art import circuit as art_circuit
 from ....blocks.imaging.art import edges as art_edges
+from ....blocks.imaging.art import engraving as art_engraving
 from ....blocks.imaging.art import hilbert as art_hilbert
 from ....blocks.imaging.art import lowpoly as art_lowpoly
+from ....blocks.imaging.art import matrix as art_matrix
+from ....blocks.imaging.art import maze as art_maze
 from ....blocks.imaging.art import ridgeline as art_ridgeline
 from ....blocks.imaging.art import rings as art_rings
 from ....blocks.imaging.art import truchet as art_truchet
 from ....blocks.imaging.art import tsp as art_tsp
+from ....blocks.imaging.art import wordart as art_wordart
 from ....blocks.imaging.modes import (
     AI_LINE_ART_TRACE,
     MODES,
@@ -173,6 +178,11 @@ ART_MODES = {
         art_truchet,
         art_rings,
         art_lowpoly,
+        art_matrix,
+        art_engraving,
+        art_wordart,
+        art_circuit,
+        art_maze,
     )
 }
 MODE_HELP.update({name: module.HELP for name, module in ART_MODES.items()})

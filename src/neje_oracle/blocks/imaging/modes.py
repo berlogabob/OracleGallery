@@ -1646,13 +1646,18 @@ def _chaikin(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
 # The modes in imaging/art/ import helpers from this module, so they are imported, and
 # registered, only once everything above exists.
 from .art.ascii import ascii as _ascii  # noqa: E402
+from .art.circuit import circuit as _circuit  # noqa: E402
 from .art.edges import edges as _edges  # noqa: E402
+from .art.engraving import engraving as _engraving  # noqa: E402
 from .art.hilbert import hilbert as _hilbert  # noqa: E402
 from .art.lowpoly import lowpoly as _lowpoly  # noqa: E402
+from .art.matrix import matrix as _matrix  # noqa: E402
+from .art.maze import maze as _maze  # noqa: E402
 from .art.ridgeline import ridgeline as _ridgeline  # noqa: E402
 from .art.rings import rings as _rings  # noqa: E402
 from .art.truchet import truchet as _truchet  # noqa: E402
 from .art.tsp import tsp as _tsp  # noqa: E402
+from .art.wordart import wordart as _wordart  # noqa: E402
 
 MODES.update(
     {
@@ -1664,5 +1669,10 @@ MODES.update(
         "truchet": _truchet,
         "rings": _rings,
         "lowpoly": _lowpoly,
+        "matrix": _matrix,
+        "engraving": _engraving,
+        "wordart": _wordart,
+        "circuit": _circuit,
+        "maze": _maze,
     }
 )
