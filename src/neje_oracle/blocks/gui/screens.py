@@ -39,7 +39,7 @@ from .ui import (
     safe_action_button,
     section_title,
 )
-from .workspaces import calibration, connection, generative, image, tests, texture, work
+from .workspaces import calibration, connection, generative, grid, image, tests, texture, work
 
 
 def _legend_dialog() -> ui.dialog:
@@ -138,6 +138,7 @@ def build_create(ctx: GuiContext) -> None:
                 "image": "IMAGE",
                 "text": "TEXT",
                 "sheet": "SHEET",
+                "grid": "GRID",
                 "motif": "MOTIF",
             },
             value="sketch",
@@ -189,6 +190,10 @@ def build_create(ctx: GuiContext) -> None:
             text_section = generative.build_text(ctx, preview_slot=canvas, actions=False)
         if text_section is not None:
             strip["text"] = text_section
+
+        canvas, panel = pane("grid")
+        with panel:
+            strip["grid"] = grid.build_section(ctx, preview_slot=canvas)
 
         # The one print strip: every source that prints, prints here, exactly one way.
         def _active() -> Section:

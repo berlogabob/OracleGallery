@@ -8,6 +8,14 @@ from typing import Any
 
 from nicegui import ui
 
+from ....blocks.imaging.art import ascii as art_ascii
+from ....blocks.imaging.art import edges as art_edges
+from ....blocks.imaging.art import hilbert as art_hilbert
+from ....blocks.imaging.art import lowpoly as art_lowpoly
+from ....blocks.imaging.art import ridgeline as art_ridgeline
+from ....blocks.imaging.art import rings as art_rings
+from ....blocks.imaging.art import truchet as art_truchet
+from ....blocks.imaging.art import tsp as art_tsp
 from ....blocks.imaging.modes import (
     AI_LINE_ART_TRACE,
     MODES,
@@ -152,6 +160,23 @@ MODE_HELP = {
     "squiggle": "One continuous meandering line, packing tighter where the image is dark. Wandering, few pen lifts.",
 }
 
+# imaging/art/ modes carry their own operator help and their own quality mapping, so adding
+# one is a module plus a line here, not another branch in _mode_params.
+ART_MODES = {
+    module.__name__.rsplit(".", 1)[-1]: module
+    for module in (
+        art_tsp,
+        art_ridgeline,
+        art_edges,
+        art_hilbert,
+        art_ascii,
+        art_truchet,
+        art_rings,
+        art_lowpoly,
+    )
+}
+MODE_HELP.update({name: module.HELP for name, module in ART_MODES.items()})
+
 
 # The quality fader, slowest last. Every row below is indexed by the same position, so a
 # preset is one number that moves resolution, spacing and the segment budget together.
@@ -258,6 +283,8 @@ def _mode_params(mode: str, detail: float, quality: str = "balanced", source: st
     """
     step = quality_index(quality)
     scale = max(0.2, detail)
+    if (art := ART_MODES.get(mode)) is not None:
+        return dict(art.quality_params(_SPACING_MM[step] / scale))
     if mode == "hatch":
         return {
             "line_spacing_mm": max(0.2, _SPACING_MM[step] / scale),
@@ -395,9 +422,7 @@ def build_sections(
 
             # Unlabelled, a QUploader renders as a black "0.0B / 0.00%" strip and reads as a
             # progress bar, not a file picker — operators could not find the feature.
-            ui.upload(label="Drop a PNG/JPG here, or click + to choose", on_upload=handle_upload).props(
-                "accept=.png,.jpg,.jpeg,.bmp,.webp,.gif max-files=1 auto-upload"
-            ).classes("w-full")
+            oracle.file_upload("Drop a PNG/JPG here, or click + to choose", handle_upload)
 
         def conversion_controls() -> None:
             mode_help = helper_text(MODE_HELP[STATE["mode"]])
@@ -601,9 +626,7 @@ def build_sections(
                     min_value=0.0,
                     step=0.5,
                     tooltip="0 draws continuous flow lines; above 0 alternates dashes and gaps.",
-                    on_change=lambda: set_field(
-                        "flow_dash_mm", float(ctx.fields["flow_dash_mm"].value or 0.0)
-                    ),
+                    on_change=lambda: set_field("flow_dash_mm", float(ctx.fields["flow_dash_mm"].value or 0.0)),
                 ).props("max=10")
             built_controls["flow"] = flow_controls
             flow_controls.set_visibility(STATE["mode"] == "flow")
@@ -627,9 +650,7 @@ def build_sections(
                 if STATE["mode"] == "wave"
                 else {}
             )
-            flow_param: dict[str, Any] = (
-                {"dash_mm": float(STATE["flow_dash_mm"])} if STATE["mode"] == "flow" else {}
-            )
+            flow_param: dict[str, Any] = {"dash_mm": float(STATE["flow_dash_mm"])} if STATE["mode"] == "flow" else {}
             polylines = image_to_polylines(
                 STATE["bytes"],
                 mode=str(STATE["mode"]),
@@ -979,9 +1000,7 @@ def _build_motif_import_card(ctx: GuiContext, preview_slot: Any = None, on_use_i
         # Unlabelled, a QUploader renders as a black progress strip rather than a picker.
         # Capped like the generative SVG route: the bytes land in a module global that is
         # never freed, and a phone photo past ~20MB buys no detail the 100mm motif keeps.
-        ui.upload(label="Drop a photo here, or click + to choose", on_upload=handle_upload).props(
-            "accept=.png,.jpg,.jpeg,.bmp,.webp,.gif max-files=1 auto-upload max-file-size=20971520"
-        ).classes("w-full")
+        oracle.file_upload("Drop a photo here, or click + to choose", handle_upload, props="max-file-size=20971520")
 
         # The knobs as one (controls, render)-shaped building block, same as the sheet and
         # conversion cards. The uploader and the name/save strip stay outside: the uploader

@@ -389,10 +389,7 @@ def flow(
                 points_per_dash = math.ceil(dash_mm / step_mm) + 1
                 skipped_points = math.floor(dash_mm / (2 * step_mm))
                 stride = points_per_dash + skipped_points
-                polylines.extend(
-                    path[start : start + points_per_dash]
-                    for start in range(0, len(path) - 1, stride)
-                )
+                polylines.extend(path[start : start + points_per_dash] for start in range(0, len(path) - 1, stride))
             else:
                 polylines.append(path)
     return polylines
@@ -1305,7 +1302,8 @@ MODES: dict[str, Callable[..., Polylines]] = {
 # would cut it back into per-row strokes and reintroduce the very lifts it exists to avoid.
 # stipple is deliberately NOT here — each row is its own short chained run, not a single
 # through-line, so serpentine's raster ordering is what makes those runs plot efficiently.
-CONTINUOUS_MODES = frozenset({"spiral", "squiggle"})
+# tsp and hilbert (imaging/art/) emit their tour / curve in plot order for the same reason.
+CONTINUOUS_MODES = frozenset({"spiral", "squiggle", "tsp", "hilbert"})
 
 
 def order_serpentine(polylines: Polylines) -> Polylines:
@@ -1516,6 +1514,22 @@ def image_to_svg(
     return polylines_to_svg(polylines, width_mm=width_mm, height_mm=height_mm)
 
 
+def cell_darkness(
+    darkness: np.ndarray, x0: float, y0: float, x1: float, y1: float, width_mm: float, height_mm: float
+) -> float:
+    """Mean darkness over a cell's footprint in the tone raster, not a single point sample.
+
+    A character stands for an area, not a pixel; point-sampling one corner would let a
+    single bright or dark speck in the source flip the whole cell's glyph.
+    """
+    rows, cols = darkness.shape
+    col0 = min(cols - 1, max(0, int(x0 * cols / width_mm)))
+    col1 = min(cols, max(col0 + 1, int(math.ceil(x1 * cols / width_mm))))
+    row0 = min(rows - 1, max(0, int(y0 * rows / height_mm)))
+    row1 = min(rows, max(row0 + 1, int(math.ceil(y1 * rows / height_mm))))
+    return float(darkness[row0:row1, col0:col1].mean())
+
+
 def _clip(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
@@ -1627,3 +1641,28 @@ def _chaikin(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
     else:
         smoothed.append(source[-1])
     return smoothed
+
+
+# The modes in imaging/art/ import helpers from this module, so they are imported, and
+# registered, only once everything above exists.
+from .art.ascii import ascii as _ascii  # noqa: E402
+from .art.edges import edges as _edges  # noqa: E402
+from .art.hilbert import hilbert as _hilbert  # noqa: E402
+from .art.lowpoly import lowpoly as _lowpoly  # noqa: E402
+from .art.ridgeline import ridgeline as _ridgeline  # noqa: E402
+from .art.rings import rings as _rings  # noqa: E402
+from .art.truchet import truchet as _truchet  # noqa: E402
+from .art.tsp import tsp as _tsp  # noqa: E402
+
+MODES.update(
+    {
+        "tsp": _tsp,
+        "ridgeline": _ridgeline,
+        "edges": _edges,
+        "hilbert": _hilbert,
+        "ascii": _ascii,
+        "truchet": _truchet,
+        "rings": _rings,
+        "lowpoly": _lowpoly,
+    }
+)

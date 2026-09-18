@@ -218,6 +218,52 @@ def number_control(
     return control
 
 
+@contextmanager
+def tile_grid(columns: int) -> Any:
+    """An N-column grid of square tiles that fills the free space of its container and never overflows."""
+    with ui.element("div").classes("grid-fit"), ui.element("div").classes("grid-editor") as grid:
+        grid.style(f"--grid-n: {columns}")
+        yield grid
+
+
+def picture_tile(
+    caption: str,
+    svg: str,
+    options: dict[str, str],
+    on_pick: Callable[[str], Any],
+    *,
+    empty: bool = False,
+    failed: str = "",
+) -> Any:
+    """A thumbnail with a caption; clicking it opens a menu of `options` (value -> label)."""
+    classes = "grid-tile" + (" grid-tile-empty" if empty else "") + (" grid-tile-failed" if failed else "")
+    with ui.element("div").classes(classes) as tile:
+        ui.html(svg).classes("grid-tile-art")
+        ui.label(caption).classes("grid-tile-caption")
+        if failed:
+            tile.tooltip(failed)
+        with ui.menu():
+            for value, label in options.items():
+                ui.menu_item(label, on_click=lambda _, value=value: on_pick(value))
+    return tile
+
+
+IMAGE_ACCEPT = ".png,.jpg,.jpeg,.bmp,.webp,.gif"
+
+
+def file_upload(label: str, on_upload: Callable[..., Any], *, accept: str = IMAGE_ACCEPT, props: str = "") -> Any:
+    """Single-file auto-upload picker. Four hand copies (image, motif, grid, SVG test) became this.
+
+    Unlabelled, a QUploader renders as a black "0.0B / 0.00%" strip and reads as a progress
+    bar, not a file picker, which is why every caller passes a label.
+    """
+    return (
+        ui.upload(label=label, on_upload=on_upload)
+        .props(f"accept={accept} max-files=1 auto-upload {props}".strip())
+        .classes("w-full")
+    )
+
+
 # --- lifecycle ------------------------------------------------------------------
 
 

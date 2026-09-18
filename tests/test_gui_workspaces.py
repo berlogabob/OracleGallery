@@ -802,3 +802,57 @@ def test_capture_z_lands_in_the_profile_field_and_survives_the_pull(monkeypatch:
 
     assert ctx.fields["z_down_mm"].value == -27.35
     assert ctx.settings.z_down_mm == -27.35
+
+
+def test_grid_section_renders_all_modes_from_the_shared_picture(monkeypatch: pytest.MonkeyPatch) -> None:
+    from neje_oracle.blocks.gui import ui as oracle
+    from neje_oracle.blocks.gui.workspaces import grid as grid_workspace
+
+    buffer = io.BytesIO()
+    image = Image.new("L", (80, 40), 255)
+    ImageDraw.Draw(image).ellipse((20, 5, 60, 35), fill=0)
+    image.save(buffer, format="PNG")
+    ctx = _new_ctx(monkeypatch)
+    grid_workspace.set_all_modes(ctx.settings)
+    ctx.settings.grid_quality = "draft"
+    handles: list[oracle.RenderCard] = []
+    real_render_card = oracle.render_card
+    monkeypatch.setattr(oracle, "render_card", lambda *a, **k: handles.append(real_render_card(*a, **k)) or handles[-1])
+    tiles: list[tuple[str, str]] = []
+    real_tile = oracle.picture_tile
+    monkeypatch.setattr(
+        oracle,
+        "picture_tile",
+        lambda caption, svg, *a, **k: tiles.append((caption, svg)) or real_tile(caption, svg, *a, **k),
+    )
+
+    previous = dict(image_workspace.STATE)
+    try:
+        image_workspace.STATE.update({"name": "swatch.png", "bytes": buffer.getvalue()})
+        with ui.column():
+            section = grid_workspace.build_section(ctx)
+        section.refresh()
+        assert "<svg" in handles[0].svg
+        # The editor shows every cell of the grid, and each chosen cell carries its real render.
+        cells = ctx.settings.grid_size**2
+        assert cells >= len(MODES) > (ctx.settings.grid_size - 1) ** 2
+        assert len(tiles) == cells
+        assert [caption for caption, _ in tiles[: len(MODES)]] == list(MODES)
+        assert all("<svg" in svg for _, svg in tiles[: len(MODES)])
+        assert [caption for caption, _ in tiles[len(MODES) :]] == ["empty"] * (cells - len(MODES))
+        assert handles[0].name == f"swatch_grid{ctx.settings.grid_size}x{ctx.settings.grid_size}"
+        assert grid_workspace.active_modes(ctx.settings)[: len(MODES)] == list(MODES)
+    finally:
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
+
+
+def test_grid_cell_modes_keep_their_position_across_size_changes() -> None:
+    from neje_oracle.blocks.gui.workspaces import grid as grid_workspace
+
+    settings = GuiSettings()
+    grid_workspace.set_all_modes(settings)
+    n = settings.grid_size
+    names = list(MODES)
+    settings.grid_size = 2
+    assert grid_workspace.active_modes(settings) == [names[0], names[1], names[n], names[n + 1]]

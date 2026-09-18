@@ -289,6 +289,15 @@ class GuiSettings:
     motif_invert: bool = GUI_DEFAULTS["motif_invert"]
     motif_despeckle_mm: float = GUI_DEFAULTS["motif_despeckle_mm"]
     motif_simplify_mm: float = GUI_DEFAULTS["motif_simplify_mm"]
+    # CREATE -> GRID. The GRID pane writes these straight onto settings and never registers
+    # them in ctx.fields, so pull_settings_from_fields has nothing to read back.
+    # grid_cell_modes is a flat 9x9 table indexed row * 9 + col ("" = empty cell), so a
+    # cell keeps its mode when the grid size changes.
+    grid_size: int = 4
+    grid_quality: str = "balanced"
+    grid_photo_filter: bool = False
+    grid_labels: bool = True
+    grid_cell_modes: list[str] = field(default_factory=list)
 
     def apply_system_mode(self) -> None:
         policy = mode_policy(self.system_mode)

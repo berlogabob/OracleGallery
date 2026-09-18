@@ -8,9 +8,15 @@ model would put the exhibition print path at risk for a feature only this worksp
 
 from __future__ import annotations
 
+import io
 import math
+from collections.abc import Callable, Sequence
 from typing import Any
 
+import numpy as np
+from PIL import Image, ImageFilter
+
+from ..text import shx
 from .modes import Polylines, image_to_polylines
 
 SHAPES = ("rect", "ellipse", "none")
@@ -151,3 +157,139 @@ def images_to_sheet_polylines(
         offset_y = center_y - art_h / 2.0
         sheet.extend([[(x + offset_x, y + offset_y) for x, y in polyline] for polyline in art])
     return sheet, len(centers)
+
+
+GRID_SIZES = tuple(range(1, 10))
+GRID_GAP_MM = 4.0
+GRID_LABEL_MM = 3.0
+GRID_LABEL_FONT = "zzsimplex"
+
+
+def grid_cells(
+    n: int, *, width_mm: float, height_mm: float, gap_mm: float = GRID_GAP_MM, label_mm: float = GRID_LABEL_MM
+) -> list[tuple[float, float, float]]:
+    """N x N square cells as (left, top, side), row-major, the block centred in the canvas.
+
+    build_frame_grid derives the column count from a cell size; a grid picked as "4x4" needs
+    the count fixed and the size derived, which is the other way round. Each row reserves a
+    label strip under its cells so the text never lands on the next row's art.
+    """
+    if n not in GRID_SIZES:
+        raise ValueError(f"grid size must be 1..9, got {n}")
+    strip = label_mm + 1.5 if label_mm > 0 else 0.0
+    side = min((width_mm - gap_mm * (n - 1)) / n, (height_mm - gap_mm * (n - 1)) / n - strip)
+    if side <= 0:
+        raise ValueError(f"a {n}x{n} grid does not fit {width_mm:g} x {height_mm:g} mm")
+    block_w = n * side + (n - 1) * gap_mm
+    block_h = n * (side + strip) + (n - 1) * gap_mm
+    left0 = (width_mm - block_w) / 2.0
+    top0 = (height_mm - block_h) / 2.0
+    return [
+        (left0 + col * (side + gap_mm), top0 + row * (side + strip + gap_mm), side)
+        for row in range(n)
+        for col in range(n)
+    ]
+
+
+def _content_span(flat: np.ndarray) -> tuple[int, int]:
+    """First and one-past-last index that is not a flat edge bar; the whole range if all flat."""
+    content = np.where(~flat)[0]
+    return (int(content[0]), int(content[-1]) + 1) if len(content) else (0, len(flat))
+
+
+def photo_filter(data: bytes, *, flat_std: float = 3.0, sigma_px: float = 25.0) -> bytes:
+    """Crop letterbox bars, then flatten the lighting so faces keep their features.
+
+    Measured on a group photo (2026-09-16): the bars were 52% of the frame and every tone mode
+    filled them with ink; subtracting a heavy blur is what made glasses, beards and mouths
+    survive contour. A poor man's CLAHE. A bar is any edge row or column with no texture
+    (std below flat_std), so black, white and transparent bars all go: the same photo came
+    back a day later as RGBA with white bars, and a near-black test kept every row.
+    # ponytail: fixed sigma 25 px on the source pixels; expose it if another photo needs it.
+    """
+    with Image.open(io.BytesIO(data)) as source:
+        rgba = source.convert("RGBA")
+    # Transparent pixels carry arbitrary RGB; paper is white, so that is what they become.
+    image = Image.alpha_composite(Image.new("RGBA", rgba.size, "white"), rgba).convert("L")
+    grey = np.asarray(image, dtype=np.float64)
+    top, bottom = _content_span(grey.std(axis=1) < flat_std)
+    left, right = _content_span(grey.std(axis=0) < flat_std)
+    image = image.crop((left, top, right, bottom))
+    grey = np.asarray(image, dtype=np.float64)
+    blurred = np.asarray(image.filter(ImageFilter.GaussianBlur(sigma_px)), dtype=np.float64)
+    detail = grey - blurred
+    low, high = np.percentile(detail, 1), np.percentile(detail, 99)
+    scaled = np.clip((detail - low) / max(high - low, 1e-6), 0.0, 1.0)
+    out = io.BytesIO()
+    Image.fromarray((scaled * 255).astype(np.uint8)).save(out, "PNG")
+    return out.getvalue()
+
+
+def _grid_label(text: str, x_mm: float, y_mm: float) -> Polylines:
+    try:
+        return shx.text_polylines(text, font=GRID_LABEL_FONT, cap_height_mm=GRID_LABEL_MM, origin=(x_mm, y_mm))
+    except (ValueError, OSError):
+        # No font means no labels, not no grid.
+        return []
+
+
+def image_aspect(data: bytes) -> float:
+    with Image.open(io.BytesIO(data)) as source:
+        return source.width / source.height
+
+
+def cell_art(data: bytes, mode: str, side_mm: float, params: dict[str, Any], *, aspect: float) -> Polylines:
+    """One cell's drawing in cell-local mm, aspect kept and centred in a side x side square.
+
+    Rendered at cell size, not rendered once and scaled: a mode's line pitch is in mm, so
+    scaling afterwards would draw a 9x9 cell with lines nine times too dense. The GUI's cell
+    thumbnails are this exact output, so what a tile shows is what the sheet prints.
+    """
+    art_w, art_h = (side_mm, side_mm / aspect) if aspect >= 1 else (side_mm * aspect, side_mm)
+    art = image_to_polylines(data, mode=mode, width_mm=art_w, height_mm=art_h, **params)
+    dx, dy = (side_mm - art_w) / 2.0, (side_mm - art_h) / 2.0
+    return [[(x + dx, y + dy) for x, y in polyline] for polyline in art]
+
+
+def grid_to_polylines(
+    data: bytes,
+    modes: Sequence[str | None],
+    *,
+    n: int,
+    width_mm: float,
+    height_mm: float,
+    params_for: Callable[[str], dict[str, Any]],
+    labels: bool = True,
+    art_for: Callable[[str, float], Polylines] | None = None,
+) -> tuple[Polylines, list[str]]:
+    """One picture, one mode per cell. Returns (polylines, failures).
+
+    A cell whose mode refuses the picture (trace's skeleton cap, a segment cap) keeps its
+    outline and says so in its label; the other cells still print. `art_for(mode, side_mm)`
+    lets a caller substitute a cached cell_art; it must raise ValueError the same way.
+    """
+    if art_for is None:
+        aspect = image_aspect(data)
+
+        def art_for(mode: str, side_mm: float) -> Polylines:
+            return cell_art(data, mode, side_mm, params_for(mode), aspect=aspect)
+
+    cells = grid_cells(n, width_mm=width_mm, height_mm=height_mm, label_mm=GRID_LABEL_MM if labels else 0.0)
+    sheet: Polylines = []
+    failures: list[str] = []
+    for index, (left, top, side) in enumerate(cells):
+        mode = modes[index] if index < len(modes) else None
+        if not mode:
+            continue
+        caption = mode
+        try:
+            art = art_for(mode, side)
+        except ValueError as exc:
+            art = []
+            caption = f"{mode}: failed"
+            failures.append(f"cell {index + 1} {mode}: {exc}")
+        sheet.extend([[(x + left, y + top) for x, y in polyline] for polyline in art])
+        if labels:
+            sheet.extend(cell_outline(left + side / 2.0, top + side / 2.0, side, side, "rect"))
+            sheet.extend(_grid_label(caption, left, top + side + 1.0))
+    return sheet, failures

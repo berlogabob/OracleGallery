@@ -54,6 +54,18 @@ __TOKENS_PLACEHOLDER__
   .create-canvas { min-width: 0; overflow: hidden; }
   .create-panel { overflow-y: auto; }
   .create-strip { border-top: 1px solid var(--border); padding-top: var(--space-xs); flex: 0 0 auto; }
+  /* GRID pane: the cell editor takes the whole canvas. .grid-fit is a size container, so the
+     grid is as wide as the canvas allows but never taller: width = min(canvas width, canvas
+     height minus one caption row per grid row). Tiles stay square at any window size. */
+  .grid-fit { flex: 1 1 auto; min-height: 0; width: 100%; container-type: size; overflow: auto; }
+  .grid-editor { display: grid; gap: 4px; grid-template-columns: repeat(var(--grid-n), minmax(0, 1fr)); width: min(100cqw, calc(100cqh - var(--grid-n) * 26px)); margin: 0 auto; }
+  .grid-tile { display: flex; flex-direction: column; min-width: 0; padding: 2px; cursor: pointer; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .grid-tile:hover { border-color: var(--accent); }
+  .grid-tile-empty { border-style: dashed; background: var(--sunken); }
+  .grid-tile-art { width: 100%; aspect-ratio: 1; overflow: hidden; }
+  .grid-tile-art svg { display: block; width: 100%; height: 100%; }
+  .grid-tile-caption { font-size: var(--type-xs); color: var(--text-mid); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grid-tile-failed .grid-tile-caption { color: var(--danger); }
   .preview-fill { background: var(--sunken); border: 1px solid var(--border); border-radius: var(--radius-md); }
   /* Quasar's tab panel is not a flex child by default, so height:100% below it resolves
      to auto and the canvas column grows past the viewport instead of letting the

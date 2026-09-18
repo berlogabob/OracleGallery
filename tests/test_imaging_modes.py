@@ -86,6 +86,14 @@ def test_all_modes_registered() -> None:
         "wave",
         "stipple",
         "squiggle",
+        "tsp",
+        "ridgeline",
+        "edges",
+        "hilbert",
+        "ascii",
+        "truchet",
+        "rings",
+        "lowpoly",
     }
 
 
@@ -98,15 +106,18 @@ def test_solid_white_produces_no_ink() -> None:
 def test_monotonic_ink_vs_brightness() -> None:
     """Ink density must fall as the image gets lighter — for the tone modes.
 
-    trace is excluded on purpose, not because it fails: it is not a tone renderer. It
-    follows strokes, and a smooth gradient has none, so "ink proportional to darkness" is
-    not a property it is supposed to have. tests/test_imaging_trace.py covers it instead.
+    trace, edges and ridgeline are excluded on purpose, not because they fail: none is a tone
+    renderer. trace follows strokes, and a smooth gradient has none; edges and ridgeline respond
+    to changes in darkness, which a linear gradient holds constant. Their own suites cover them
+    (tests/test_imaging_trace.py, tests/test_mode_edges.py, tests/test_mode_ridgeline.py).
     """
     gradient = np.tile(np.arange(256, dtype=np.uint8), (64, 1))
     data = _png(Image.fromarray(gradient, mode="L"))
     tone = load_tone(data, width_mm=80, height_mm=20, cell_mm=1)
     for name, mode in MODES.items():
-        if name == "trace":
+        # edges draws where brightness changes and ridgeline turns tone into displacement;
+        # a linear gradient has constant change, so neither is an ink-follows-darkness mode.
+        if name in ("trace", "edges", "ridgeline"):
             continue
         if name == "halftone":
             polylines = mode(tone, angle_deg=0.0)
@@ -319,9 +330,7 @@ def test_lift_budget_zero_collapses_any_mode_to_one_stroke() -> None:
     gradient = np.tile(np.linspace(0, 255, 60, dtype=np.uint8), (60, 1))
     data = _png(Image.fromarray(gradient, mode="L"))
     for mode in ("hatch", "contour"):
-        polylines = image_to_polylines(
-            data, mode=mode, width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=0
-        )
+        polylines = image_to_polylines(data, mode=mode, width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=0)
         assert len(polylines) == 1, mode
 
 
@@ -330,10 +339,7 @@ def test_lift_budget_default_changes_nothing() -> None:
     data = _png(Image.fromarray(gradient, mode="L"))
     baseline = image_to_polylines(data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0)
     assert (
-        image_to_polylines(
-            data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=1024
-        )
-        == baseline
+        image_to_polylines(data, mode="hatch", width_mm=60.0, height_mm=60.0, cell_mm=1.0, lift_budget=1024) == baseline
     )
 
 
@@ -370,9 +376,7 @@ def test_flow_dash_mm_breaks_streamlines() -> None:
     assert len(dashed) > len(continuous)
 
     def _path_length(stroke):
-        return sum(
-            math.dist(stroke[i - 1], stroke[i]) for i in range(1, len(stroke))
-        )
+        return sum(math.dist(stroke[i - 1], stroke[i]) for i in range(1, len(stroke)))
 
     assert max(_path_length(stroke) for stroke in dashed) <= 3.0 * 1.5
 
@@ -381,6 +385,4 @@ def test_flow_dash_mm_breaks_streamlines() -> None:
     # measurably less ink than the continuous version.
     gaps = [math.dist(dashed[i - 1][-1], dashed[i][0]) for i in range(1, len(dashed))]
     assert min(gaps) > 0.05
-    assert sum(_path_length(stroke) for stroke in dashed) <= 0.85 * sum(
-        _path_length(stroke) for stroke in continuous
-    )
+    assert sum(_path_length(stroke) for stroke in dashed) <= 0.85 * sum(_path_length(stroke) for stroke in continuous)
