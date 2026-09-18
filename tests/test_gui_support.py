@@ -78,16 +78,32 @@ def test_gui_settings_load_save_handles_missing_file(tmp_path: Path) -> None:
     assert reloaded.layout_mode == "grid"
 
 
-def test_z_fix_mm_round_trips(tmp_path: Path) -> None:
-    # The three Z positions are captured live on hardware; a field that silently resets
-    # on reload means re-doing the servo tuning session.
+def test_the_pen_load_position_round_trips_and_drives_its_millimetres(tmp_path: Path) -> None:
+    # The five positions are captured live on hardware; a field that silently resets on
+    # reload means re-doing the servo tuning session. Microseconds are what is stored --
+    # the Z axis is a servo and its millimetres are fiction -- and z_fix_mm is derived.
     settings_path = tmp_path / "runtime" / "gui_settings.json"
     settings = load_gui_settings(settings_path)
-    assert settings.z_fix_mm == GUI_DEFAULTS["z_fix_mm"] == -24.0
-    settings.z_fix_mm = -23.75
+    assert settings.z_load_us == GUI_DEFAULTS["z_load_us"] == 2388
+    assert settings.z_fix_mm == -24.0  # 2388us at 12us per Z unit below 2100
+    settings.z_load_us = 2352
     save_gui_settings(settings, settings_path)
 
-    assert load_gui_settings(settings_path).z_fix_mm == -23.75
+    reloaded = load_gui_settings(settings_path)
+    assert reloaded.z_load_us == 2352
+    assert reloaded.z_fix_mm == -21.0
+
+
+def test_a_settings_file_from_before_the_pulse_positions_keeps_its_z(tmp_path: Path) -> None:
+    """The migration's job: the first launch after this change must not move the pen."""
+    settings_path = tmp_path / "runtime" / "gui_settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"z_up_mm": 0.0, "z_down_mm": -25.0, "z_fix_mm": -24.0}), encoding="utf-8")
+
+    settings = load_gui_settings(settings_path)
+
+    assert (settings.z_up_mm, settings.z_down_mm, settings.z_fix_mm) == (0.0, -25.0, -24.0)
+    assert (settings.z_top_soft_us, settings.z_bottom_soft_us, settings.z_load_us) == (2100, 2400, 2388)
 
 
 def test_gui_settings_preserves_saved_cell_streaming(tmp_path: Path) -> None:

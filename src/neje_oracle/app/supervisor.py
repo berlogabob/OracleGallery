@@ -208,15 +208,14 @@ class SupervisorService:
             on_fallback_config=self._record_fallback_config,
         )
         result = service.run(mode=mode, gui_settings=gui_settings)
-        if any(check.detail.get("fallback_config") for check in result.checks):
-            # FluidNC skips config.yaml for exactly one boot after a panic; a $Bye
-            # restart boots the real config again. The machine runs unattended, so
-            # it must heal itself instead of waiting for someone to walk over and
-            # power-cycle it. One attempt only: if the restart does not clear the
-            # fallback, the original CRITICAL check (with its power-cycle advice)
-            # stands and printing stays blocked.
-            if self.recover_fallback_config():
-                result = service.run(mode=mode, gui_settings=gui_settings)
+        # FluidNC skips config.yaml for exactly one boot after a panic; a $Bye restart boots
+        # the real config again. The machine runs unattended, so it must heal itself instead
+        # of waiting for someone to walk over and power-cycle it. One attempt only: if the
+        # restart does not clear the fallback, the original CRITICAL check (with its
+        # power-cycle advice) stands and printing stays blocked.
+        fallen_back = any(check.detail.get("fallback_config") for check in result.checks)
+        if fallen_back and self.recover_fallback_config():
+            result = service.run(mode=mode, gui_settings=gui_settings)
         self.runtime_store.save_system_check_result(result)
         status = ComponentStatus.RUNNING
         level = "info"
@@ -773,23 +772,23 @@ class SupervisorService:
         result = self.transport_factory(self.plotter_settings).pen_down()
         return self._record_fluidnc_command(result, f"Pen down {self.plotter_settings.pen_down_command}")
 
-    def pen_fix_fluidnc(self) -> ComponentState:
-        """Move Z to the pen-fix position: the holder clamps the pen against a plate.
+    def pen_load_fluidnc(self) -> ComponentState:
+        """Move Z to the pen-load position: the holder clamps the pen against a plate.
 
         A fed G1 like pen-down, not a rapid -- this parks ~1mm off the hard mechanical
         floor and a rapid overshoot there stalls the servo against the shelf. Servo-only:
         the Z tune card that owns the button is hidden when use_z_servo is off.
         """
-        if not self._manual_control_allowed("pen fix"):
+        if not self._manual_control_allowed("pen load"):
             return self.runtime_store.load_component_state("fluidnc")
         config = self.runtime_store.load_plotter_config()
         if not (config.use_z_servo or self.plotter_settings.use_z_servo):
             return self.runtime_store.load_component_state("fluidnc")
-        z_fix = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, config.z_fix_mm))
+        z_load = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, config.z_fix_mm))
         z_feed = config.z_feed_mm_min if config.use_z_servo else self.plotter_settings.z_feed_mm_min
-        command = f"G1 Z{z_fix:.3f} F{z_feed:.2f}"
+        command = f"G1 Z{z_load:.3f} F{z_feed:.2f}"
         result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
-        return self._record_fluidnc_command(result, f"Z fix servo {command}")
+        return self._record_fluidnc_command(result, f"Z load servo {command}")
 
     def unlock_fluidnc_alarm(self) -> ComponentState:
         if not self._manual_control_allowed("unlock alarm"):

@@ -24,8 +24,10 @@ from nicegui import run, ui
 from ...app.supervisor import SupervisorService
 from ...shared import telemetry
 from ...shared.config import ensure_dir
+from ...shared.gui_settings import z_pulse_range
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
+from ...shared.z_positions import ZPositions, pulse_for_z
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
 from .modes import mode_policy
 from .support import (
@@ -226,9 +228,14 @@ class GuiContext:
         settings.travel_rate = _field_or_default(fields, "travel_rate")
         settings.draw_rate = _field_or_default(fields, "draw_rate")
         settings.xy_acceleration_mm_s2 = _field_or_default(fields, "xy_acceleration_mm_s2")
-        settings.z_down_mm = _field_or_default(fields, "z_down_mm")
-        settings.z_up_mm = _field_or_default(fields, "z_up_mm")
-        settings.z_fix_mm = _field_or_default(fields, "z_fix_mm")
+        # z_down_mm / z_up_mm / z_fix_mm are NOT pulled here: they are derived from the five
+        # pulse fields below (sync_z_from_pulses, run inside save_gui_settings), and no
+        # widget writes them directly any more -- see the "Z positions (us)" card.
+        settings.z_top_mech_us = int(_field_or_default(fields, "z_top_mech_us"))
+        settings.z_top_soft_us = int(_field_or_default(fields, "z_top_soft_us"))
+        settings.z_load_us = int(_field_or_default(fields, "z_load_us"))
+        settings.z_bottom_soft_us = int(_field_or_default(fields, "z_bottom_soft_us"))
+        settings.z_bottom_mech_us = int(_field_or_default(fields, "z_bottom_mech_us"))
         settings.z_feed_mm_min = _field_or_default(fields, "z_feed_mm_min")
         # Pen profile fields. pen_width_mm existed on GuiSettings long before it was
         # pulled here, which is why it had no working GUI control: a widget missing from
@@ -1107,13 +1114,72 @@ class GuiContext:
         self.persist_and_refresh()
         ui.notify(f"{field_key} = {float(control.value):g} mm - SAVE AS PROFILE to keep it.", color="positive")
 
-    async def goto_fix(self) -> None:
-        """Move to the saved pen-fix position so the holder clamps against the plate."""
+    async def capture_z_us(self, field_key: str) -> None:
+        """Write the machine's reported Z into one of the five pulse fields, via pulse_for_z.
+
+        A converting sibling of capture_z rather than a branch inside it: capture_z writes
+        a millimetre straight through, this one takes the extra pulse_for_z step first, but
+        keeps the same write-the-widget-not-settings property and for the same reason --
+        commit_z_position re-reads every widget through persist_and_refresh and would
+        clobber a value set on settings directly.
+        """
+        if self._machine_z is None:
+            await self.check_fluidnc(scan=False)
+        if self._machine_z is None:
+            ui.notify("Machine Z unknown - connect FluidNC first (CONNECT on SETUP).", color="warning")
+            return
+        control = self.fields.get(field_key)
+        if control is None:
+            ui.notify(f"No {field_key} control on this screen.", color="warning")
+            return
+        pulse_us = pulse_for_z(self._machine_z, z_pulse_range(self.settings))
+        control.value = pulse_us
+        control.update()
+        # commit_z_position notifies its own refusal (and reverts the widget) when the
+        # captured pulse would invert the five-position order, so nothing more to say here.
+        if self.commit_z_position(field_key):
+            ui.notify(f"{field_key} = {pulse_us} us - SAVE AS PROFILE to keep it.", color="positive")
+
+    def commit_z_position(self, key: str) -> bool:
+        """Validate the five Z pulse widgets as a set and persist only if they are in order.
+
+        Reads every position field, not just `key`, because ZPositions.problems() is a
+        property of the whole ordered set, not of one value. Refused rather than clamped:
+        clamping would quietly move a position the operator just measured off the machine,
+        and an inverted pair here drives the pen through the paper or through its own
+        mechanical stop.
+        """
+        fields = self.fields
+        candidate = ZPositions(
+            top_mech_us=int(fields["z_top_mech_us"].value or 0),
+            top_soft_us=int(fields["z_top_soft_us"].value or 0),
+            load_us=int(fields["z_load_us"].value or 0),
+            bottom_soft_us=int(fields["z_bottom_soft_us"].value or 0),
+            bottom_mech_us=int(fields["z_bottom_mech_us"].value or 0),
+        )
+        problems = candidate.problems()
+        if problems:
+            # ctx.settings holds exactly the last value that DID commit -- persist_and_refresh
+            # only ever runs from the success branch below -- so it is the correct value to
+            # revert the widget to, with no separate "last known good" bookkeeping needed.
+            # This reassignment re-enters here once (nicegui fires on_value_change from the
+            # value setter itself, not only from a browser event): the other four fields are
+            # unchanged, so the recursive candidate is exactly the last committed set, always
+            # valid, and it terminates there.
+            fields[key].value = getattr(self.settings, key)
+            fields[key].update()
+            ui.notify(problems[0], color="negative")
+            return False
+        self.persist_and_refresh()
+        return True
+
+    async def goto_load(self) -> None:
+        """Move to the saved pen-load position so the holder clamps against the plate."""
         await self.fluidnc_action(
-            "pen fix",
-            self.supervisor.pen_fix_fluidnc,
+            "pen load",
+            self.supervisor.pen_load_fluidnc,
             refresh_probe=True,
-            success_message="At pen-fix",
+            success_message="At pen load",
         )
 
     async def pen_up(self) -> None:

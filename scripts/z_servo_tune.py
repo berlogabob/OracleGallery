@@ -44,6 +44,8 @@ from math import cos, radians
 
 from neje_oracle.blocks.fluidnc.transport import FluidNCTransport, discover_fluidnc, settings_for_fluidnc_host
 from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.shared.z_positions import ZPulseRange
+from neje_oracle.shared.z_positions import pulse_for_z as shared_pulse_for_z
 
 MIN_KEY = "$/axes/Z/motor0/rc_servo/min_pulse_us"
 MAX_KEY = "$/axes/Z/motor0/rc_servo/max_pulse_us"
@@ -88,9 +90,13 @@ def theta_for_z(z_mm: float) -> float:
 
 
 def pulse_for_z(z_mm: float, top_pulse: int, bottom_pulse: int) -> int:
-    """The pulse FluidNC holds at a commanded Z, given the two endpoint pulses."""
-    span = (z_mm - Z_TOP_MM) / (Z_BOTTOM_MM - Z_TOP_MM)
-    return round(top_pulse + span * (bottom_pulse - top_pulse))
+    """The pulse FluidNC holds at a commanded Z, given the two endpoint pulses.
+
+    The arithmetic lives in shared/z_positions.py now: the GUI's five named Z positions are
+    stored as pulses and converted the same way, and two copies of this would drift the
+    moment a horn remount changes the endpoints.
+    """
+    return shared_pulse_for_z(z_mm, ZPulseRange(top_us=top_pulse, bottom_us=bottom_pulse, travel_mm=-Z_BOTTOM_MM))
 
 
 def geometry_report(l_mm: float, z_mm: float) -> str:

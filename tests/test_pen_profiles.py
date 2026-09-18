@@ -290,7 +290,7 @@ def test_z_ladder_stays_within_the_safe_span() -> None:
     assert min(depths) >= settings.z_down_mm - Z_LADDER_SPAN_MM - 1e-9
     assert max(depths) <= 0.0
     assert min(depths) >= Z_ABSOLUTE_FLOOR_MM
-    ladder = {d for d in depths}
+    ladder = set(depths)
     assert len({d for d in ladder if d <= settings.z_down_mm + 2 * Z_LADDER_SPAN_MM}) >= PenCalRanges().z_steps
 
 

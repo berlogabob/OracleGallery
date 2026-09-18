@@ -351,9 +351,10 @@ Working Z-axis baseline, confirmed on 2026-05-13:
 - Keep `NEJE_PLOTTER_USE_Z_SERVO=true`.
 - FluidNC exposes the TinyBee touch PWM servo as the Z axis.
 - `$H=Z` is pen up/safe everywhere, including generated drawing G-code.
-- `G0 Z-25` is fixed absolute pen down/contact everywhere; saved GUI/runtime Z-down values are ignored in Z-servo mode.
+- Pen down is a fed `G1 Z<drawing> F<z_feed>`, never a rapid: the saved position IS honoured, and rapiding a servo into its stop is how one was killed.
+- The drawing Z comes from the **bottom soft** position (SETUP → Z positions), not from a fixed -25.
 - GUI `Z Home / Pen up` sends `$H=Z`.
-- GUI `Z- / Pen down` sends `G21`, `G90`, `G54`, `G0 Z-25`.
+- GUI `Z- / Pen down` sends `G21`, `G90`, `G54`, then the fed `G1 Z`.
 - Do not replace these buttons with `$J Z...` jog or `M3/M5`; both broke this hardware path.
 - Do not auto-probe immediately after manual Z buttons; that looked like a FluidNC reconnect and disturbed operation.
 
@@ -490,6 +491,34 @@ measurements.** The calibration sheet is what turns them into real numbers.
 Switch pens on `SETUP` → Motion speed → **Fitted pen**. Selecting a profile
 overwrites only the fields above and pushes them live; there is no restart and no save
 button, every control autosaves.
+
+### The five Z positions
+
+The Z axis is an RC servo, and its millimetres are fiction: 25 Z units span a measured
+6.8 mm of real pen travel, about 0.27 mm per unit. So the positions are tuned in servo
+**microseconds** — the units `scripts/z_servo_tune.py` nudges — and the millimetres the
+G-code needs are derived. On the current range, Z0 is 2100 us and Z-25 is 2400 us: 12 us
+per Z unit, and the pulse RISES as the pen goes down.
+
+`SETUP` → **Z positions (us)**, top to bottom:
+
+| Position | What it is |
+| --- | --- |
+| top mechanical | above home, where the linkage can cross over and lock. Reference only, never commanded. |
+| top soft | pen-up travel height, and where `$H=Z` leaves the axis. |
+| pen load | park for getting a pen in and out of the holder. |
+| **bottom soft** | **drawing.** The servo stops here and the holder's spring presses the last of the way. |
+| bottom mechanical | arm square to the body. Past this something breaks. Reference only. |
+
+Tuning order, pen out of the holder first: `$H`, then GO TO each position and watch the
+arm. Fit a pen, then raise **bottom soft** in 5-10 us steps until the spring visibly
+compresses and the bottom is silent — a buzz is the servo stalling, and a stalled servo
+holds near stall current with no protection until it dies. Confirm with PRINT PEN CAL that
+the Z ladder still inks, then measure the real millimetre delta and record it in a session
+report.
+
+The set is refused, not clamped, if the positions are out of order: an inverted pair drives
+the pen either through the paper or through its own end stop.
 
 ### Pen-down dwell
 
@@ -736,7 +765,7 @@ If FluidNC WebUI opens but GUI says FluidNC is not ready, check the Telnet side 
 
 If FluidNC state is `Alarm`, inspect the machine physically, then use `UNLOCK ALARM` only when safe.
 
-If every `$` command answers `error:152` ("invalid configuration") and `$CD` reports board `None`, FluidNC panicked and booted its built-in "Default (Test Drive)" config — no motor pins, no limits. The panic skip lasts exactly one boot: the system check restarts the board automatically with `$Bye`, or press `RESTART BOARD` (SETUP → MACHINE, Recovery row). The board is back in ~10 s with the real config; home before printing. A physical power cycle is only needed if the restart does not clear it. The panics correlate with Z-servo moves (brownout suspect): inspect the Z-servo power feed / give the servo its own 5 V supply, and recalibrate the servo pulse range (`scripts/build_z_range_cal.py`) so Z0/−25 sit inside the mechanical range.
+If every `$` command answers `error:152` ("invalid configuration") and `$CD` reports board `None`, FluidNC panicked and booted its built-in "Default (Test Drive)" config — no motor pins, no limits. The panic skip lasts exactly one boot: the system check restarts the board automatically with `$Bye`, or press `RESTART BOARD` (SETUP → MACHINE, Recovery row). The board is back in ~10 s with the real config; home before printing. A physical power cycle is only needed if the restart does not clear it. The panics correlate with Z-servo moves (brownout suspect): inspect the Z-servo power feed / give the servo its own 5 V supply, and recalibrate the servo pulse range with `scripts/z_servo_tune.py` (the pulse tool; `build_z_range_cal.py` only prints a depth test sheet) so the endpoints sit inside the mechanical range.
 
 If FluidNC state is `Hold`, use `RESUME` only when the tool path is safe to continue.
 

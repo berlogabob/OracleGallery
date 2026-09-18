@@ -69,5 +69,3 @@ def build_diagnostics(ctx: GuiContext) -> None:
             safe_action_button("Refresh", ctx.refresh_logs)
             safe_action_button("Open logs", ctx.open_logs)
         ctx.logs_view = log_viewer([])
-
-

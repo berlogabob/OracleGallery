@@ -27,6 +27,8 @@ def _write_tinybee_config(
     z_travel: float = 25.0,
     x_acceleration: float | None = None,
     y_acceleration: float | None = None,
+    z_servo_min_pulse_us: int | None = None,
+    z_servo_max_pulse_us: int | None = None,
 ) -> None:
     config_items = [
         {"id": "/board", "value": "MKS TinyBee V1.0 XXYYZ"},
@@ -42,6 +44,10 @@ def _write_tinybee_config(
         config_items.append({"id": "/axes/X/acceleration_mm_per_sec2", "value": f"{x_acceleration:.3f}"})
     if y_acceleration is not None:
         config_items.append({"id": "/axes/Y/acceleration_mm_per_sec2", "value": f"{y_acceleration:.3f}"})
+    if z_servo_min_pulse_us is not None:
+        config_items.append({"id": "/axes/Z/motor0/rc_servo/min_pulse_us", "value": str(z_servo_min_pulse_us)})
+    if z_servo_max_pulse_us is not None:
+        config_items.append({"id": "/axes/Z/motor0/rc_servo/max_pulse_us", "value": str(z_servo_max_pulse_us)})
     settings = {
         "Flash": {
             "Settings": [
@@ -313,3 +319,117 @@ def test_tinybee_check_does_not_warn_when_controller_acceleration_unavailable(tm
 def test_gui_settings_xy_acceleration_default_matches_controller() -> None:
     """The controller (echodraw/hardware/configs/config.yaml, axes X/Y) runs 100 mm/s^2."""
     assert GuiSettings().xy_acceleration_mm_s2 == 100.0
+
+
+def test_tinybee_check_does_not_warn_when_live_z_servo_pulses_match_gui(tmp_path: Path) -> None:
+    """GuiSettings defaults (top=2100us/bottom=2400us) already match the live board."""
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, z_servo_min_pulse_us=2400, z_servo_max_pulse_us=2100)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(
+        tmp_path,
+        settings,
+        board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ",
+        z_servo_pulse_provider=lambda: (2400, 2100),
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.OK
+    assert "pulse" not in tinybee.message.lower()
+    assert tinybee.detail is not None
+    assert tinybee.detail["z_pulse_source"] == "live"
+    assert tinybee.detail["z_pulse_top_us_controller"] == 2100
+    assert tinybee.detail["z_pulse_bottom_us_controller"] == 2400
+
+
+def test_tinybee_check_warns_when_live_z_servo_pulse_range_drifts_from_gui(tmp_path: Path) -> None:
+    """A re-tune (scripts/z_servo_tune.py) or a horn remount can move the board without the
+
+    GUI's copy (shared/gui_settings.py z_pulse_top_us/z_pulse_bottom_us) ever changing.
+    """
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, z_servo_min_pulse_us=2400, z_servo_max_pulse_us=2100)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(
+        tmp_path,
+        settings,
+        board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ",
+        z_servo_pulse_provider=lambda: (2000, 2100),
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.WARNING
+    assert "bottom(Z-25)=2000us" in tinybee.message
+    assert "bottom=2400us" in tinybee.message
+    assert "every derived Z position is off by the difference" in tinybee.message
+
+
+def test_tinybee_check_falls_back_to_cached_pulses_when_board_unreachable(tmp_path: Path) -> None:
+    """Stale cached values (assets/tinybee.json's pre-2026-08-19 900/2100) still warn when
+
+    the board itself cannot be reached, instead of silently skipping the check.
+    """
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, z_servo_min_pulse_us=900, z_servo_max_pulse_us=2100)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(
+        tmp_path,
+        settings,
+        board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ",
+        z_servo_pulse_provider=lambda: None,
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.WARNING
+    assert "bottom(Z-25)=900us" in tinybee.message
+    assert tinybee.detail is not None
+    assert tinybee.detail["z_pulse_source"] == "cached"
+
+
+def test_tinybee_check_does_not_warn_when_no_pulse_data_available(tmp_path: Path) -> None:
+    """Neither a live read nor a cached value exists -- do not warn on nothing."""
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(
+        tmp_path,
+        settings,
+        board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ",
+        z_servo_pulse_provider=lambda: None,
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.OK
+    assert tinybee.detail is not None
+    assert tinybee.detail["z_pulse_source"] is None
+    assert tinybee.detail["z_pulse_top_us_controller"] is None
+    assert tinybee.detail["z_pulse_bottom_us_controller"] is None
+
+
+def test_tinybee_check_warns_when_live_and_cached_pulse_snapshot_disagree(tmp_path: Path) -> None:
+    """assets/tinybee.json can go stale even when the GUI already matches the live board --
+
+    that drift is worth surfacing too, folded into the same check (one WARNING, not two).
+    """
+    settings = _plotter_settings(tmp_path)
+    _write_tinybee_config(settings.tinybee_config_path, z_servo_min_pulse_us=900, z_servo_max_pulse_us=2100)
+    gui_settings = GuiSettings(sheet_width_mm=200.0, sheet_height_mm=200.0)
+
+    result = _service(
+        tmp_path,
+        settings,
+        board_identity_provider=lambda: "MKS TinyBee V1.0 XXYYZ",
+        z_servo_pulse_provider=lambda: (2400, 2100),
+    ).run(mode=SystemMode.TEST, gui_settings=gui_settings)
+
+    tinybee = next(c for c in result.checks if c.name == "tinybee hardware")
+    assert tinybee.level == SystemCheckLevel.WARNING
+    assert "stale" in tinybee.message
+    assert "min=900us" in tinybee.message
+    assert "live controller reports min=2400us" in tinybee.message
+    # The GUI itself matches the live board -- only the cached snapshot is stale.
+    assert "every derived Z position is off by the difference" not in tinybee.message

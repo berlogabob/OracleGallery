@@ -7,6 +7,13 @@ from .config import PlotterSettings
 from .models import PlotterRuntimeConfig, SystemMode
 from .modes import apply_mode_to_config, mode_policy
 from .origin_markers import ALL_ORIGINS, DEFAULT_MARKER_DIAMETER_MM
+from .z_positions import (
+    DEFAULT_BOTTOM_PULSE_US,
+    DEFAULT_TOP_PULSE_US,
+    ZPositions,
+    ZPulseRange,
+    z_for_pulse,
+)
 
 
 class GuiDefaults(TypedDict):
@@ -41,6 +48,13 @@ class GuiDefaults(TypedDict):
     z_down_mm: float
     z_up_mm: float
     z_fix_mm: float
+    z_top_mech_us: int
+    z_top_soft_us: int
+    z_load_us: int
+    z_bottom_soft_us: int
+    z_bottom_mech_us: int
+    z_pulse_top_us: int
+    z_pulse_bottom_us: int
     z_feed_mm_min: float
     pen_width_mm: float
     pen_down_dwell_ms: float
@@ -102,6 +116,11 @@ type NumericGuiDefaultKey = Literal[
     "z_down_mm",
     "z_up_mm",
     "z_fix_mm",
+    "z_top_mech_us",
+    "z_top_soft_us",
+    "z_load_us",
+    "z_bottom_soft_us",
+    "z_bottom_mech_us",
     "z_feed_mm_min",
     "pen_width_mm",
     "pen_down_dwell_ms",
@@ -162,9 +181,24 @@ GUI_DEFAULTS: GuiDefaults = {
     "xy_acceleration_mm_s2": 100.0,
     "z_down_mm": -25.0,
     "z_up_mm": 0.0,
-    # Pen-fix: ~1mm above the mechanical bottom, where the holder clamps a pen
-    # against a calibration plate. Operator-only position; never emitted in print G-code.
+    # Derived from the pulse positions below by sync_z_from_pulses -- the five microsecond
+    # values are what an operator tunes, and these three are what the G-code needs. A value
+    # here is overwritten on load and on every save.
     "z_fix_mm": -24.0,
+    # The five named positions, in servo microseconds, top to bottom. The Z axis is a servo
+    # and its millimetres are fiction (25 units span a measured 6.8 mm), so the tuning
+    # happens in the units the servo really takes. See shared/z_positions.py.
+    "z_top_mech_us": DEFAULT_TOP_PULSE_US,
+    "z_top_soft_us": DEFAULT_TOP_PULSE_US,
+    "z_load_us": 2388,
+    # Drawing. Shipped at the bottom stop, which is where it has always been, so this change
+    # moves nothing until the operator raises it and lets the holder's spring do the pressing.
+    "z_bottom_soft_us": DEFAULT_BOTTOM_PULSE_US,
+    "z_bottom_mech_us": DEFAULT_BOTTOM_PULSE_US,
+    # The controller's own endpoints, mirrored here so a re-tuned servo moves every derived
+    # millimetre with it. A system check compares these against the live board.
+    "z_pulse_top_us": DEFAULT_TOP_PULSE_US,
+    "z_pulse_bottom_us": DEFAULT_BOTTOM_PULSE_US,
     "z_feed_mm_min": 1000.0,
     "pen_width_mm": 0.3,
     "pen_down_dwell_ms": 0.0,
@@ -241,6 +275,13 @@ class GuiSettings:
     z_down_mm: float = -25.0
     z_up_mm: float = 0.0
     z_fix_mm: float = GUI_DEFAULTS["z_fix_mm"]
+    z_top_mech_us: int = GUI_DEFAULTS["z_top_mech_us"]
+    z_top_soft_us: int = GUI_DEFAULTS["z_top_soft_us"]
+    z_load_us: int = GUI_DEFAULTS["z_load_us"]
+    z_bottom_soft_us: int = GUI_DEFAULTS["z_bottom_soft_us"]
+    z_bottom_mech_us: int = GUI_DEFAULTS["z_bottom_mech_us"]
+    z_pulse_top_us: int = GUI_DEFAULTS["z_pulse_top_us"]
+    z_pulse_bottom_us: int = GUI_DEFAULTS["z_pulse_bottom_us"]
     z_feed_mm_min: float = 1000.0
     # Nib calibration: the width of the emitted SVG stroke, and how many passes trace
     # needs to fill a bold line. halftone's min_ink_mm is NOT wired to this yet — it keeps
@@ -310,6 +351,35 @@ class GuiSettings:
         return SystemMode(self.system_mode)
 
 
+def z_pulse_range(settings: GuiSettings) -> ZPulseRange:
+    """The controller's endpoints as this GUI has them recorded."""
+    return ZPulseRange(top_us=int(settings.z_pulse_top_us), bottom_us=int(settings.z_pulse_bottom_us))
+
+
+def z_positions(settings: GuiSettings) -> ZPositions:
+    return ZPositions(
+        top_mech_us=int(settings.z_top_mech_us),
+        top_soft_us=int(settings.z_top_soft_us),
+        load_us=int(settings.z_load_us),
+        bottom_soft_us=int(settings.z_bottom_soft_us),
+        bottom_mech_us=int(settings.z_bottom_mech_us),
+    )
+
+
+def sync_z_from_pulses(settings: GuiSettings) -> GuiSettings:
+    """Recompute the millimetre Z targets from the microsecond positions, in place.
+
+    The pulses are what the operator tunes; these three are what every emitter already
+    reads (svg_gcode's pen up/down, the calibration sheets, the daemon, the supervisor's
+    manual moves). Deriving them in one place means none of that had to learn about pulses.
+    """
+    pulses = z_pulse_range(settings)
+    settings.z_up_mm = z_for_pulse(settings.z_top_soft_us, pulses)
+    settings.z_down_mm = z_for_pulse(settings.z_bottom_soft_us, pulses)
+    settings.z_fix_mm = z_for_pulse(settings.z_load_us, pulses)
+    return settings
+
+
 def _repair_xy_acceleration(value: float) -> float:
     # Guards against a near-zero garbage value surviving a bad save/migration (0 itself is
     # legitimate -- it means "no comment, use the controller's saved acceleration", see
@@ -366,9 +436,11 @@ def gui_settings_to_plotter_config(settings: GuiSettings) -> PlotterRuntimeConfi
             draw_rate=settings.draw_rate,
             xy_acceleration_mm_s2=_repair_xy_acceleration(settings.xy_acceleration_mm_s2),
             use_z_servo=plotter_settings.use_z_servo,
-            z_down_mm=settings.z_down_mm,
-            z_up_mm=settings.z_up_mm,
-            z_fix_mm=settings.z_fix_mm,
+            # Derived here too: a caller that built a GuiSettings by hand (a script, a test)
+            # never passed through load or save, so its millimetres could be stale.
+            z_down_mm=z_for_pulse(settings.z_bottom_soft_us, z_pulse_range(settings)),
+            z_up_mm=z_for_pulse(settings.z_top_soft_us, z_pulse_range(settings)),
+            z_fix_mm=z_for_pulse(settings.z_load_us, z_pulse_range(settings)),
             z_feed_mm_min=settings.z_feed_mm_min,
             pen_down_dwell_ms=settings.pen_down_dwell_ms,
             work_zero_command=plotter_settings.work_zero_command,

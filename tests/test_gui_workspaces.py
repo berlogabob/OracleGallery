@@ -93,13 +93,20 @@ def test_calibration_workspace_builds_and_populates_layout_and_scale_fields(monk
         "travel_rate",
         "draw_rate",
         "xy_acceleration_mm_s2",
-        "z_up_mm",
-        "z_down_mm",
-        "z_fix_mm",
+        # z_up_mm / z_down_mm / z_fix_mm are derived now (sync_z_from_pulses) and have no
+        # widget of their own; the five microsecond fields below are what is actually tuned.
+        "z_top_mech_us",
+        "z_top_soft_us",
+        "z_load_us",
+        "z_bottom_soft_us",
+        "z_bottom_mech_us",
         "z_feed_mm_min",
         "z_step",
     }
     assert expected_fields <= ctx.fields.keys()
+    # The removed millimetre fields must have no widget of their own any more -- editing
+    # them would do nothing, since sync_z_from_pulses overwrites them on every save.
+    assert {"z_up_mm", "z_down_mm", "z_fix_mm"}.isdisjoint(ctx.fields.keys())
 
     # One scale slider per bundled base symbol, one origin checkbox pair per origin --
     # asserted by count (not hardcoded names) since the bundled symbol set can grow.
@@ -324,8 +331,22 @@ def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.Mo
     # probe would truncate and read as "did not survive" when it persisted correctly.
     numeric = {field.name: field.type for field in dataclass_fields(GuiSettings()) if field.type in ("float", "int")}
     bound = sorted(key for key in ctx.fields if key in numeric)
-    assert set(PEN_PROFILE_FIELDS) <= set(bound), "a pen profile field has no control"
+    # z_up_mm / z_down_mm / z_fix_mm are still PEN_PROFILE_FIELDS (a saved profile still
+    # carries them), but they no longer have a widget of their own: they are DERIVED from
+    # the five microsecond fields by sync_z_from_pulses, so a control here would edit a
+    # number the next save overwrites. Excluded by name, not by dropping the invariant --
+    # every other profile field still needs a real control.
+    derived_pen_fields = {"z_up_mm", "z_down_mm", "z_fix_mm"}
+    assert set(PEN_PROFILE_FIELDS) - derived_pen_fields <= set(bound), "a pen profile field has no control"
     assert len(bound) >= 25, f"only {len(bound)} controls discovered; did a workspace fail to build?"
+
+    # The five Z pulse fields validate against EACH OTHER (ZPositions.problems(), via
+    # ctx.commit_z_position, which fires on every value assignment, not only real UI edits
+    # -- see test_the_five_pulse_fields_survive_a_settings_round_trip below). The single
+    # shared probe here would invert them and get refused, which is a fact about their
+    # ordering constraint, not a missing-control bug -- so they get their own test instead.
+    z_pulse_fields = {"z_top_mech_us", "z_top_soft_us", "z_load_us", "z_bottom_soft_us", "z_bottom_mech_us"}
+    bound = [key for key in bound if key not in z_pulse_fields]
 
     # Values no default equals, so "survived" cannot be confused with "never written".
     probes = {key: (7 if numeric[key] == "int" else 3.25) for key in bound}
@@ -335,6 +356,43 @@ def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.Mo
 
     inert = [key for key, value in probes.items() if getattr(ctx.settings, key) != value]
     assert not inert, f"controls exist but never persist (add them to pull_settings_from_fields): {inert}"
+
+
+def test_the_five_pulse_fields_survive_a_settings_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same guard as the test above, adapted for the one family of controls it excludes.
+
+    The five Z pulse fields validate as an ordered set (ZPositions.problems(), via
+    ctx.commit_z_position), so a single shared probe value is not usable here -- each field
+    gets its own, still distinct from the shipped default, and still a valid ordered set
+    both before and after every individual field lands, since commit_z_position fires on
+    each assignment as it happens, exactly like a real edit.
+    """
+    ctx = _new_ctx(monkeypatch)
+    with ui.column():
+        # The whole page, like the test above: commit_z_position persists through
+        # persist_and_refresh, which pulls controls from several tabs at once.
+        for build in (
+            connection.build,
+            calibration.build_sections,
+            tests_workspace.build,
+            work.build_diagnostics,
+            image_workspace.build_sections,
+        ):
+            build(ctx)
+
+    probes = {
+        "z_top_mech_us": 500,
+        "z_top_soft_us": 510,
+        "z_load_us": 800,
+        "z_bottom_soft_us": 900,
+        "z_bottom_mech_us": 950,
+    }
+    for key, value in probes.items():
+        ctx.fields[key].value = value
+    ctx.pull_settings_from_fields()
+
+    inert = [key for key, value in probes.items() if getattr(ctx.settings, key) != value]
+    assert not inert, f"pulse controls exist but never persist: {inert}"
 
 
 def test_applying_a_profile_leaves_machine_settings_alone(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -714,13 +772,32 @@ def test_z_tune_card_builds_with_step_jog_and_capture_controls(monkeypatch: pyte
 
     assert "z_step" in ctx.fields
     assert ctx.machine_z_label is not None
+    # The five named positions, in microseconds, live on the same screen as the jog/capture
+    # controls that set them.
+    assert {
+        "z_top_mech_us",
+        "z_top_soft_us",
+        "z_load_us",
+        "z_bottom_soft_us",
+        "z_bottom_mech_us",
+    } <= ctx.fields.keys()
     rendered = {
         str(text)
         for element in ui.context.slot.parent.descendants()
         for text in (getattr(element, "text", None), element._props.get("label"))
         if text
     }
-    for control in ("Z+", "Z−", "SET AS PEN-DOWN", "SET AS PEN-UP"):
+    for control in (
+        "Z+",
+        "Z−",
+        "SET AS BOTTOM SOFT",
+        "SET AS TOP SOFT",
+        "SET AS PEN LOAD",
+        "GO TO LOAD",
+        "GO TO TOP SOFT",
+        "GO TO PEN LOAD",
+        "GO TO BOTTOM SOFT",
+    ):
         assert any(control in text for text in rendered), control
 
 
@@ -735,6 +812,9 @@ def test_z_tune_card_explains_itself_without_a_z_servo(monkeypatch: pytest.Monke
 
     assert "z_step" not in ctx.fields
     assert ctx.machine_z_label is None
+    # The positions card hides itself the same way, for the same reason: there is no
+    # servo position to tune when Z is a binary solenoid.
+    assert "z_top_soft_us" not in ctx.fields
 
 
 def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -778,8 +858,13 @@ def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest
     assert sum("refused" in n for n in notices) == 2
 
 
-def test_capture_z_lands_in_the_profile_field_and_survives_the_pull(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_capture_z_us_lands_in_the_pulse_field_converted_and_survives_the_pull(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
+
+    from neje_oracle.shared.gui_settings import z_pulse_range
+    from neje_oracle.shared.z_positions import pulse_for_z
 
     ctx = _new_ctx(monkeypatch)
     with ui.column():
@@ -795,13 +880,53 @@ def test_capture_z_lands_in_the_profile_field_and_survives_the_pull(monkeypatch:
             build(ctx)
 
     monkeypatch.setattr("neje_oracle.blocks.gui.context.ui.notify", lambda *a, **kw: None)
-    monkeypatch.setattr(ctx, "persist_and_refresh", ctx.pull_settings_from_fields)
-    ctx._machine_z = -27.35
+    # -24.5, not the shipped default's -25: it must land strictly between the shipped pen
+    # load (Z-24) and bottom mechanical (Z-25) or ZPositions.problems() refuses it, and the
+    # point of this test is the conversion, not the refusal path (covered separately).
+    ctx._machine_z = -24.5
 
-    asyncio.run(ctx.capture_z("z_down_mm"))
+    asyncio.run(ctx.capture_z_us("z_bottom_soft_us"))
 
-    assert ctx.fields["z_down_mm"].value == -27.35
-    assert ctx.settings.z_down_mm == -27.35
+    expected_pulse = pulse_for_z(-24.5, z_pulse_range(ctx.settings))
+    assert ctx.fields["z_bottom_soft_us"].value == expected_pulse
+    assert ctx.settings.z_bottom_soft_us == expected_pulse
+    # z_down_mm is derived from the pulse just captured (sync_z_from_pulses, run inside
+    # save_gui_settings), not written directly -- the whole point of moving to pulses.
+    assert ctx.settings.z_down_mm == -24.5
+
+
+def test_an_out_of_order_pulse_set_is_refused_and_the_old_value_stays(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Setting bottom soft below bottom mechanical must not commit -- it would stall the
+    servo against its own stop, which is the exact failure this feature exists to prevent."""
+    notices: list[str] = []
+    ctx = _new_ctx(monkeypatch)
+    with ui.column():
+        # The whole page: commit_z_position persists through persist_and_refresh, which
+        # (like the round-trip test) pulls controls from several tabs at once.
+        for build in (
+            connection.build,
+            calibration.build_sections,
+            tests_workspace.build,
+            work.build_diagnostics,
+            image_workspace.build_sections,
+        ):
+            build(ctx)
+    monkeypatch.setattr("neje_oracle.blocks.gui.context.ui.notify", lambda msg, **kw: notices.append(str(msg)))
+
+    old_value = ctx.settings.z_bottom_soft_us
+    bad_value = ctx.settings.z_bottom_mech_us + 50
+    # The assignment itself fires the field's on_change (nicegui calls every registered
+    # on_value_change handler from the value setter, not only from a real browser event --
+    # see ValueElement._handle_value_change), exactly as a real edit would. No separate
+    # call is needed, and calling commit_z_position again here would just re-validate the
+    # already-reverted value and report the wrong thing.
+    ctx.fields["z_bottom_soft_us"].value = bad_value
+
+    assert any("mechanical" in n for n in notices)
+    # Refused, not clamped: the widget is put back to the last value that DID commit,
+    # and settings never saw the bad number at all.
+    assert ctx.fields["z_bottom_soft_us"].value == old_value
+    assert ctx.settings.z_bottom_soft_us == old_value
 
 
 def test_grid_section_renders_all_modes_from_the_shared_picture(monkeypatch: pytest.MonkeyPatch) -> None:

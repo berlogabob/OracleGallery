@@ -161,7 +161,9 @@ def _check_bounds(polylines: Polylines, width_mm: float, height_mm: float, name:
     for line in polylines:
         for x, y in line:
             if not (-0.01 <= x <= width_mm + 0.01 and -0.01 <= y <= height_mm + 0.01):
-                raise ValueError(f"{name}: point ({x:.1f}, {y:.1f}) outside the {width_mm:.0f}x{height_mm:.0f} mm sheet")
+                raise ValueError(
+                    f"{name}: point ({x:.1f}, {y:.1f}) outside the {width_mm:.0f}x{height_mm:.0f} mm sheet"
+                )
 
 
 def _generator_polylines(names: tuple[str, ...]) -> dict[str, Polylines]:

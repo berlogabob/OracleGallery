@@ -4,8 +4,8 @@ import json
 import random
 import threading
 import time
-from collections.abc import Callable
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -507,7 +507,7 @@ class PlotterDaemon:
                 "plotter", ComponentStatus.WARNING, message="Sheet finished; print stopped", heartbeat=True
             )
 
-    def _stream_stop_check(self) -> "Callable[[], bool]":
+    def _stream_stop_check(self) -> Callable[[], bool]:
         """Line-granular stop signal for transport.send().
 
         STOP PRINT used to take effect only at row/cell boundaries -- on a dense

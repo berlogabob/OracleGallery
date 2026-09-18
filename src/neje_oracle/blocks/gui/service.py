@@ -61,9 +61,13 @@ def build_page() -> None:
                 on_change=lambda event: ctx.run_profile_changed(event.value),
             ).tooltip("ON: a run must have the Firebase queue (exhibition). OFF: local-only verification prints.")
             ui.element("div").classes("status-spacer")
-            stop_button("STOP PRINT", ctx.stop_print).tooltip("Pauses the current print (feed hold). The machine keeps its position.")
+            stop_button("STOP PRINT", ctx.stop_print).tooltip(
+                "Pauses the current print (feed hold). The machine keeps its position."
+            )
             ui.element("div").classes("estop-gap")
-            estop_button("EMERGENCY STOP", ctx.emergency_stop).tooltip("Halts all motion NOW (software feed hold). Recover via SETUP → MACHINE.")
+            estop_button("EMERGENCY STOP", ctx.emergency_stop).tooltip(
+                "Halts all motion NOW (software feed hold). Recover via SETUP → MACHINE."
+            )
         ui.label(
             "Operator GUI is designed for MacBook/tablet width. Use the MacBook operator station for exhibition control."
         ).classes("mobile-operator-warning")

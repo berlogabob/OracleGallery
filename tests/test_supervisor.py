@@ -875,9 +875,7 @@ def test_manual_pen_moves_clamp_to_servo_travel(tmp_path: Path) -> None:
     """A profile depth past the 25mm servo travel must not reach the board:
     it trips the soft limit into Alarm or stalls the servo against its stop."""
     supervisor, transport = _supervisor_with_transport(tmp_path, DryTransport)
-    supervisor.runtime_store.save_plotter_config(
-        PlotterRuntimeConfig(use_z_servo=True, z_down_mm=-40.0, z_up_mm=5.0)
-    )
+    supervisor.runtime_store.save_plotter_config(PlotterRuntimeConfig(use_z_servo=True, z_down_mm=-40.0, z_up_mm=5.0))
 
     supervisor.pen_down_fluidnc()
     supervisor.pen_up_fluidnc()

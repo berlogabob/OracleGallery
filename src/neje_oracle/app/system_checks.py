@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import tempfile
 from collections.abc import Callable
@@ -9,9 +10,15 @@ from ..blocks.fluidnc.transport import FluidNCTransport
 from ..blocks.gcode.dry_run import generate_dry_run_sheet
 from ..shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings, ensure_dir
 from ..shared.gui_settings import GuiSettings
-from ..shared.models import SystemCheck, SystemCheckLevel, SystemCheckResult, SystemMode
+from ..shared.models import FluidNCCommandResult, SystemCheck, SystemCheckLevel, SystemCheckResult, SystemMode
 from ..shared.modes import mode_policy
 from ..shared.symbols import default_idle_root, list_base_symbols
+
+# The same two `$key` reads scripts/z_servo_tune.py uses to print the servo endpoints on
+# screen (read_pulse() there). min_pulse_us is the bottom (Z-25), max_pulse_us the top (Z0) --
+# see shared/z_positions.py for why the pair is inverted on this machine.
+_Z_SERVO_MIN_PULSE_KEY = "$/axes/Z/motor0/rc_servo/min_pulse_us"
+_Z_SERVO_MAX_PULSE_KEY = "$/axes/Z/motor0/rc_servo/max_pulse_us"
 
 
 class SystemCheckService:
@@ -29,6 +36,11 @@ class SystemCheckService:
         # built-in fallback config. Optional so the existing constructors keep working;
         # the supervisor wires it to the runtime store to count recurrences.
         on_fallback_config: Callable[[str], str] | None = None,
+        # Test seam for the live rc_servo pulse read, mirroring fluidnc_checker: when this
+        # is None (the production default) the check builds its own FluidNCTransport and
+        # reads the board directly, same as _check_fluidnc's default path below. Returns
+        # (min_pulse_us, max_pulse_us) or None when the board cannot be asked.
+        z_servo_pulse_provider: Callable[[], tuple[int, int] | None] | None = None,
     ) -> None:
         self.supervisor_settings = supervisor_settings or OracleSupervisorSettings()
         self.plotter_settings = plotter_settings or PlotterSettings()
@@ -38,16 +50,23 @@ class SystemCheckService:
         self.work_offset_provider = work_offset_provider
         self.board_identity_provider = board_identity_provider
         self.on_fallback_config = on_fallback_config
+        self.z_servo_pulse_provider = z_servo_pulse_provider
 
     def run(self, *, mode: SystemMode, gui_settings: GuiSettings) -> SystemCheckResult:
+        # FluidNC first, though it is reported in its old place: the hardware check asks the
+        # board for its servo endpoints, and there is no point spending a connect timeout on
+        # that when the probe has just found the board unreachable. This check runs before
+        # every print, so the wait is the operator's.
+        fluidnc = self._check_fluidnc(mode)
+        board_online = fluidnc.level is not SystemCheckLevel.CRITICAL and "offline" not in fluidnc.message.lower()
         checks = [
             self._check_runtime_folder(),
             self._check_symbols(),
             self._check_idle_bank(),
             self._check_uploader_folder(),
             self._check_firebase(mode),
-            self._check_tinybee_hardware(mode, gui_settings),
-            self._check_fluidnc(mode),
+            self._check_tinybee_hardware(mode, gui_settings, board_online=board_online),
+            fluidnc,
             self._check_spool_write(),
             self._check_gcode_generation(gui_settings),
         ]
@@ -102,7 +121,16 @@ class SystemCheckService:
         level = SystemCheckLevel.CRITICAL if mode_policy(mode).firebase_required else SystemCheckLevel.WARNING
         return SystemCheck("firebase config", level, "Firebase credentials/project/bucket are not fully configured")
 
-    def _check_tinybee_hardware(self, mode: SystemMode, gui_settings: GuiSettings) -> SystemCheck:
+    def _check_tinybee_hardware(
+        self, mode: SystemMode, gui_settings: GuiSettings, *, board_online: bool = False
+    ) -> SystemCheck:
+        """The board's configured travel and servo endpoints against what the GUI believes.
+
+        `board_online` is opt-in, not opt-out: asking the controller for its live endpoints
+        is an enhancement over the cached snapshot, and defaulting it on would make every
+        direct caller pay a connect timeout to learn nothing. run() passes it once the
+        probe has said the board is there.
+        """
         config_path = self.plotter_settings.tinybee_config_path
         if not config_path.exists():
             level = SystemCheckLevel.CRITICAL if mode_policy(mode).real_output_required else SystemCheckLevel.WARNING
@@ -205,6 +233,42 @@ class SystemCheckService:
         if values.get("/axes/Z/motor0/rc_servo/pwm_hz") in {None, ""}:
             problems.append("Z rc_servo config is missing")
 
+        # shared/z_positions.py derives every millimetre Z target from the GUI's own copy
+        # of these two pulse endpoints (gui_settings.z_pulse_top_us/z_pulse_bottom_us) --
+        # G-code never reads this JSON, so a re-tune (scripts/z_servo_tune.py) or a horn
+        # remount can drift the board away from that copy with nothing else noticing.
+        # Live beats cached: the snapshot is only ever as fresh as the last re-export.
+        live_pulses = (
+            self.z_servo_pulse_provider()
+            if self.z_servo_pulse_provider is not None
+            else (self._read_live_servo_pulses() if board_online else None)
+        )
+        cached_min_raw = values.get("/axes/Z/motor0/rc_servo/min_pulse_us")
+        cached_max_raw = values.get("/axes/Z/motor0/rc_servo/max_pulse_us")
+        cached_pulses: tuple[int, int] | None = None
+        if cached_min_raw not in (None, "") and cached_max_raw not in (None, ""):
+            cached_pulses = (int(_float_value(cached_min_raw, 0)), int(_float_value(cached_max_raw, 0)))
+
+        board_pulses = live_pulses if live_pulses is not None else cached_pulses
+        pulse_source = "live" if live_pulses is not None else ("cached" if cached_pulses is not None else None)
+        board_min_us, board_max_us = board_pulses if board_pulses is not None else (None, None)
+
+        if live_pulses is not None and cached_pulses is not None and live_pulses != cached_pulses:
+            warnings.append(
+                f"cached {config_path.name} rc_servo range (min={cached_pulses[0]}us max={cached_pulses[1]}us) is "
+                f"stale -- live controller reports min={live_pulses[0]}us max={live_pulses[1]}us; re-export the snapshot"
+            )
+        if (
+            board_min_us is not None
+            and board_max_us is not None
+            and (board_max_us != gui_settings.z_pulse_top_us or board_min_us != gui_settings.z_pulse_bottom_us)
+        ):
+            warnings.append(
+                f"Z servo pulse range drifted ({pulse_source}): controller top(Z0)={board_max_us}us "
+                f"bottom(Z-25)={board_min_us}us but GUI has top={gui_settings.z_pulse_top_us}us "
+                f"bottom={gui_settings.z_pulse_bottom_us}us -- every derived Z position is off by the difference"
+            )
+
         detail = {
             "config_path": str(config_path),
             "board": board,
@@ -215,6 +279,11 @@ class SystemCheckService:
             "x_acceleration_mm_s2": x_accel,
             "y_acceleration_mm_s2": y_accel,
             "gui_xy_acceleration_mm_s2": gui_accel,
+            "z_pulse_source": pulse_source,
+            "z_pulse_top_us_controller": board_max_us,
+            "z_pulse_bottom_us_controller": board_min_us,
+            "gui_z_pulse_top_us": gui_settings.z_pulse_top_us,
+            "gui_z_pulse_bottom_us": gui_settings.z_pulse_bottom_us,
             "problems": problems,
             "warnings": warnings,
             # Lets the supervisor trigger the automatic $Bye restart without
@@ -231,6 +300,25 @@ class SystemCheckService:
             f"{board}; travel X{x_travel:.0f} Y{y_travel:.0f} Z{z_travel:.0f}; single-axis homing enabled",
             detail=detail,
         )
+
+    def _read_live_servo_pulses(self) -> tuple[int, int] | None:
+        """Ask the controller directly for its rc_servo endpoints.
+
+        Same two `$key` reads scripts/z_servo_tune.py's read_pulse() uses to print the
+        endpoints on screen. Any transport failure (board off, wrong host, timeout) returns
+        None so the caller falls back to the cached JSON snapshot instead of warning on a
+        guess -- mirrors _check_fluidnc's default probe path below.
+        """
+        # Both keys down ONE connection. Every probe costs the ESP32 a fresh socket, and
+        # polling it faster than about once a second exhausts its pool -- which reads as a
+        # board that has gone offline while it is perfectly healthy (transport.probe's own
+        # docstring). A check that runs before every print must not spend two sockets here.
+        result = FluidNCTransport(self.plotter_settings).send_commands([_Z_SERVO_MIN_PULSE_KEY, _Z_SERVO_MAX_PULSE_KEY])
+        pulses = _parse_pulse_responses(result, (_Z_SERVO_MIN_PULSE_KEY, _Z_SERVO_MAX_PULSE_KEY))
+        min_us, max_us = pulses
+        if min_us is None or max_us is None:
+            return None
+        return min_us, max_us
 
     def _check_fluidnc(self, mode: SystemMode) -> SystemCheck:
         if self.fluidnc_checker is not None:
@@ -289,6 +377,25 @@ def _flatten_tinybee_settings(payload: dict[str, object]) -> dict[str, str]:
                     continue
                 values[str(key)] = str(item.get("value", ""))
     return values
+
+
+def _parse_pulse_responses(result: FluidNCCommandResult, keys: tuple[str, ...]) -> tuple[int | None, ...]:
+    """Pull each key's microsecond value out of the `key=value` lines of one batched read.
+
+    Matched by key rather than by position: the board echoes other lines in the same
+    stream, and reading the wrong one would silently report the wrong endpoint -- which
+    lands as every derived Z position being off.
+    """
+    found: dict[str, int] = {}
+    if not result.ok:
+        return tuple(None for _ in keys)
+    for line in result.response_lines:
+        if "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        with contextlib.suppress(ValueError):
+            found[name.strip().lstrip("$")] = int(float(value.strip()))
+    return tuple(found.get(key.lstrip("$")) for key in keys)
 
 
 def _float_value(value: str | None, default: float) -> float:

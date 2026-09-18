@@ -184,9 +184,7 @@ def test_ribbon_point_count_stays_plottable(
     # 40k segment budget when stacked with other layers. Keep it under 8k.
     output, _ = generated_patterns
     svg = (output / "ribbon.svg").read_text()
-    total_points = sum(
-        len(match.split()) for match in re.findall(r'points="([^"]+)"', svg)
-    ) + sum(
+    total_points = sum(len(match.split()) for match in re.findall(r'points="([^"]+)"', svg)) + sum(
         len(re.findall(r"[ML]", match)) for match in re.findall(r'\bd="([^"]+)"', svg)
     )
     assert 500 < total_points <= 8000

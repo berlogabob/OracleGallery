@@ -11,7 +11,7 @@ from typing import Any
 
 from nicegui import ui
 
-from ....shared.gui_settings import NumericGuiDefaultKey
+from ....shared.gui_settings import NumericGuiDefaultKey, z_pulse_range
 from ....shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS
 from ....shared.pen_profiles import (
     PEN_PROFILE_FIELDS,
@@ -23,6 +23,7 @@ from ....shared.pen_profiles import (
     rename_pen_profile,
     save_pen_profiles,
 )
+from ....shared.z_positions import z_for_pulse
 from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
@@ -183,41 +184,10 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
                     ),
                     on_change=persist_and_refresh,
                 )
-                number_control(
-                    fields,
-                    "z_up_mm",
-                    label="Pen-up Z (mm)",
-                    value=settings.z_up_mm,
-                    default=0,
-                    # The same floor the G-code generators clamp at, so the box can
-                    # accept anything a calibration sheet can legally print.
-                    min_value=Z_ABSOLUTE_FLOOR_MM,
-                    width_class="w-full",
-                    tooltip="Height the pen lifts to between strokes. Emitted as G0 Z when the Z servo is in use.",
-                    on_change=persist_and_refresh,
-                )
-                number_control(
-                    fields,
-                    "z_down_mm",
-                    label="Pen-down Z (mm)",
-                    value=settings.z_down_mm,
-                    default=-25,
-                    min_value=Z_ABSOLUTE_FLOOR_MM,
-                    width_class="w-full",
-                    tooltip="Pen pressure: how far the pen presses into the paper. Too shallow leaves gaps, too deep splays the nib.",
-                    on_change=persist_and_refresh,
-                )
-                number_control(
-                    fields,
-                    "z_fix_mm",
-                    label="Pen-fix Z (mm)",
-                    value=settings.z_fix_mm,
-                    default=-24,
-                    min_value=Z_ABSOLUTE_FLOOR_MM,
-                    width_class="w-full",
-                    tooltip="Setup-only height where the holder clamps the pen against a calibration plate, ~1mm off the mechanical bottom. Never emitted in print G-code.",
-                    on_change=persist_and_refresh,
-                )
+                # z_up_mm / z_down_mm / z_fix_mm used to live here as editable fields. They
+                # are DERIVED now (sync_z_from_pulses, from the five microsecond positions
+                # below), so a widget here would edit a number the next save overwrites --
+                # see the "Z positions (us)" card, which is where they actually get tuned.
                 number_control(
                     fields,
                     "z_feed_mm_min",
@@ -257,6 +227,7 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
             _build_pen_profile_row(ctx)
 
         with sections["pen"]:
+            _build_z_positions_card(ctx)
             _build_z_tune_card(ctx)
 
         # -- SHEET: layout geometry + organic ----------------------------------------
@@ -512,12 +483,115 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
     return {name: Section(root=container) for name, container in sections.items()}
 
 
+# Leash for hand-editing a pulse field, matching the tuner's own guard against a stuck
+# key walking the servo into a stall (scripts/z_servo_tune.py:52-56). number_control has
+# no max_value parameter, so the ceiling is added as a Quasar prop after construction.
+_PULSE_FLOOR_US = 400
+_PULSE_CEILING_US = 2600
+
+
+def _build_z_positions_card(ctx: GuiContext) -> None:
+    """The five named Z positions, in the servo microseconds the operator actually tunes.
+
+    z_up_mm / z_down_mm / z_fix_mm are DERIVED from these (sync_z_from_pulses), so this is
+    the card that matters; the millimetre fields removed from Motion speed only ever
+    displayed the result. Five, not two, because parking the servo on its bottom
+    mechanical stop to draw is a stall -- it killed a servo on 2026-08-31 -- and "bottom
+    soft" exists so the holder's spring takes the last of the pressure instead.
+    """
+    if not ctx.supervisor.plotter_settings.use_z_servo:
+        # Same self-explaining stand-in as the Z tune card below: no servo, nothing to tune.
+        with card(
+            "Z positions (us)",
+            "Needs the Z servo (NEJE_PLOTTER_USE_Z_SERVO). This machine drives the pen as an on/off solenoid.",
+        ):
+            pass
+        return
+
+    settings = ctx.settings
+    fields = ctx.fields
+
+    def derived_z(key: str) -> float:
+        return z_for_pulse(float(fields[key].value or 0), z_pulse_range(ctx.settings))
+
+    def build_row(
+        key: str,
+        label: str,
+        tooltip: str,
+        *,
+        goto: tuple[str, Callable[..., Any]] | None = None,
+    ) -> None:
+        with toolbar(full_width=True):
+            z_label = mini_metric("Z")
+
+            def refresh_label() -> None:
+                z_label.set_text(f"{derived_z(key):.1f}")
+
+            def on_change() -> None:
+                # commit_z_position reverts the widget itself on refusal, so the label
+                # always ends up showing whatever value actually won.
+                ctx.commit_z_position(key)
+                refresh_label()
+
+            number_control(
+                fields,
+                key,
+                label=label,
+                value=getattr(settings, key),
+                default=float(GUI_DEFAULTS[key]),
+                min_value=_PULSE_FLOOR_US,
+                step=1,
+                width_class="w-40",
+                tooltip=tooltip,
+                on_change=on_change,
+            ).props(f"max={_PULSE_CEILING_US}")
+            refresh_label()
+            if goto is not None:
+                goto_label, goto_handler = goto
+                safe_action_button(goto_label, goto_handler).tooltip(f"Move the servo to {label}.")
+
+    with card(
+        "Z positions (us)",
+        "Top to bottom. The two mechanical marks are reference points the operator measures "
+        "once -- never commanded -- and only the three positions between them ever move the pen.",
+    ):
+        build_row(
+            "z_top_mech_us",
+            "Top mechanical",
+            "Reference only, never commanded: above this the linkage can cross over and lock.",
+        )
+        build_row(
+            "z_top_soft_us",
+            "Top soft (pen-up)",
+            "Where the pen parks between strokes, and where homing leaves the axis.",
+            goto=("GO TO TOP SOFT", ctx.pen_up),
+        )
+        build_row(
+            "z_load_us",
+            "Pen load",
+            "Park position for getting a pen in and out of the holder.",
+            goto=("GO TO PEN LOAD", ctx.goto_load),
+        )
+        build_row(
+            "z_bottom_soft_us",
+            "Bottom soft (drawing)",
+            "Where the servo stops to draw, short of the mechanical floor, so the holder's "
+            "spring gives the last of the pressure instead of stalling the servo.",
+            goto=("GO TO BOTTOM SOFT", ctx.pen_down),
+        )
+        build_row(
+            "z_bottom_mech_us",
+            "Bottom mechanical",
+            "Reference only, never commanded: past this the arm is square to the body and something breaks.",
+        )
+
+
 def _build_z_tune_card(ctx: GuiContext) -> None:
     """Interactive Z calibration: step the servo, read the machine Z, capture it.
 
-    Replaces the plot-a-ladder-sheet loop for finding z_down_mm / z_up_mm: jog until
-    the nib just marks, SET AS PEN-DOWN; jog to the shallowest clean clearance,
-    SET AS PEN-UP. Both land in the profile fields, so SAVE AS PROFILE keeps them.
+    Replaces the plot-a-ladder-sheet loop for finding the soft positions: jog until the
+    nib just marks, SET AS BOTTOM SOFT; jog to the shallowest clean clearance, SET AS TOP
+    SOFT. Both land in the "Z positions (us)" fields above, so SAVE AS PROFILE keeps them.
     """
     if not ctx.supervisor.plotter_settings.use_z_servo:
         # With use_z_servo off, Z is a binary M5/M3 pen solenoid: there is no position
@@ -530,8 +604,8 @@ def _build_z_tune_card(ctx: GuiContext) -> None:
         return
     with card(
         "Z tune",
-        "Jog Z until the nib just marks the paper, then SET AS PEN-DOWN. "
-        "Jog up to the shallowest height that clears the paper, then SET AS PEN-UP. "
+        "Jog Z until the nib just marks the paper, then SET AS BOTTOM SOFT. "
+        "Jog up to the shallowest height that clears the paper, then SET AS TOP SOFT. "
         f"SAVE AS PROFILE above keeps both. Jogs stay inside {Z_ABSOLUTE_FLOOR_MM:g}..0 mm.",
     ):
         with toolbar(full_width=True):
@@ -542,17 +616,17 @@ def _build_z_tune_card(ctx: GuiContext) -> None:
             safe_action_button("Z−", ctx.jog_z_down).tooltip("Lower the pen by one step")
             ctx.machine_z_label = mini_metric("Machine Z")
         with toolbar(full_width=True):
-            safe_action_button("SET AS PEN-DOWN", lambda: ctx.capture_z("z_down_mm")).tooltip(
-                "Current machine Z becomes Pen-down Z (mm)"
+            safe_action_button("SET AS BOTTOM SOFT", lambda: ctx.capture_z_us("z_bottom_soft_us")).tooltip(
+                "Current machine Z becomes Bottom soft (us), converted through pulse_for_z"
             )
-            safe_action_button("SET AS PEN-UP", lambda: ctx.capture_z("z_up_mm")).tooltip(
-                "Current machine Z becomes Pen-up Z (mm)"
+            safe_action_button("SET AS TOP SOFT", lambda: ctx.capture_z_us("z_top_soft_us")).tooltip(
+                "Current machine Z becomes Top soft (us), converted through pulse_for_z"
             )
-            safe_action_button("SET AS PEN-FIX", lambda: ctx.capture_z("z_fix_mm")).tooltip(
-                "Current machine Z becomes Pen-fix Z (mm) -- where the holder clamps the pen"
+            safe_action_button("SET AS PEN LOAD", lambda: ctx.capture_z_us("z_load_us")).tooltip(
+                "Current machine Z becomes Pen load (us) -- where the holder clamps the pen"
             )
-            safe_action_button("GO TO FIX", ctx.goto_fix).tooltip(
-                "Move to the saved Pen-fix Z. Put the calibration plate down first; keep the canvas clear."
+            safe_action_button("GO TO LOAD", ctx.goto_load).tooltip(
+                "Move to the saved Pen load position. Put the calibration plate down first; keep the canvas clear."
             )
 
 
