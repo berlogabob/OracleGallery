@@ -1303,7 +1303,7 @@ MODES: dict[str, Callable[..., Polylines]] = {
 # stipple is deliberately NOT here — each row is its own short chained run, not a single
 # through-line, so serpentine's raster ordering is what makes those runs plot efficiently.
 # tsp and hilbert (imaging/art/) emit their tour / curve in plot order for the same reason.
-CONTINUOUS_MODES = frozenset({"spiral", "squiggle", "tsp", "hilbert"})
+CONTINUOUS_MODES = frozenset({"spiral", "squiggle", "tsp", "hilbert", "scribble"})
 
 
 def order_serpentine(polylines: Polylines) -> Polylines:
@@ -1646,17 +1646,29 @@ def _chaikin(points: list[tuple[float, float]]) -> list[tuple[float, float]]:
 # The modes in imaging/art/ import helpers from this module, so they are imported, and
 # registered, only once everything above exists.
 from .art.ascii import ascii as _ascii  # noqa: E402
+from .art.bricks import bricks as _bricks  # noqa: E402
 from .art.circuit import circuit as _circuit  # noqa: E402
+from .art.dotdot import dotdot as _dotdot  # noqa: E402
 from .art.edges import edges as _edges  # noqa: E402
 from .art.engraving import engraving as _engraving  # noqa: E402
+from .art.guilloche import guilloche as _guilloche  # noqa: E402
 from .art.hilbert import hilbert as _hilbert  # noqa: E402
 from .art.lowpoly import lowpoly as _lowpoly  # noqa: E402
 from .art.matrix import matrix as _matrix  # noqa: E402
 from .art.maze import maze as _maze  # noqa: E402
+from .art.moire import moire as _moire  # noqa: E402
 from .art.ridgeline import ridgeline as _ridgeline  # noqa: E402
 from .art.rings import rings as _rings  # noqa: E402
+from .art.ripple import ripple as _ripple  # noqa: E402
+from .art.scales import scales as _scales  # noqa: E402
+from .art.scribble import scribble as _scribble  # noqa: E402
+from .art.shatter import shatter as _shatter  # noqa: E402
+from .art.stitch import stitch as _cross_stitch  # noqa: E402
+from .art.sunburst import sunburst as _sunburst  # noqa: E402
 from .art.truchet import truchet as _truchet  # noqa: E402
 from .art.tsp import tsp as _tsp  # noqa: E402
+from .art.voronoi import voronoi as _voronoi  # noqa: E402
+from .art.weave import weave as _weave  # noqa: E402
 from .art.wordart import wordart as _wordart  # noqa: E402
 
 MODES.update(
@@ -1674,5 +1686,17 @@ MODES.update(
         "wordart": _wordart,
         "circuit": _circuit,
         "maze": _maze,
+        "weave": _weave,
+        "moire": _moire,
+        "voronoi": _voronoi,
+        "dotdot": _dotdot,
+        "scribble": _scribble,
+        "shatter": _shatter,
+        "ripple": _ripple,
+        "sunburst": _sunburst,
+        "scales": _scales,
+        "bricks": _bricks,
+        "stitch": _cross_stitch,
+        "guilloche": _guilloche,
     }
 )

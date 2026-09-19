@@ -9,17 +9,29 @@ from typing import Any
 from nicegui import ui
 
 from ....blocks.imaging.art import ascii as art_ascii
+from ....blocks.imaging.art import bricks as art_bricks
 from ....blocks.imaging.art import circuit as art_circuit
+from ....blocks.imaging.art import dotdot as art_dotdot
 from ....blocks.imaging.art import edges as art_edges
 from ....blocks.imaging.art import engraving as art_engraving
+from ....blocks.imaging.art import guilloche as art_guilloche
 from ....blocks.imaging.art import hilbert as art_hilbert
 from ....blocks.imaging.art import lowpoly as art_lowpoly
 from ....blocks.imaging.art import matrix as art_matrix
 from ....blocks.imaging.art import maze as art_maze
+from ....blocks.imaging.art import moire as art_moire
 from ....blocks.imaging.art import ridgeline as art_ridgeline
 from ....blocks.imaging.art import rings as art_rings
+from ....blocks.imaging.art import ripple as art_ripple
+from ....blocks.imaging.art import scales as art_scales
+from ....blocks.imaging.art import scribble as art_scribble
+from ....blocks.imaging.art import shatter as art_shatter
+from ....blocks.imaging.art import stitch as art_stitch
+from ....blocks.imaging.art import sunburst as art_sunburst
 from ....blocks.imaging.art import truchet as art_truchet
 from ....blocks.imaging.art import tsp as art_tsp
+from ....blocks.imaging.art import voronoi as art_voronoi
+from ....blocks.imaging.art import weave as art_weave
 from ....blocks.imaging.art import wordart as art_wordart
 from ....blocks.imaging.modes import (
     AI_LINE_ART_TRACE,
@@ -183,6 +195,18 @@ ART_MODES = {
         art_wordart,
         art_circuit,
         art_maze,
+        art_weave,
+        art_moire,
+        art_voronoi,
+        art_dotdot,
+        art_scribble,
+        art_shatter,
+        art_ripple,
+        art_sunburst,
+        art_scales,
+        art_bricks,
+        art_stitch,
+        art_guilloche,
     )
 }
 MODE_HELP.update({name: module.HELP for name, module in ART_MODES.items()})

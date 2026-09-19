@@ -93,6 +93,18 @@ def test_all_modes_registered() -> None:
         "wordart",
         "circuit",
         "maze",
+        "weave",
+        "moire",
+        "voronoi",
+        "dotdot",
+        "scribble",
+        "shatter",
+        "ripple",
+        "sunburst",
+        "scales",
+        "bricks",
+        "stitch",
+        "guilloche",
         "edges",
         "hilbert",
         "ascii",
@@ -111,8 +123,8 @@ def test_solid_white_produces_no_ink() -> None:
 def test_monotonic_ink_vs_brightness() -> None:
     """Ink density must fall as the image gets lighter — for the tone modes.
 
-    trace, edges and ridgeline are excluded on purpose, not because they fail: none is a tone
-    renderer. trace follows strokes, and a smooth gradient has none; edges and ridgeline respond
+    trace, edges, ridgeline and dotdot are excluded on purpose, not because they fail: none is
+    a tone renderer. trace follows strokes, and a smooth gradient has none; edges and ridgeline respond
     to changes in darkness, which a linear gradient holds constant. Their own suites cover them
     (tests/test_imaging_trace.py, tests/test_mode_edges.py, tests/test_mode_ridgeline.py).
     """
@@ -122,7 +134,10 @@ def test_monotonic_ink_vs_brightness() -> None:
     for name, mode in MODES.items():
         # edges draws where brightness changes and ridgeline turns tone into displacement;
         # a linear gradient has constant change, so neither is an ink-follows-darkness mode.
-        if name in ("trace", "edges", "ridgeline"):
+        # dotdot's ink is mostly its numerals, and how much ink a number costs depends on how
+        # many digits it has, not on the tone under it -- its own suite pins the point density
+        # instead (tests/test_mode_dotdot.py).
+        if name in ("trace", "edges", "ridgeline", "dotdot"):
             continue
         if name == "halftone":
             polylines = mode(tone, angle_deg=0.0)
@@ -233,7 +248,7 @@ def test_travel_preview_is_screen_only_and_never_reaches_the_plotter() -> None:
 def test_unknown_mode_raises() -> None:
     data = _png(Image.new("L", (1, 1), 255))
     with pytest.raises(ValueError) as error:
-        image_to_polylines(data, mode="scribble", width_mm=10, height_mm=10, cell_mm=1)
+        image_to_polylines(data, mode="no_such_mode", width_mm=10, height_mm=10, cell_mm=1)
     message = str(error.value)
     assert all(name in message for name in MODES)
 
