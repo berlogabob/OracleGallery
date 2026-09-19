@@ -25,6 +25,11 @@ HELP = (
 )
 
 
+# Most of the half-pitch a ring may give up to its neighbour. Beyond this the lattice reads
+# as paper with specks on it rather than as rings.
+_MAX_GAP_FRACTION = 0.35
+
+
 def rings(
     tone: ToneGrid,
     *,
@@ -66,8 +71,8 @@ def rings(
     """
     if pitch_mm <= 0:
         raise ValueError("pitch_mm must be positive")
-    if pen_gap_mm < 0 or pen_gap_mm >= pitch_mm / 2.0:
-        raise ValueError("pen_gap_mm must be non-negative and less than pitch_mm / 2")
+    if pen_gap_mm < 0:
+        raise ValueError("pen_gap_mm must be non-negative")
     if max_rings < 1:
         raise ValueError("max_rings must be at least 1")
     if min_ring_mm < 0:
@@ -80,7 +85,22 @@ def rings(
         raise ValueError("max_rings_total must be at least 1")
 
     half_pitch = pitch_mm / 2.0
-    max_radius = half_pitch - pen_gap_mm
+    # The gap between neighbouring rings is a FRACTION of the pitch, not a fixed millimetre
+    # figure: at the shipped 1.92 mm pitch a flat 0.3 mm gap is a third of the half-pitch,
+    # and as the detail fader tightens the pitch the gap eats it entirely -- rings drew zero
+    # strokes at detail 2.0 and raised outright at 5.0, so turning detail UP made the mode
+    # vanish. Capping it keeps the same look at the shipped pitch and keeps it drawable at
+    # any finer one.
+    max_radius = half_pitch - min(pen_gap_mm, half_pitch * _MAX_GAP_FRACTION)
+    if max_radius < min_ring_mm:
+        # Refuse rather than return an empty sheet. Past this pitch every ring the lattice
+        # asks for is narrower than the nib, so the mode cannot draw the picture at all --
+        # and a caller solving for detail (imaging/exposure.py) reads the refusal as "too
+        # fine" and steps back, where silence would look like a mode that simply stopped.
+        raise ValueError(
+            f"rings pitch {pitch_mm:.2f}mm leaves a {max_radius:.2f}mm ring, under the "
+            f"{min_ring_mm:.2f}mm the pen can resolve; use a coarser pitch"
+        )
 
     # Upper-bound estimate of cells x max_rings, checked before any circle is walked --
     # the same fail-fast shape as stipple's and flow's pre-generation estimates.

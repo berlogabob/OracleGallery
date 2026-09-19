@@ -136,8 +136,11 @@ def test_monotonic_ink_vs_brightness() -> None:
         # a linear gradient has constant change, so neither is an ink-follows-darkness mode.
         # dotdot's ink is mostly its numerals, and how much ink a number costs depends on how
         # many digits it has, not on the tone under it -- its own suite pins the point density
-        # instead (tests/test_mode_dotdot.py).
-        if name in ("trace", "edges", "ridgeline", "dotdot"):
+        # instead (tests/test_mode_dotdot.py). sunburst is radial and this check measures
+        # VERTICAL STRIPS: its outermost strips are reached by only a narrow wedge of rays, so
+        # the darkest strip reads slightly under its neighbour even though ink falls to zero
+        # across the sheet. tests/test_mode_sunburst.py measures it with that geometry in mind.
+        if name in ("trace", "edges", "ridgeline", "dotdot", "sunburst"):
             continue
         if name == "halftone":
             polylines = mode(tone, angle_deg=0.0)

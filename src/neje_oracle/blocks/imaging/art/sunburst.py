@@ -158,7 +158,10 @@ def sunburst(
             # the rays that survive nearest the focus are exactly the multiples of a large
             # power of two, which all landed in the same lowest-threshold class and drew
             # whatever the picture said, flattening the gradient.
-            floor = ((index // stride) % _LEVELS + 1) / _LEVELS
+            # Rungs 0..(_LEVELS-1)/_LEVELS, not 1..1. The +1 this replaces put the top rung
+            # at exactly 1.0, which only the single darkest sample in the picture ever
+            # reaches, so one ray class in _LEVELS was dead whatever the subject was.
+            floor = ((index // stride) % _LEVELS) / _LEVELS
             if raw < min_darkness or stretched < floor:
                 if len(run) >= 2:
                     polylines.append(run)

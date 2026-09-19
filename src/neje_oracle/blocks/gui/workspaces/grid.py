@@ -28,10 +28,11 @@ from ....blocks.imaging.sheet import (
     image_aspect,
     photo_filter,
 )
+from ...imaging.exposure import DEFAULT_TARGET_INK_PER_MM2, expose
 from .. import ui as oracle
 from ..context import GuiContext
-from ..support import read_upload_event_payload
-from ..ui import card, helper_text, safe_action_button, select, switch, toolbar
+from ..support import read_upload_event_payload, sheet_minutes
+from ..ui import card, helper_text, number_control, safe_action_button, select, switch, toolbar
 from .generative import sketch_canvas_mm
 from .image import _PEN_AWARE_MODES, QUALITY_PRESETS, STATE, _mode_params, quality_cell_mm, quality_max_segments
 
@@ -68,6 +69,18 @@ def set_cell_mode(settings: Any, row: int, col: int, mode: str) -> None:
     settings.grid_cell_modes = table
 
 
+# Their mark pitch comes from the tone raster, not from quality_params.
+_RASTER_PITCH_MODES = frozenset({"halftone", "dither"})
+# A raster finer than this is spent on detail no pen can lay down.
+_MIN_TONE_CELL_MM = 0.15
+# How far the solve may push a mode past its shipped spacing. Beyond this the modes with an
+# absolute floor (ascii 1.2 mm characters, bricks, stitch) are already pinned anyway.
+_DETAIL_BOUNDS = (1.0, 12.0)
+# The floor the time budget may drive the ink target down to. Under this a cell reads as a
+# few marks on paper, and a grid of those answers no question.
+_MIN_TARGET_INK_PER_MM2 = 0.3
+
+
 def build_section(ctx: GuiContext, *, preview_slot: Any = None) -> oracle.Section:
     settings = ctx.settings
     root = ui.column().classes("w-full gap-2")
@@ -76,6 +89,9 @@ def build_section(ctx: GuiContext, *, preview_slot: Any = None) -> oracle.Sectio
     # ponytail: unbounded between pictures -- quality x sizes x modes is a few hundred entries.
     cache: dict[tuple[Any, ...], Polylines | str] = {}
     source: dict[str, Any] = {"key": None, "data": b"", "aspect": 1.0}
+    # Lowered by the time budget below, and part of the cache key so a changed target
+    # re-renders rather than serving the previous exposure.
+    aim: dict[str, float] = {"target": DEFAULT_TARGET_INK_PER_MM2}
 
     def picture() -> tuple[bytes, float]:
         key = (hash(STATE["bytes"]), bool(settings.grid_photo_filter))
@@ -85,26 +101,61 @@ def build_section(ctx: GuiContext, *, preview_slot: Any = None) -> oracle.Sectio
             cache.clear()
         return source["data"], source["aspect"]
 
-    def params_for(mode: str) -> dict[str, Any]:
+    def params_for(mode: str, detail: float) -> dict[str, Any]:
         # The same set IMAGE's render_conversion builds, minus its per-mode extras (wave
         # orientation, flow dashes, lift budget), which stay at the mode defaults here.
         quality, pen = str(settings.grid_quality), float(settings.pen_width_mm)
         return {
-            "cell_mm": quality_cell_mm(mode, quality, pen),
+            # halftone and dither space their marks on the tone raster itself, so for those
+            # two the raster IS the feature size and has to follow the solve. For every other
+            # mode a finer raster changes what the mode sees rather than how big it draws --
+            # measured, it made hatch and crosshatch WORSE (0.63 -> 0.34 ink per mm2), since
+            # their dither ladders are built from the raster pitch.
+            "cell_mm": max(_MIN_TONE_CELL_MM, quality_cell_mm(mode, quality, pen) / detail)
+            if mode in _RASTER_PITCH_MODES
+            else quality_cell_mm(mode, quality, pen),
             "max_segments": quality_max_segments(quality),
-            "min_stroke_mm": pen * 2.0,
+            # pen * 2 deletes anything smaller than two nib widths, which is every dot a
+            # halftone or dither lays: measured, dither drew literally nothing on a grid cell.
+            "min_stroke_mm": pen * 0.5,
             "autocontrast": not settings.grid_photo_filter,
+            # Line art averages into a faint field -- one drawing measured mean 0.10 with a
+            # MAXIMUM of 0.65 -- so the legacy modes' 0.18 white point discards most of it and
+            # they draw nothing. Stretching the field is what makes their gates mean something.
+            "normalize": True,
             **({"pen_width_mm": pen} if mode in _PEN_AWARE_MODES else {}),
-            **_mode_params(mode, 1.0, quality),
+            **_mode_params(mode, detail, quality),
         }
 
     def art(mode: str, side_mm: float) -> Polylines:
-        """cell_art through the cache. A refusal is cached too, and re-raised as ValueError."""
+        """cell_art through the cache. A refusal is cached too, and re-raised as ValueError.
+
+        With Match ink on, the detail fader is SOLVED per cell rather than left at 1.0: every
+        mode's quality_params is tuned against a ~150 mm sheet, and a grid cell is a few
+        centimetres, so the shipped spacings put geometry bigger than the subject's features
+        into the picture. See imaging/exposure.py for the measurements.
+        """
         data, aspect = picture()
-        key = (mode, round(side_mm, 3), str(settings.grid_quality), float(settings.pen_width_mm))
+        key = (
+            mode,
+            round(side_mm, 3),
+            str(settings.grid_quality),
+            float(settings.pen_width_mm),
+            bool(settings.grid_match_ink),
+            round(aim["target"], 3),
+        )
         if key not in cache:
             try:
-                cache[key] = cell_art(data, mode, side_mm, params_for(mode), aspect=aspect)
+                if settings.grid_match_ink:
+                    result = expose(
+                        lambda detail: cell_art(data, mode, side_mm, params_for(mode, detail), aspect=aspect),
+                        area_mm2=side_mm * side_mm,
+                        target_ink_per_mm2=aim["target"],
+                        detail_bounds=_DETAIL_BOUNDS,
+                    )
+                    cache[key] = result.polylines
+                else:
+                    cache[key] = cell_art(data, mode, side_mm, params_for(mode, 1.0), aspect=aspect)
             except ValueError as exc:
                 cache[key] = str(exc)
         hit = cache[key]
@@ -210,6 +261,25 @@ def build_section(ctx: GuiContext, *, preview_slot: Any = None) -> oracle.Sectio
             on_change=lambda e: set_setting("grid_photo_filter", bool(e.value)),
         )
         switch(
+            "Match ink (solve each cell's detail)",
+            value=bool(settings.grid_match_ink),
+            on_change=lambda e: set_setting("grid_match_ink", bool(e.value)),
+        )
+        number_control(
+            ctx.fields,
+            "grid_time_budget_min",
+            label="Time budget min",
+            value=float(settings.grid_time_budget_min),
+            default=180.0,
+            min_value=0,
+            step=15,
+            width_class="w-36",
+            tooltip="Match ink stops short of its target if the sheet would take longer than this. 0 removes the ceiling.",
+            on_change=lambda: set_setting(
+                "grid_time_budget_min", float(ctx.fields["grid_time_budget_min"].value or 0.0)
+            ),
+        )
+        switch(
             "Cell outlines and labels",
             value=bool(settings.grid_labels),
             on_change=lambda e: set_setting("grid_labels", bool(e.value)),
@@ -239,19 +309,36 @@ def build_section(ctx: GuiContext, *, preview_slot: Any = None) -> oracle.Sectio
         data, _aspect = picture()
         width_mm, height_mm = sketch_canvas_mm(settings)
         n = int(settings.grid_size)
+
         # ponytail: renders on the event loop like every render_card source. The cell cache
         # makes a re-render cheap; the first 9x9 at "max" can still freeze the tab. Move
         # render_card onto run.cpu_bound if that bites.
-        polylines, failures = grid_to_polylines(
-            data,
-            modes,
-            n=n,
-            width_mm=width_mm,
-            height_mm=height_mm,
-            params_for=params_for,
-            labels=bool(settings.grid_labels),
-            art_for=art,
-        )
+        def build() -> tuple[Polylines, list[str]]:
+            return grid_to_polylines(
+                data,
+                modes,
+                n=n,
+                width_mm=width_mm,
+                height_mm=height_mm,
+                params_for=lambda mode: params_for(mode, 1.0),
+                labels=bool(settings.grid_labels),
+                art_for=art,
+            )
+
+        aim["target"] = DEFAULT_TARGET_INK_PER_MM2
+        polylines, failures = build()
+        budget = float(settings.grid_time_budget_min)
+        if settings.grid_match_ink and budget > 0:
+            # Coverage is bought with minutes, so the target gives way to the clock. One
+            # correction pass: the estimator is accurate to about 1%, so scaling the target by
+            # how far over budget the sheet ran lands close enough, and a second pass would
+            # cost another full re-render to chase a few percent.
+            minutes = sheet_minutes(ctx.settings, ctx.supervisor.plotter_settings, polylines, width_mm, height_mm)
+            if minutes > budget:
+                aim["target"] = max(_MIN_TARGET_INK_PER_MM2, aim["target"] * budget / minutes)
+                cache.clear()
+                polylines, failures = build()
+                failures.append(f"ink held back to fit {budget:.0f} min (was ~{minutes:.0f} min)")
         failures_box["label"].set_text("; ".join(failures))
         stem = str(STATE["name"] or "image").rsplit(".", 1)[0]
         return oracle.Render(polylines=polylines, width_mm=width_mm, height_mm=height_mm, name=f"{stem}_grid{n}x{n}")

@@ -29,6 +29,7 @@ from ...shared.gui_settings import (
 )
 from ...shared.store import OracleRuntimeStore, PlotterStore
 from ..gcode.estimate import estimate, limits_for
+from ..imaging.modes import Polylines, polylines_to_svg
 from ...shared.symbols import (
     default_idle_root as default_idle_root,
 )
@@ -182,6 +183,24 @@ def latest_spool_manifest(spool_root: Path) -> Path | None:
         return None
     manifests = sorted(spool_root.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
     return manifests[0] if manifests else None
+
+
+def sheet_minutes(
+    settings: GuiSettings,
+    plotter_settings: PlotterSettings,
+    polylines: Polylines,
+    width_mm: float,
+    height_mm: float,
+) -> float:
+    """What a sheet of polylines would take to plot, in minutes.
+
+    Lives here rather than in the workspace that needs it so cost estimation keeps to one
+    call site (tests/test_operator_metrics.py holds that line). The GRID pane uses it to
+    decide whether its ink target has to give way to the operator's time budget.
+    """
+    svg = polylines_to_svg(polylines, width_mm=width_mm, height_mm=height_mm, pen_width_mm=settings.pen_width_mm)
+    xy_seconds, pen_seconds = estimate_svg_seconds(settings, plotter_settings, svg.encode("utf-8"))
+    return (xy_seconds + pen_seconds) / 60.0
 
 
 def estimate_svg_seconds(

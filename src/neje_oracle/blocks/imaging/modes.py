@@ -65,6 +65,37 @@ def load_tone(
     return ToneGrid(darkness, cell_mm, width_mm, height_mm)
 
 
+def normalize_tone(
+    tone: ToneGrid, *, low_pct: float = 10.0, high_pct: float = 99.5, full_black: float = 0.9
+) -> ToneGrid:
+    """Rescale a tone grid over its own percentile range, so a mode can use its full ramp.
+
+    Line art is the case this exists for. A pen drawing is thin strokes on white, so once it
+    is area-averaged into cells the field is faint everywhere: measured on one drawing at a
+    41 mm cell, mean darkness 0.10, median 0.01, MAXIMUM 0.65, with 60% of cells under the
+    0.12 gate. Every mode then honestly draws about a tenth of what it would on a photograph,
+    which reads as a blank cell rather than as a picture.
+
+    `load_tone(autocontrast=True)` does not help: it stretches the IMAGE, and a drawing
+    already spans pure black to pure white, so it is a no-op (mean 0.101 either way). The
+    stretch has to happen on the coverage field, after the averaging that flattened it.
+
+    A field that already reaches full black is left alone -- that is what `full_black` tests --
+    so a photograph passes through untouched. Without that guard this would clip a photo's
+    shadows rather than help it: anchoring on the median took one test photo's mean DOWN from
+    0.36 to 0.20, because half its tonal range sat below the anchor.
+    """
+    darkness = tone.darkness
+    if darkness.size == 0 or float(np.percentile(darkness, high_pct)) >= full_black:
+        return tone
+    low = float(np.percentile(darkness, low_pct))
+    high = float(np.percentile(darkness, high_pct))
+    if high - low < 1e-6:
+        return tone
+    scaled = np.clip((darkness - low) / (high - low), 0.0, 1.0)
+    return ToneGrid(scaled, tone.cell_mm, tone.width_mm, tone.height_mm)
+
+
 def halftone(
     tone: ToneGrid,
     *,
@@ -1406,6 +1437,7 @@ def image_to_polylines(
     gamma: float = 1.0,
     levels: int | None = None,
     autocontrast: bool = True,
+    normalize: bool = False,
     max_segments: int = MAX_SEGMENTS_DEFAULT,
     min_stroke_mm: float = 0.0,
     lift_budget: int = 1024,
@@ -1427,6 +1459,10 @@ def image_to_polylines(
         # which lifts fabric texture and JPEG noise into ink (tests/test_imaging_speckle.py).
         autocontrast=autocontrast,
     )
+    if normalize:
+        # For line art. autocontrast stretches the IMAGE, which a drawing already fills; this
+        # stretches the coverage field the averaging produced, which a drawing does not.
+        tone = normalize_tone(tone)
     return tone_to_polylines(
         tone,
         mode=mode,

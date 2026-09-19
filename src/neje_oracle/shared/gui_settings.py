@@ -337,6 +337,15 @@ class GuiSettings:
     grid_size: int = 4
     grid_quality: str = "balanced"
     grid_photo_filter: bool = False
+    # Solve each cell's detail for a target ink coverage instead of rendering at the shipped
+    # spacings, which are tuned for a ~150 mm sheet and leave a few-centimetre cell nearly
+    # blank. See blocks/imaging/exposure.py.
+    grid_match_ink: bool = True
+    # Minutes the whole grid sheet may take. Match ink buys coverage with plot time, so it
+    # backs off its target until the estimate fits. 0 means no ceiling. 180 because a 36-cell
+    # sheet measured 190 min at the shipped spacings and 413 with the solve at full target --
+    # a tighter default would clamp the solve back to its floor on an ordinary sheet.
+    grid_time_budget_min: float = 180.0
     grid_labels: bool = True
     grid_cell_modes: list[str] = field(default_factory=list)
 
