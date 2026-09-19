@@ -265,6 +265,32 @@ def test_image_workspace_generates_real_preview_svg_for_uploaded_image(monkeypat
         image_workspace.STATE.update(previous)
 
 
+def test_a_wide_picture_keeps_its_shape_on_the_image_tab(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The W x H numbers are a box the picture fits in, not a box it is stretched to.
+
+    Both default to 150, so before the fit every landscape photo was plotted squeezed into
+    a square -- silently, because the distortion happens in load_tone before any mode runs.
+    """
+    image = Image.new("L", (400, 200), 255)
+    ImageDraw.Draw(image).rectangle((0, 0, 399, 199), outline=0, width=10)
+    ctx = _new_ctx(monkeypatch)
+    ctx.settings.image_mode = "trace"
+    ctx.settings.image_width_mm = 150.0
+    ctx.settings.image_height_mm = 150.0
+    ctx.settings.image_cell_mm = 1.0
+
+    previous = dict(image_workspace.STATE)
+    try:
+        image_workspace.STATE.update({"name": "wide.png", "bytes": _to_png(image)})
+        with ui.column():
+            image_workspace.build_sections(ctx)
+        svg = image_workspace.STATE["svg"]
+        assert 'width="150' in svg and 'height="75' in svg, svg[:200]
+    finally:
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
+
+
 def test_motif_import_card_traces_a_real_preview(monkeypatch: pytest.MonkeyPatch) -> None:
     """Same trick as the preview test above: build() calls the card's refresh() once at
     the end, so pre-seeding MOTIF_STATE runs the real crop -> trace -> unit-box -> svg

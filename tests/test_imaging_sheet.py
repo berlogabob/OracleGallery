@@ -3,12 +3,13 @@ from __future__ import annotations
 import io
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from neje_oracle.blocks.imaging.modes import polylines_to_svg
 from neje_oracle.blocks.imaging.sheet import (
     build_frame_grid,
     cell_outline,
+    fit_box,
     frame_grid_capacity,
     images_to_sheet_polylines,
 )
@@ -21,6 +22,39 @@ def _png(value: int = 90, size: int = 64) -> bytes:
     output = io.BytesIO()
     Image.new("L", (size, size), value).save(output, format="PNG")
     return output.getvalue()
+
+
+def _rect_png(width: int, height: int) -> bytes:
+    """A picture whose ink reaches all four edges, so the drawn bbox IS the aspect."""
+    image = Image.new("L", (width, height), 255)
+    ImageDraw.Draw(image).rectangle((0, 0, width - 1, height - 1), outline=0, width=max(2, height // 20))
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def test_fit_box_keeps_the_picture_shape_inside_the_box() -> None:
+    """The mm box is what the picture fits in, never what it is stretched to."""
+    assert fit_box(2.0, 150.0, 150.0) == (150.0, 75.0)  # landscape: width decides
+    assert fit_box(0.5, 150.0, 150.0) == (75.0, 150.0)  # portrait: height decides
+    assert fit_box(1.0, 100.0, 40.0) == (40.0, 40.0)  # square picture, wide box
+    # Already the right shape: untouched, so nothing shrinks a correctly-sized request.
+    assert fit_box(2.0, 200.0, 100.0) == (200.0, 100.0)
+    # A degenerate aspect draws the old way rather than refusing to draw at all.
+    assert fit_box(0.0, 150.0, 150.0) == (150.0, 150.0)
+
+
+def test_a_wide_picture_is_not_squeezed_into_a_cell() -> None:
+    """The bug this fixes: load_tone resamples to the mm box it is handed and never reads
+    the source's pixel dimensions, so a 2:1 photo in a 40x60 frame came out stretched --
+    invisibly, because every mode downstream works in the distorted space."""
+    polylines, _ = images_to_sheet_polylines(
+        [_rect_png(400, 200)], mode="trace", **SHEET, **FRAME, padding_mm=2.0, cell_mm=1.0
+    )
+    art = polylines[1:]  # the cell outline is emitted first, then that cell's art
+    xs = [x for line in art for x, _ in line]
+    ys = [y for line in art for _, y in line]
+    assert (max(xs) - min(xs)) / (max(ys) - min(ys)) == pytest.approx(2.0, rel=0.05)
 
 
 def test_capacity_matches_hand_arithmetic() -> None:

@@ -20,6 +20,7 @@ from typing import Any
 from PIL import Image, UnidentifiedImageError
 
 from ..imaging.modes import Polylines, image_to_polylines, polylines_to_svg, simplify_polyline
+from ..imaging.sheet import fit_box, image_aspect
 from .bank import to_unit_box
 
 # Stored size. to_unit_box renormalizes on load, so this is arbitrary to the pipeline --
@@ -159,20 +160,18 @@ def motif_svg(unit: Polylines) -> str:
 
 
 def _motif_extent_mm(data: bytes) -> tuple[float, float]:
-    """Longest side at CANONICAL_MOTIF_MM, so cell_mm means the same at any resolution."""
+    """Longest side at CANONICAL_MOTIF_MM, so cell_mm means the same at any resolution.
+
+    Which is fit_box into a square: the same "keep the picture's shape" the grid cells and
+    the IMAGE box need, and it used to be spelled out three separate times.
+    """
     try:
-        with Image.open(BytesIO(data)) as image:
-            width_px, height_px = image.width, image.height
+        aspect = image_aspect(data)
     except (UnidentifiedImageError, OSError) as error:
         raise ValueError(f"unreadable image: {error}") from error
-    if width_px <= 0 or height_px <= 0:
+    if aspect <= 0:
         raise ValueError("image has no pixels")
-
-    longest = float(max(width_px, height_px))
-    return (
-        CANONICAL_MOTIF_MM * width_px / longest,
-        CANONICAL_MOTIF_MM * height_px / longest,
-    )
+    return fit_box(aspect, CANONICAL_MOTIF_MM, CANONICAL_MOTIF_MM)
 
 
 def _clamp(value: float, low: float, high: float) -> float:

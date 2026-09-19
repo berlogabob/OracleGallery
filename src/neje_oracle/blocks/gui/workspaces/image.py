@@ -41,7 +41,13 @@ from ....blocks.imaging.modes import (
     polylines_to_svg,
     travel_preview_svg,
 )
-from ....blocks.imaging.sheet import SHAPES, frame_grid_capacity, images_to_sheet_polylines
+from ....blocks.imaging.sheet import (
+    SHAPES,
+    fit_box,
+    frame_grid_capacity,
+    image_aspect,
+    images_to_sheet_polylines,
+)
 from ....blocks.patterns import bank
 from ....blocks.patterns.ingest import DEFAULT_MODE as DEFAULT_MOTIF_MODE
 from ....blocks.patterns.ingest import CropBox, image_to_motif_polylines, motif_svg
@@ -685,11 +691,16 @@ def build_sections(
                 else {}
             )
             flow_param: dict[str, Any] = {"dash_mm": float(STATE["flow_dash_mm"])} if STATE["mode"] == "flow" else {}
+            # The W x H boxes are what the picture must FIT IN, not what it is stretched to.
+            # load_tone resamples to the box without ever reading the source's pixel
+            # dimensions, so passing both straight through drew every non-square photo
+            # squeezed -- and no mode downstream could tell, let alone undo it.
+            art_w, art_h = fit_box(image_aspect(STATE["bytes"]), float(STATE["width_mm"]), float(STATE["height_mm"]))
             polylines = image_to_polylines(
                 STATE["bytes"],
                 mode=str(STATE["mode"]),
-                width_mm=float(STATE["width_mm"]),
-                height_mm=float(STATE["height_mm"]),
+                width_mm=art_w,
+                height_mm=art_h,
                 cell_mm=float(STATE["cell_mm"]),
                 gamma=float(STATE["gamma"]),
                 invert=bool(STATE["invert"]),
@@ -704,8 +715,8 @@ def build_sections(
             stem = str(STATE["name"] or "image").rsplit(".", 1)[0]
             return oracle.Render(
                 polylines=polylines,
-                width_mm=float(STATE["width_mm"]),
-                height_mm=float(STATE["height_mm"]),
+                width_mm=art_w,
+                height_mm=art_h,
                 name=f"{stem}_{STATE['mode']}",
             )
 

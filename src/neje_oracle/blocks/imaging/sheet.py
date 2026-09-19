@@ -144,14 +144,17 @@ def images_to_sheet_polylines(
         cell_height_mm=cell_height_mm,
         gap_mm=gap_mm,
     )
-    art_w = cell_width_mm - padding_mm * 2.0
-    art_h = cell_height_mm - padding_mm * 2.0
-    if min(art_w, art_h) <= 0:
+    frame_w = cell_width_mm - padding_mm * 2.0
+    frame_h = cell_height_mm - padding_mm * 2.0
+    if min(frame_w, frame_h) <= 0:
         raise ValueError("padding_mm leaves no room for art inside the cell")
 
     sheet: Polylines = []
     for (center_x, center_y), data in zip(centers, images, strict=False):
         sheet.extend(cell_outline(center_x, center_y, cell_width_mm, cell_height_mm, shape))
+        # Per image, not per sheet: a contact sheet is usually a folder of whatever the
+        # camera produced, portrait and landscape mixed.
+        art_w, art_h = fit_box(image_aspect(data), frame_w, frame_h)
         art = image_to_polylines(data, mode=mode, width_mm=art_w, height_mm=art_h, cell_mm=cell_mm, **params)
         offset_x = center_x - art_w / 2.0
         offset_y = center_y - art_h / 2.0
@@ -238,6 +241,26 @@ def image_aspect(data: bytes) -> float:
         return source.width / source.height
 
 
+def fit_box(aspect: float, box_w_mm: float, box_h_mm: float) -> tuple[float, float]:
+    """The largest box_w x box_h rectangle with this aspect ratio, in mm.
+
+    Everything downstream renders into the mm box it is handed: load_tone resamples the
+    picture to width_mm/cell_mm by height_mm/cell_mm without ever reading the source's own
+    pixel dimensions, so a 2:1 photo handed a square box is stretched into it before any
+    mode runs, and no mode can undo it. Shrinking the box to the picture's shape is the
+    whole fix -- the caller places the result wherever it wants.
+
+    A degenerate aspect (a zero-pixel dimension cannot happen, but a caller computing one
+    can) returns the box unchanged rather than raising: refusing to draw is worse than
+    drawing the old way.
+    """
+    if aspect <= 0 or box_w_mm <= 0 or box_h_mm <= 0:
+        return box_w_mm, box_h_mm
+    if box_w_mm / box_h_mm > aspect:  # the box is wider than the picture: height decides
+        return box_h_mm * aspect, box_h_mm
+    return box_w_mm, box_w_mm / aspect
+
+
 def cell_art(data: bytes, mode: str, side_mm: float, params: dict[str, Any], *, aspect: float) -> Polylines:
     """One cell's drawing in cell-local mm, aspect kept and centred in a side x side square.
 
@@ -245,7 +268,7 @@ def cell_art(data: bytes, mode: str, side_mm: float, params: dict[str, Any], *, 
     scaling afterwards would draw a 9x9 cell with lines nine times too dense. The GUI's cell
     thumbnails are this exact output, so what a tile shows is what the sheet prints.
     """
-    art_w, art_h = (side_mm, side_mm / aspect) if aspect >= 1 else (side_mm * aspect, side_mm)
+    art_w, art_h = fit_box(aspect, side_mm, side_mm)
     art = image_to_polylines(data, mode=mode, width_mm=art_w, height_mm=art_h, **params)
     dx, dy = (side_mm - art_w) / 2.0, (side_mm - art_h) / 2.0
     return [[(x + dx, y + dy) for x, y in polyline] for polyline in art]
