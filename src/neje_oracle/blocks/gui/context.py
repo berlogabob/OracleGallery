@@ -27,7 +27,7 @@ from ...shared.config import ensure_dir
 from ...shared.gui_settings import z_pulse_range
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
-from ...shared.z_positions import ZPositions, pulse_for_z, z_for_pulse
+from ...shared.z_positions import ZPositions, pulse_for_z, real_mm_between, z_for_pulse
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
 from .modes import mode_policy
 from .support import (
@@ -153,6 +153,7 @@ class GuiContext:
         # ever taken from a FluidNC MPos report, never from commanded moves, so the
         # capture buttons write what the machine says, not what we asked for.
         self.machine_z_label: Any = None
+        self.machine_real_mm_label: Any = None
         self._machine_z: float | None = None
 
         store = self.supervisor.runtime_store
@@ -892,8 +893,21 @@ class GuiContext:
         z_position = result.get("machine_position")
         if isinstance(z_position, (list, tuple)) and len(z_position) >= 3:
             self._machine_z = float(z_position[2])
+        # Reported in the servo's own microseconds, not the machine's millimetres: the Z
+        # "mm" are an interpolation across a made-up travel, and the only lengths worth
+        # showing an operator are the pulse and the millimetres measured off the nib.
+        pulse = pulse_for_z(self._machine_z, z_pulse_range(self.settings)) if self._machine_z is not None else None
         if self.machine_z_label is not None:
-            self.machine_z_label.set_text(f"{self._machine_z:.2f} mm" if self._machine_z is not None else "-")
+            self.machine_z_label.set_text(f"{pulse}" if pulse is not None else "-")
+        if self.machine_real_mm_label is not None:
+            below = (
+                real_mm_between(
+                    self.settings.z_top_soft_us, pulse, self.settings.z_real_span_mm, self.settings.z_real_span_us
+                )
+                if pulse is not None
+                else None
+            )
+            self.machine_real_mm_label.set_text(f"{below:+.2f}" if below is not None else "-")
         if "pins" in labels:
             labels["pins"].set_text(str(result.get("pins") or "none"))
         if "modal" in labels:

@@ -505,10 +505,16 @@ tuning is how a position is found and the table is where it lands. The jog step 
 microseconds too, on the tuner's own ladder (1, 2, 5, 10, 20, 50): an SG90's dead band is
 5-10 us, so 1 and 2 settle a position and 10-50 find it.
 
-Every row of the table carries the same columns — real mm below pen-up, the machine Z, the
-pulse, **GO TO** and **SET** — so the table reads down a column. GO TO moves the servo
-there; SET stores wherever the machine currently is. The mechanical rows have both on
-purpose: measuring the sweep means parking at each end, and you do that with no pen fitted.
+Every row of the table carries the same columns — real mm below pen-up, the pulse,
+**GO TO** and **SET** — so the table reads down a column. GO TO moves the servo there; SET
+stores wherever the machine currently is. The mechanical rows have both on purpose:
+measuring the sweep means parking at each end, and you do that with no pen fitted.
+
+The machine's own Z millimetres are not shown anywhere on this screen, including the Z tune
+readout, which reports the pulse the servo is holding and how far below pen-up that really
+is. Those millimetres are an interpolation across a made-up 25-unit travel: a row reading
+-16.7 mm invites you to check it against a rule and find it wrong. The only Z left in
+machine units is the feed rate **Z mm/min**, because that is the number FluidNC consumes.
 
 Top to bottom:
 

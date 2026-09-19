@@ -11,7 +11,7 @@ from typing import Any
 
 from nicegui import ui
 
-from ....shared.gui_settings import NumericGuiDefaultKey, z_pulse_range
+from ....shared.gui_settings import NumericGuiDefaultKey
 from ....shared.materials import (
     apply_material,
     capture_material,
@@ -30,8 +30,7 @@ from ....shared.pen_profiles import (
     rename_pen_profile,
     save_pen_profiles,
 )
-from ....shared.z_positions import mm_per_us, real_mm_between, z_for_pulse
-from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
+from ....shared.z_positions import mm_per_us, real_mm_between
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
 from ..ui import (
@@ -507,9 +506,14 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
     stop to draw is a stall -- it killed a servo on 2026-08-31 -- and "bottom soft" exists so
     the holder's spring takes the last of the pressure instead.
 
-    Every row carries the same four columns (real mm, machine Z, the pulse, GO TO, SET), so
-    the table reads down a column: what the operator compares is one position against the
-    next, and a row missing a control breaks that scan.
+    Every row carries the same columns (real mm below pen-up, the pulse, GO TO, SET), so the
+    table reads down a column: what the operator compares is one position against the next,
+    and a row missing a control breaks that scan.
+
+    The machine's own Z millimetres are deliberately not shown anywhere. They are an
+    interpolation across a made-up 25-unit travel, so a row reading "-16.7 mm" invites the
+    operator to measure it against a rule and find it wrong. Only two units are real here:
+    the microseconds the servo takes, and the millimetres measured off the nib.
     """
     if not ctx.supervisor.plotter_settings.use_z_servo:
         # Same self-explaining stand-in as the Z tune card: no servo, nothing to tune.
@@ -534,17 +538,14 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
     def build_row(key: str, label: str, tooltip: str) -> None:
         with toolbar(full_width=True):
             real_label = mini_metric("mm")
-            z_label = mini_metric("Z")
 
             def refresh_label() -> None:
-                pulses = z_pulse_range(ctx.settings)
                 # Real travel is measured DOWN from pen-up: that is the number an operator
                 # checks against a rule and against the thickness of what is on the bed.
                 real = real_mm_between(
                     pulse_of("z_top_soft_us"), pulse_of(key), ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us
                 )
                 real_label.set_text(f"{real:+.2f}")
-                z_label.set_text(f"{z_for_pulse(pulse_of(key), pulses):.1f}")
 
             def on_change() -> None:
                 # commit_z_position reverts the widget itself on refusal, so the labels
@@ -761,7 +762,8 @@ def _build_z_tune_card(ctx: GuiContext) -> None:
         "Z tune",
         "Jog Z until the nib just marks the paper, then SET AS BOTTOM SOFT. "
         "Jog up to the shallowest height that clears the paper, then SET AS TOP SOFT. "
-        f"SAVE AS PROFILE above keeps both. Jogs stay inside {Z_ABSOLUTE_FLOOR_MM:g}..0 mm.",
+        "SAVE AS PROFILE above keeps both. The readout is the pulse the servo is holding "
+        "and how far below pen-up that really is.",
     ):
         with toolbar(full_width=True):
             # The tuner's own ladder (scripts/z_servo_tune.py): an SG90's dead band is 5-10us,
@@ -771,7 +773,8 @@ def _build_z_tune_card(ctx: GuiContext) -> None:
             )
             safe_action_button("Z+", ctx.jog_z_up).tooltip("Raise the pen by one step")
             safe_action_button("Z−", ctx.jog_z_down).tooltip("Lower the pen by one step")
-            ctx.machine_z_label = mini_metric("Machine Z")
+            ctx.machine_z_label = mini_metric("us")
+            ctx.machine_real_mm_label = mini_metric("mm below pen-up")
         with toolbar(full_width=True):
             safe_action_button("SET AS BOTTOM SOFT", lambda: ctx.capture_z_us("z_bottom_soft_us")).tooltip(
                 "Current machine Z becomes Bottom soft (us), converted through pulse_for_z"

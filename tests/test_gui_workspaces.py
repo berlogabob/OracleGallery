@@ -801,6 +801,31 @@ def test_z_tune_card_builds_with_step_jog_and_capture_controls(monkeypatch: pyte
         assert any(control in text for text in rendered), control
 
 
+def test_the_z_cards_never_show_the_machines_own_millimetres(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two units are real on this axis: the servo's microseconds and a measured millimetre.
+
+    The machine's Z mm are an interpolation across a made-up 25-unit travel, so a row
+    reading "-16.7 mm" invites the operator to check it against a rule and find it wrong.
+    """
+    ctx = _new_ctx(monkeypatch)
+
+    with ui.column():
+        calibration.build_sections(ctx)
+
+    labels = [
+        str(element._props.get("label"))
+        for element in ui.context.slot.parent.descendants()
+        if element._props.get("label")
+    ]
+    assert "Machine Z" not in labels
+    assert "Z" not in labels, "the per-row machine-Z column is gone"
+
+    ctx.update_fluidnc_labels({"machine_position": [0.0, 0.0, -25.0]})
+    # -25 mm is the bottom of the travel, which is the bottom pulse -- reported as a pulse.
+    assert ctx.machine_z_label.text == str(ctx.settings.z_bottom_mech_us)
+    assert ctx.machine_real_mm_label.text.endswith(("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+
+
 def test_z_tune_card_explains_itself_without_a_z_servo(monkeypatch: pytest.MonkeyPatch) -> None:
     from dataclasses import replace
 
