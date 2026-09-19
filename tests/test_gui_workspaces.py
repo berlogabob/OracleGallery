@@ -823,7 +823,13 @@ def test_the_z_cards_never_show_the_machines_own_millimetres(monkeypatch: pytest
     ctx.update_fluidnc_labels({"machine_position": [0.0, 0.0, -25.0]})
     # -25 mm is the bottom of the travel, which is the bottom pulse -- reported as a pulse.
     assert ctx.machine_z_label.text == str(ctx.settings.z_bottom_mech_us)
-    assert ctx.machine_real_mm_label.text.endswith(("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+    # And no real millimetre until this servo has been measured with a rule.
+    assert ctx.machine_real_mm_label.text == "-"
+
+    ctx.settings.z_real_span_mm = 6.8
+    ctx.settings.z_real_span_us = 300
+    ctx.update_fluidnc_labels({"machine_position": [0.0, 0.0, -25.0]})
+    assert ctx.machine_real_mm_label.text == "+6.80"
 
 
 def test_z_tune_card_explains_itself_without_a_z_servo(monkeypatch: pytest.MonkeyPatch) -> None:

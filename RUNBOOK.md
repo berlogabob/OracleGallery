@@ -533,13 +533,17 @@ holds near stall current with no protection until it dies. Confirm with PRINT PE
 the Z ladder still inks, then measure the sweep in real millimetres (below) so every
 position can be read in a unit a sheet of paper shares.
 
-**Real millimetres.** The machine's Z units are made up, so the table's first column is
-real travel, from one measurement: park at pen-up, measure the nib against a rule, park at
-bottom soft, measure again, and type the difference into **Measured sweep mm**. The span in
-microseconds it covered is recorded with it, so moving a position later does not silently
-rewrite what the old measurement meant. `mm per 100us` beside it is the resulting scale.
+**Real millimetres, and only measured ones.** The mm column is blank and the scale reads
+`not measured` until you measure this servo: GO TO pen-up, measure the nib against a rule,
+GO TO bottom soft, measure again, type the difference into **Measured sweep mm**. Nothing
+derives it — the linkage turns a linear pulse ramp into an arc — and a plausible-looking
+millimetre nobody measured is worse than a blank, because it is the number you would act
+on. The span in microseconds is recorded alongside, so moving a position later does not
+silently rewrite what the old measurement meant.
 
-**What is on the bed.** A silicone mat, card or plastic raises the surface the pen meets, so
+**What is on the bed.** This needs the scale above — with nothing measured, a thickness
+moves nothing at all, because the correction would be a guess and the pen pays for it.
+Once measured: a silicone mat, card or plastic raises the surface the pen meets, so
 **Thickness mm** lifts *drawing* and *pen load* by that much in real millimetres. Pen-up
 deliberately does not move: it is referenced to the machine, and lifting it for every sheet
 of card would add pen-lift time to every stroke of every plot, and lifts are already about

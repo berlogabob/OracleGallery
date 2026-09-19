@@ -40,12 +40,13 @@ DEFAULT_TRAVEL_MM = 25.0
 PULSE_FLOOR_US = 400
 PULSE_CEILING_US = 2600
 
-# What the operator measured with a rule: the real pen travel across the sweep they measured
-# it over. 6.8 mm across the full 2100-2400 range was measured on 2026-09-09, which is where
-# the default comes from. The machine's own "millimetres" are fiction, so this is the only
-# honest way to read a position in a unit a pen and a sheet of paper share.
-DEFAULT_REAL_SPAN_MM = 6.8
-DEFAULT_REAL_SPAN_US = 300
+# Real millimetres exist only once somebody has held a rule against THIS servo, THIS arm and
+# THIS holder. So the default is nothing measured. A previous build shipped 6.8 mm over 300 us
+# (measured 2026-09-09 on a different servo) and every row then displayed a millimetre figure
+# the operator had never measured -- a number that looks like a measurement and is a guess is
+# worse than no number, because it invites decisions.
+DEFAULT_REAL_SPAN_MM = 0.0
+DEFAULT_REAL_SPAN_US = 0
 
 Z_TOP_MM = 0.0
 
@@ -124,22 +125,32 @@ class ZPositions:
         return found
 
 
+def is_measured(span_mm: float, span_us: float) -> bool:
+    """Whether anybody has actually measured this axis. Nothing in mm is knowable until they have."""
+    return abs(span_mm) > 0 and abs(span_us) > 0
+
+
 def mm_per_us(span_mm: float = DEFAULT_REAL_SPAN_MM, span_us: float = DEFAULT_REAL_SPAN_US) -> float:
     """Real millimetres of pen travel per microsecond of pulse, from one measured sweep.
 
     Measured rather than derived: the linkage turns a linear pulse ramp into an arc, so the
     only number worth trusting is the one that came off a rule between two known positions.
     """
-    if span_us == 0:
+    if not is_measured(span_mm, span_us):
         return 0.0
     return abs(span_mm) / abs(span_us)
 
 
-def real_mm_between(from_us: float, to_us: float, span_mm: float, span_us: float) -> float:
+def real_mm_between(from_us: float, to_us: float, span_mm: float, span_us: float) -> float | None:
     """How far the pen really moves between two pulses, in millimetres.
+
+    None until the axis has been measured: there is no scale to convert with, and inventing
+    one would put a made-up millimetre in front of an operator holding a rule.
 
     Positive means the pen goes DOWN, matching the way a thickness adds to a stack.
     """
+    if not is_measured(span_mm, span_us):
+        return None
     return (to_us - from_us) * mm_per_us(span_mm, span_us)
 
 
@@ -148,6 +159,8 @@ def pulse_for_real_mm(distance_mm: float, span_mm: float, span_us: float) -> int
 
     This is how a material thickness becomes a Z correction: put a 2 mm mat on the bed and
     the drawing position has to rise by 2 mm of real travel, which is this many microseconds.
+    Zero until the axis is measured -- an unmeasured scale would move the drawing position by
+    a guess, and the pen is what pays for it.
     """
     scale = mm_per_us(span_mm, span_us)
     if scale == 0:

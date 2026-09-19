@@ -80,5 +80,26 @@ def test_an_inverted_pair_is_refused_with_its_own_complaint(positions: ZPosition
     assert any(complaint in problem for problem in problems), problems
 
 
+def test_millimetres_are_unknown_until_somebody_measures_them() -> None:
+    """The shipped state is "nobody has measured this servo", and it says so rather than
+    deriving a figure from someone else's machine."""
+    from neje_oracle.shared.z_positions import (
+        DEFAULT_REAL_SPAN_MM,
+        DEFAULT_REAL_SPAN_US,
+        is_measured,
+        pulse_for_real_mm,
+        real_mm_between,
+    )
+
+    assert not is_measured(DEFAULT_REAL_SPAN_MM, DEFAULT_REAL_SPAN_US)
+    assert real_mm_between(2100, 2400, DEFAULT_REAL_SPAN_MM, DEFAULT_REAL_SPAN_US) is None
+    # And a material thickness moves nothing: without a scale the correction would be a
+    # guess, and the pen is what pays for it.
+    assert pulse_for_real_mm(2.0, DEFAULT_REAL_SPAN_MM, DEFAULT_REAL_SPAN_US) == 0
+
+    assert real_mm_between(2100, 2400, 6.8, 300) == pytest.approx(6.8)
+    assert pulse_for_real_mm(2.0, 6.8, 300) == 88
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

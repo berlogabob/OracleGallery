@@ -30,7 +30,7 @@ from ....shared.pen_profiles import (
     rename_pen_profile,
     save_pen_profiles,
 )
-from ....shared.z_positions import mm_per_us, real_mm_between
+from ....shared.z_positions import is_measured, mm_per_us, real_mm_between
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
 from ..ui import (
@@ -545,7 +545,9 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
                 real = real_mm_between(
                     pulse_of("z_top_soft_us"), pulse_of(key), ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us
                 )
-                real_label.set_text(f"{real:+.2f}")
+                # A dash, not a zero: until the sweep below is measured there is no scale, and
+                # a plausible-looking millimetre is the one number an operator would act on.
+                real_label.set_text("-" if real is None else f"{real:+.2f}")
 
             def on_change() -> None:
                 # commit_z_position reverts the widget itself on refusal, so the labels
@@ -608,12 +610,28 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
             "only to measure, and never with a pen fitted.",
         )
 
-        micro_label("Scale: measure the nib at pen-up and at bottom soft, and type the difference")
+        micro_label(
+            "Scale: GO TO pen-up, measure the nib against a rule, GO TO bottom soft, measure "
+            "again, type the difference. Until you do, the mm column stays blank -- this servo "
+            "has never been measured and nothing here can guess it."
+        )
         with toolbar(full_width=True):
             scale_label = mini_metric("mm per 100us")
 
             def refresh_scale() -> None:
-                scale_label.set_text(f"{mm_per_us(ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us) * 100:.2f}")
+                measured = is_measured(ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us)
+                scale_label.set_text(
+                    f"{mm_per_us(ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us) * 100:.2f}"
+                    if measured
+                    else "not measured"
+                )
+                span_label.set_text(f"over {int(abs(ctx.settings.z_real_span_us))}us" if measured else "")
+                material_note.set_text(
+                    ""
+                    if measured
+                    else "A thickness needs the scale above: measure the sweep first, or set the "
+                    "drawing position by hand."
+                )
                 for _, refresh in rows:
                     refresh()
 
@@ -635,14 +653,16 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
                 min_value=0,
                 step=0.1,
                 width_class="w-40",
-                tooltip="Real pen travel between pen-up and bottom soft, off a rule. The machine's "
-                "own millimetres are fiction -- 25 Z units measured 6.8 mm of pen movement.",
+                tooltip="Real pen travel between pen-up and bottom soft, off a rule. Nothing "
+                "derives this: the linkage turns a linear pulse ramp into an arc, so the only "
+                "honest number is the one you measured on this machine.",
                 on_change=on_span_change,
             )
-            micro_label(f"over {int(abs(settings.z_real_span_us))}us")
-            refresh_scale()
+            span_label = micro_label("")
 
+        material_note = micro_label("")
         _build_material_row(ctx, refresh_scale)
+        refresh_scale()
 
 
 def _build_material_row(ctx: GuiContext, on_change: Callable[[], None]) -> None:
