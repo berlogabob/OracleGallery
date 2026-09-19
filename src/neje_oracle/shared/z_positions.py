@@ -34,6 +34,11 @@ from dataclasses import dataclass
 DEFAULT_TOP_PULSE_US = 2100  # Z0
 DEFAULT_BOTTOM_PULSE_US = 2400  # Z-25
 DEFAULT_TRAVEL_MM = 25.0
+# The leash scripts/z_servo_tune.py hand-nudges inside. A value outside it is not a servo
+# position at all -- it is a typo or a half-written settings file, and it derives a Z target
+# metres away from the machine.
+PULSE_FLOOR_US = 400
+PULSE_CEILING_US = 2600
 
 Z_TOP_MM = 0.0
 
@@ -90,6 +95,17 @@ class ZPositions:
         or through its own end stop.
         """
         found = []
+        for name, value in (
+            ("top mechanical", self.top_mech_us),
+            ("top soft", self.top_soft_us),
+            ("pen load", self.load_us),
+            ("drawing", self.bottom_soft_us),
+            ("bottom mechanical", self.bottom_mech_us),
+        ):
+            if not PULSE_FLOOR_US <= value <= PULSE_CEILING_US:
+                found.append(f"{name} is {value}us, outside the {PULSE_FLOOR_US}-{PULSE_CEILING_US}us the servo takes")
+        if found:
+            return found
         if self.top_soft_us < self.top_mech_us:
             found.append("top soft is above top mechanical -- the linkage can lock there")
         if self.load_us <= self.top_soft_us:

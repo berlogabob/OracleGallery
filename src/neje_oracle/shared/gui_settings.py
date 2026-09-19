@@ -383,9 +383,17 @@ def sync_z_from_pulses(settings: GuiSettings) -> GuiSettings:
     manual moves). Deriving them in one place means none of that had to learn about pulses.
     """
     pulses = z_pulse_range(settings)
-    settings.z_up_mm = z_for_pulse(settings.z_top_soft_us, pulses)
-    settings.z_down_mm = z_for_pulse(settings.z_bottom_soft_us, pulses)
-    settings.z_fix_mm = z_for_pulse(settings.z_load_us, pulses)
+
+    def target(pulse_us: int) -> float:
+        # Clamped to the axis. A pulse outside the servo's range derives a Z metres off the
+        # machine -- one settings file carried z_top_soft_us = 7, which is Z+174 mm, and the
+        # estimate for a sheet read 1499 minutes of pen lifts because every stroke was
+        # travelling 174 mm twice. The board would refuse the move; better never to emit it.
+        return min(0.0, max(pulses.bottom_mm, z_for_pulse(pulse_us, pulses)))
+
+    settings.z_up_mm = target(settings.z_top_soft_us)
+    settings.z_down_mm = target(settings.z_bottom_soft_us)
+    settings.z_fix_mm = target(settings.z_load_us)
     return settings
 
 

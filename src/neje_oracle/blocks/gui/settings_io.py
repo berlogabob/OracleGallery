@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ...shared.config import OracleSupervisorSettings, ensure_parent
 from ...shared.gui_settings import (
+    GUI_DEFAULTS,
     GuiSettings,
     _repair_xy_acceleration,
     gui_settings_to_plotter_config,
@@ -26,7 +27,7 @@ from ...shared.symbols import (
 from ...shared.symbols import (
     save_symbol_scales as save_symbol_scales,
 )
-from ...shared.z_positions import ZPulseRange, pulse_for_z
+from ...shared.z_positions import PULSE_CEILING_US, PULSE_FLOOR_US, ZPulseRange, pulse_for_z
 from .support import default_gui_settings_path
 
 
@@ -47,10 +48,24 @@ def load_gui_settings(path: Path | None = None) -> GuiSettings:
     merged.update({key: value for key, value in payload.items() if key in merged})
     merged["xy_acceleration_mm_s2"] = _repair_xy_acceleration(float(merged.get("xy_acceleration_mm_s2", 0.0) or 0.0))
     _migrate_z_pulses(payload, merged)
+    _repair_z_pulses(merged)
     settings = GuiSettings(**merged)
     settings.apply_system_mode()
     sync_z_from_pulses(settings)
     return settings
+
+
+def _repair_z_pulses(merged: dict) -> None:
+    """Put any Z position that is not a servo pulse back to its default.
+
+    One settings file in the field carried z_top_soft_us = 7, which derives a pen-up height
+    of Z+174 mm: past the axis, refused by the board, and enough to make a sheet's estimate
+    read 1499 minutes of pen lifts. Whatever wrote it, a value outside the servo's range is
+    not a position the operator chose, and silently keeping it costs a print.
+    """
+    for key in ("z_top_mech_us", "z_top_soft_us", "z_load_us", "z_bottom_soft_us", "z_bottom_mech_us"):
+        if not PULSE_FLOOR_US <= int(merged.get(key, 0)) <= PULSE_CEILING_US:
+            merged[key] = GUI_DEFAULTS[key]
 
 
 def _migrate_z_pulses(payload: dict, merged: dict) -> None:

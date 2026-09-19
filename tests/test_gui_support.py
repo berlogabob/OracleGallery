@@ -29,6 +29,7 @@ from neje_oracle.blocks.gui.support import (
     save_symbol_scales,
 )
 from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.shared.gui_settings import sync_z_from_pulses
 from neje_oracle.shared.models import RuntimeStatus, SystemMode
 
 SIMPLE_SYMBOL = (
@@ -92,6 +93,32 @@ def test_the_pen_load_position_round_trips_and_drives_its_millimetres(tmp_path: 
     reloaded = load_gui_settings(settings_path)
     assert reloaded.z_load_us == 2352
     assert reloaded.z_fix_mm == -21.0
+
+
+def test_a_z_pulse_outside_the_servos_range_is_repaired(tmp_path: Path) -> None:
+    """Seen in the field: z_top_soft_us = 7, which derives a pen-up height of Z+174 mm.
+
+    The board refuses a move that far off the axis, and before the repair a sheet's estimate
+    read 1499 minutes of pen lifts because every stroke was travelling 174 mm twice.
+    """
+    settings_path = tmp_path / "runtime" / "gui_settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"z_top_soft_us": 7, "z_bottom_soft_us": 2400}), encoding="utf-8")
+
+    settings = load_gui_settings(settings_path)
+
+    assert settings.z_top_soft_us == GUI_DEFAULTS["z_top_soft_us"]
+    assert settings.z_up_mm == 0.0
+    assert settings.z_bottom_soft_us == 2400, "a value inside the range is left alone"
+
+
+def test_a_derived_z_target_stays_inside_the_axis(tmp_path: Path) -> None:
+    """Even a pulse just inside the leash must not derive a Z past the travel."""
+    settings = GuiSettings(z_top_soft_us=400)
+
+    sync_z_from_pulses(settings)
+
+    assert -25.0 <= settings.z_up_mm <= 0.0
 
 
 def test_a_settings_file_from_before_the_pulse_positions_keeps_its_z(tmp_path: Path) -> None:
