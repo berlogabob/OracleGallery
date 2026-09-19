@@ -9,9 +9,13 @@ from .modes import apply_mode_to_config, mode_policy
 from .origin_markers import ALL_ORIGINS, DEFAULT_MARKER_DIAMETER_MM
 from .z_positions import (
     DEFAULT_BOTTOM_PULSE_US,
+    DEFAULT_REAL_SPAN_MM,
+    DEFAULT_REAL_SPAN_US,
     DEFAULT_TOP_PULSE_US,
     ZPositions,
     ZPulseRange,
+    pulse_for_real_mm,
+    with_material,
     z_for_pulse,
 )
 
@@ -55,6 +59,9 @@ class GuiDefaults(TypedDict):
     z_bottom_mech_us: int
     z_pulse_top_us: int
     z_pulse_bottom_us: int
+    z_real_span_mm: float
+    z_real_span_us: int
+    z_material_mm: float
     z_feed_mm_min: float
     pen_width_mm: float
     pen_down_dwell_ms: float
@@ -121,6 +128,8 @@ type NumericGuiDefaultKey = Literal[
     "z_load_us",
     "z_bottom_soft_us",
     "z_bottom_mech_us",
+    "z_real_span_mm",
+    "z_material_mm",
     "z_feed_mm_min",
     "pen_width_mm",
     "pen_down_dwell_ms",
@@ -199,6 +208,13 @@ GUI_DEFAULTS: GuiDefaults = {
     # millimetre with it. A system check compares these against the live board.
     "z_pulse_top_us": DEFAULT_TOP_PULSE_US,
     "z_pulse_bottom_us": DEFAULT_BOTTOM_PULSE_US,
+    # One measured sweep, in real millimetres and the microseconds it covered: the linkage
+    # turns pulse into an arc, so nothing but a rule can say what a position means on paper.
+    "z_real_span_mm": DEFAULT_REAL_SPAN_MM,
+    "z_real_span_us": DEFAULT_REAL_SPAN_US,
+    # What is on the bed. A mat or a thicker sheet raises the drawing surface, so drawing and
+    # pen load rise with it; pen-up does not, or every stroke of every plot pays the lift.
+    "z_material_mm": 0.0,
     "z_feed_mm_min": 1000.0,
     "pen_width_mm": 0.3,
     "pen_down_dwell_ms": 0.0,
@@ -282,6 +298,12 @@ class GuiSettings:
     z_bottom_mech_us: int = GUI_DEFAULTS["z_bottom_mech_us"]
     z_pulse_top_us: int = GUI_DEFAULTS["z_pulse_top_us"]
     z_pulse_bottom_us: int = GUI_DEFAULTS["z_pulse_bottom_us"]
+    z_real_span_mm: float = GUI_DEFAULTS["z_real_span_mm"]
+    z_real_span_us: int = GUI_DEFAULTS["z_real_span_us"]
+    z_material_mm: float = GUI_DEFAULTS["z_material_mm"]
+    # Name of the material last applied from the library (shared/materials.py). A label, like
+    # pen_profile: the thickness above is the value that counts.
+    z_material: str = ""
     z_feed_mm_min: float = 1000.0
     # Nib calibration: the width of the emitted SVG stroke, and how many passes trace
     # needs to fill a bold line. halftone's min_ink_mm is NOT wired to this yet — it keeps
@@ -365,7 +387,17 @@ def z_pulse_range(settings: GuiSettings) -> ZPulseRange:
     return ZPulseRange(top_us=int(settings.z_pulse_top_us), bottom_us=int(settings.z_pulse_bottom_us))
 
 
-def z_positions(settings: GuiSettings) -> ZPositions:
+def material_offset_us(settings: GuiSettings) -> int:
+    """The pulse correction for whatever is on the bed, from its measured thickness."""
+    return pulse_for_real_mm(float(settings.z_material_mm), settings.z_real_span_mm, settings.z_real_span_us)
+
+
+def z_positions(settings: GuiSettings, *, with_material_offset: bool = False) -> ZPositions:
+    positions = _z_positions_raw(settings)
+    return with_material(positions, material_offset_us(settings)) if with_material_offset else positions
+
+
+def _z_positions_raw(settings: GuiSettings) -> ZPositions:
     return ZPositions(
         top_mech_us=int(settings.z_top_mech_us),
         top_soft_us=int(settings.z_top_soft_us),
@@ -383,6 +415,9 @@ def sync_z_from_pulses(settings: GuiSettings) -> GuiSettings:
     manual moves). Deriving them in one place means none of that had to learn about pulses.
     """
     pulses = z_pulse_range(settings)
+    # The commanded set, material included: what is on the bed lifts the surface the pen
+    # meets, so the millimetres the G-code carries have to account for it.
+    commanded = z_positions(settings, with_material_offset=True)
 
     def target(pulse_us: int) -> float:
         # Clamped to the axis. A pulse outside the servo's range derives a Z metres off the
@@ -391,9 +426,9 @@ def sync_z_from_pulses(settings: GuiSettings) -> GuiSettings:
         # travelling 174 mm twice. The board would refuse the move; better never to emit it.
         return min(0.0, max(pulses.bottom_mm, z_for_pulse(pulse_us, pulses)))
 
-    settings.z_up_mm = target(settings.z_top_soft_us)
-    settings.z_down_mm = target(settings.z_bottom_soft_us)
-    settings.z_fix_mm = target(settings.z_load_us)
+    settings.z_up_mm = target(commanded.top_soft_us)
+    settings.z_down_mm = target(commanded.bottom_soft_us)
+    settings.z_fix_mm = target(commanded.load_us)
     return settings
 
 

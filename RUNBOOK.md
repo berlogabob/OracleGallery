@@ -500,7 +500,17 @@ The Z axis is an RC servo, and its millimetres are fiction: 25 Z units span a me
 G-code needs are derived. On the current range, Z0 is 2100 us and Z-25 is 2400 us: 12 us
 per Z unit, and the pulse RISES as the pen goes down.
 
-`SETUP` → **Z positions (us)**, top to bottom:
+`SETUP` → **Z tune** (jog and capture) sits above **Z positions (us)** (the table), because
+tuning is how a position is found and the table is where it lands. The jog step is in
+microseconds too, on the tuner's own ladder (1, 2, 5, 10, 20, 50): an SG90's dead band is
+5-10 us, so 1 and 2 settle a position and 10-50 find it.
+
+Every row of the table carries the same columns — real mm below pen-up, the machine Z, the
+pulse, **GO TO** and **SET** — so the table reads down a column. GO TO moves the servo
+there; SET stores wherever the machine currently is. The mechanical rows have both on
+purpose: measuring the sweep means parking at each end, and you do that with no pen fitted.
+
+Top to bottom:
 
 | Position | What it is |
 | --- | --- |
@@ -514,8 +524,29 @@ Tuning order, pen out of the holder first: `$H`, then GO TO each position and wa
 arm. Fit a pen, then raise **bottom soft** in 5-10 us steps until the spring visibly
 compresses and the bottom is silent — a buzz is the servo stalling, and a stalled servo
 holds near stall current with no protection until it dies. Confirm with PRINT PEN CAL that
-the Z ladder still inks, then measure the real millimetre delta and record it in a session
-report.
+the Z ladder still inks, then measure the sweep in real millimetres (below) so every
+position can be read in a unit a sheet of paper shares.
+
+**Real millimetres.** The machine's Z units are made up, so the table's first column is
+real travel, from one measurement: park at pen-up, measure the nib against a rule, park at
+bottom soft, measure again, and type the difference into **Measured sweep mm**. The span in
+microseconds it covered is recorded with it, so moving a position later does not silently
+rewrite what the old measurement meant. `mm per 100us` beside it is the resulting scale.
+
+**What is on the bed.** A silicone mat, card or plastic raises the surface the pen meets, so
+**Thickness mm** lifts *drawing* and *pen load* by that much in real millimetres. Pen-up
+deliberately does not move: it is referenced to the machine, and lifting it for every sheet
+of card would add pen-lift time to every stroke of every plot, and lifts are already about
+half of this machine's plot time.
+
+The materials themselves are a library like the pen profiles — a dropdown of named
+thicknesses with SAVE MATERIAL and DELETE, shipped with `paper` 0.1, `card` 0.3,
+`plastic sheet` 0.5, `thick card` 1.0 and `silicone mat` 2.0 mm. Those are starting points;
+measure yours and save over them. `assets/materials.json` appears on the first save.
+
+A pulse outside 400-2600 us is not a servo position at all, so it is reported as an error
+and repaired back to its default on the next launch — one settings file carried 7 us, which
+derives a pen-up height of Z+174 mm and made a sheet estimate 1499 minutes of pen lifts.
 
 The set is refused, not clamped, if the positions are out of order: an inverted pair drives
 the pen either through the paper or through its own end stop.

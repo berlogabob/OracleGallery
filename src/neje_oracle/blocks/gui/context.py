@@ -27,7 +27,7 @@ from ...shared.config import ensure_dir
 from ...shared.gui_settings import z_pulse_range
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.origin_markers import ALL_ORIGINS
-from ...shared.z_positions import ZPositions, pulse_for_z
+from ...shared.z_positions import ZPositions, pulse_for_z, z_for_pulse
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
 from .modes import mode_policy
 from .support import (
@@ -1065,7 +1065,11 @@ class GuiContext:
         a jog that lands somewhere other than where the operator asked is worse than
         one that says why it will not move.
         """
-        step = abs(float(self.fields["z_step"].value or 0.5))
+        # The step is in SERVO MICROSECONDS, like every Z position: millimetres here were a
+        # scale the machine made up (25 Z units measure 6.8 mm of real pen travel), so a
+        # 0.1 mm step meant nothing an operator could see or check against a rule.
+        step_us = abs(float(self.fields["z_step"].value or 10))
+        step = abs(z_for_pulse(0, z_pulse_range(self.settings)) - z_for_pulse(step_us, z_pulse_range(self.settings)))
         if self._machine_z is None:
             await self.check_fluidnc(scan=False)
         if self._machine_z is None:
@@ -1172,6 +1176,27 @@ class GuiContext:
             return False
         self.persist_and_refresh()
         return True
+
+    async def goto_z_position(self, field_key: str) -> None:
+        """Move the servo to one of the five named positions, by its pulse field.
+
+        The two mechanical marks are reachable on purpose: measuring the real travel with a
+        rule means parking at each end. The pen comes out of the holder first -- the bottom
+        mark is where the arm rests against its own stop.
+        """
+        control = self.fields.get(field_key)
+        if control is None:
+            ui.notify(f"No {field_key} control on this screen.", color="warning")
+            return
+        pulses = z_pulse_range(self.settings)
+        target = z_for_pulse(float(control.value or 0), pulses)
+        target = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, target))
+        await self.fluidnc_action(
+            f"go to {field_key}",
+            lambda: self.supervisor.goto_z_fluidnc(target),
+            refresh_probe=True,
+            success_message=f"At {target:.2f} mm",
+        )
 
     async def goto_load(self) -> None:
         """Move to the saved pen-load position so the holder clamps against the plate."""

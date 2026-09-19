@@ -12,6 +12,13 @@ from typing import Any
 from nicegui import ui
 
 from ....shared.gui_settings import NumericGuiDefaultKey, z_pulse_range
+from ....shared.materials import (
+    apply_material,
+    capture_material,
+    delete_material,
+    load_materials,
+    save_materials,
+)
 from ....shared.origin_markers import ALL_ORIGINS, ORIGIN_LABELS
 from ....shared.pen_profiles import (
     PEN_PROFILE_FIELDS,
@@ -23,7 +30,7 @@ from ....shared.pen_profiles import (
     rename_pen_profile,
     save_pen_profiles,
 )
-from ....shared.z_positions import z_for_pulse
+from ....shared.z_positions import mm_per_us, real_mm_between, z_for_pulse
 from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
 from ..support import GUI_DEFAULTS
@@ -227,8 +234,10 @@ def build_sections(ctx: GuiContext) -> dict[str, Section]:
             _build_pen_profile_row(ctx)
 
         with sections["pen"]:
-            _build_z_positions_card(ctx)
+            # Tune first, then the table: the jog-and-capture loop is what an operator runs
+            # to FIND a position, and the table below is where the result lands.
             _build_z_tune_card(ctx)
+            _build_z_positions_card(ctx)
 
         # -- SHEET: layout geometry + organic ----------------------------------------
         sections["sheet"] = ui.column().classes("w-full gap-2")
@@ -494,13 +503,16 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
     """The five named Z positions, in the servo microseconds the operator actually tunes.
 
     z_up_mm / z_down_mm / z_fix_mm are DERIVED from these (sync_z_from_pulses), so this is
-    the card that matters; the millimetre fields removed from Motion speed only ever
-    displayed the result. Five, not two, because parking the servo on its bottom
-    mechanical stop to draw is a stall -- it killed a servo on 2026-08-31 -- and "bottom
-    soft" exists so the holder's spring takes the last of the pressure instead.
+    the card that matters. Five, not two, because parking the servo on its bottom mechanical
+    stop to draw is a stall -- it killed a servo on 2026-08-31 -- and "bottom soft" exists so
+    the holder's spring takes the last of the pressure instead.
+
+    Every row carries the same four columns (real mm, machine Z, the pulse, GO TO, SET), so
+    the table reads down a column: what the operator compares is one position against the
+    next, and a row missing a control breaks that scan.
     """
     if not ctx.supervisor.plotter_settings.use_z_servo:
-        # Same self-explaining stand-in as the Z tune card below: no servo, nothing to tune.
+        # Same self-explaining stand-in as the Z tune card: no servo, nothing to tune.
         with card(
             "Z positions (us)",
             "Needs the Z servo (NEJE_PLOTTER_USE_Z_SERVO). This machine drives the pen as an on/off solenoid.",
@@ -510,28 +522,36 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
 
     settings = ctx.settings
     fields = ctx.fields
+    rows: list[tuple[str, Callable[[], None]]] = []
 
-    def derived_z(key: str) -> float:
-        return z_for_pulse(float(fields[key].value or 0), z_pulse_range(ctx.settings))
+    def pulse_of(key: str) -> float:
+        # Falls back to the stored value: the rows build top-down and each one's real-mm
+        # column is measured against pen-up, which the first row reaches before its widget
+        # exists.
+        control = fields.get(key)
+        return float(control.value if control is not None else getattr(ctx.settings, key)) or 0.0
 
-    def build_row(
-        key: str,
-        label: str,
-        tooltip: str,
-        *,
-        goto: tuple[str, Callable[..., Any]] | None = None,
-    ) -> None:
+    def build_row(key: str, label: str, tooltip: str) -> None:
         with toolbar(full_width=True):
+            real_label = mini_metric("mm")
             z_label = mini_metric("Z")
 
             def refresh_label() -> None:
-                z_label.set_text(f"{derived_z(key):.1f}")
+                pulses = z_pulse_range(ctx.settings)
+                # Real travel is measured DOWN from pen-up: that is the number an operator
+                # checks against a rule and against the thickness of what is on the bed.
+                real = real_mm_between(
+                    pulse_of("z_top_soft_us"), pulse_of(key), ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us
+                )
+                real_label.set_text(f"{real:+.2f}")
+                z_label.set_text(f"{z_for_pulse(pulse_of(key), pulses):.1f}")
 
             def on_change() -> None:
-                # commit_z_position reverts the widget itself on refusal, so the label
-                # always ends up showing whatever value actually won.
+                # commit_z_position reverts the widget itself on refusal, so the labels
+                # always end up showing whatever value actually won.
                 ctx.commit_z_position(key)
-                refresh_label()
+                for _, refresh in rows:
+                    refresh()
 
             number_control(
                 fields,
@@ -545,44 +565,179 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
                 tooltip=tooltip,
                 on_change=on_change,
             ).props(f"max={_PULSE_CEILING_US}")
+            safe_action_button("GO TO", lambda key=key: ctx.goto_z_position(key)).tooltip(f"Move the servo to {label}.")
+            safe_action_button("SET", lambda key=key: ctx.capture_z_us(key)).tooltip(
+                f"Store the machine's current Z as {label}."
+            )
+            rows.append((key, refresh_label))
             refresh_label()
-            if goto is not None:
-                goto_label, goto_handler = goto
-                safe_action_button(goto_label, goto_handler).tooltip(f"Move the servo to {label}.")
 
     with card(
         "Z positions (us)",
-        "Top to bottom. The two mechanical marks are reference points the operator measures "
-        "once -- never commanded -- and only the three positions between them ever move the pen.",
+        "Top to bottom, with each position's real travel below pen-up. The two mechanical "
+        "marks are what the operator measures against; only the three between them are used "
+        "when plotting.",
     ):
         build_row(
             "z_top_mech_us",
             "Top mechanical",
-            "Reference only, never commanded: above this the linkage can cross over and lock.",
+            "The limit above pen-up: past it the linkage can cross over and lock. Measured, not plotted with.",
         )
         build_row(
             "z_top_soft_us",
             "Top soft (pen-up)",
-            "Where the pen parks between strokes, and where homing leaves the axis.",
-            goto=("GO TO TOP SOFT", ctx.pen_up),
+            "Where the pen parks between strokes, and where homing leaves the axis. Every "
+            "stroke pays this height twice, and lifts are about half of this machine's plot time.",
         )
         build_row(
             "z_load_us",
             "Pen load",
-            "Park position for getting a pen in and out of the holder.",
-            goto=("GO TO PEN LOAD", ctx.goto_load),
+            "Park position for getting a pen in and out of the holder. Rises with the material on the bed.",
         )
         build_row(
             "z_bottom_soft_us",
             "Bottom soft (drawing)",
             "Where the servo stops to draw, short of the mechanical floor, so the holder's "
             "spring gives the last of the pressure instead of stalling the servo.",
-            goto=("GO TO BOTTOM SOFT", ctx.pen_down),
         )
         build_row(
             "z_bottom_mech_us",
             "Bottom mechanical",
-            "Reference only, never commanded: past this the arm is square to the body and something breaks.",
+            "The floor: past this the arm is square to the body and something breaks. GO TO it "
+            "only to measure, and never with a pen fitted.",
+        )
+
+        micro_label("Scale: measure the nib at pen-up and at bottom soft, and type the difference")
+        with toolbar(full_width=True):
+            scale_label = mini_metric("mm per 100us")
+
+            def refresh_scale() -> None:
+                scale_label.set_text(f"{mm_per_us(ctx.settings.z_real_span_mm, ctx.settings.z_real_span_us) * 100:.2f}")
+                for _, refresh in rows:
+                    refresh()
+
+            def on_span_change() -> None:
+                # The sweep the number describes is the one currently between the two soft
+                # positions, so the span in microseconds is recorded with it: change a
+                # position later and the old measurement still means what it meant.
+                settings.z_real_span_mm = float(fields["z_real_span_mm"].value or 0.0)
+                settings.z_real_span_us = max(1, int(abs(pulse_of("z_bottom_soft_us") - pulse_of("z_top_soft_us"))))
+                ctx.persist_and_refresh()
+                refresh_scale()
+
+            number_control(
+                fields,
+                "z_real_span_mm",
+                label="Measured sweep mm",
+                value=float(settings.z_real_span_mm),
+                default=float(GUI_DEFAULTS["z_real_span_mm"]),
+                min_value=0,
+                step=0.1,
+                width_class="w-40",
+                tooltip="Real pen travel between pen-up and bottom soft, off a rule. The machine's "
+                "own millimetres are fiction -- 25 Z units measured 6.8 mm of pen movement.",
+                on_change=on_span_change,
+            )
+            micro_label(f"over {int(abs(settings.z_real_span_us))}us")
+            refresh_scale()
+
+        _build_material_row(ctx, refresh_scale)
+
+
+def _build_material_row(ctx: GuiContext, on_change: Callable[[], None]) -> None:
+    """What is on the bed, as a thickness that lifts the drawing and pen-load positions.
+
+    A silicone mat or a sheet of card raises the surface the pen meets, so without this the
+    operator re-tunes bottom soft every time the bed changes. Pen-up deliberately does not
+    move: it is referenced to the machine, and lifting it for every sheet of card would add
+    pen-lift time to every stroke of every plot.
+    """
+    settings = ctx.settings
+    materials = load_materials()
+
+    def apply_named(name: str) -> None:
+        if not name or name == settings.z_material:
+            return
+        try:
+            thickness = apply_material(name, materials)
+        except ValueError as exc:
+            ui.notify(str(exc), color="negative")
+            return
+        settings.z_material = name
+        settings.z_material_mm = thickness
+        thickness_field.value = thickness
+        thickness_field.update()
+        ctx.persist_and_refresh()
+        on_change()
+        ui.notify(f"Material '{name}' applied: {thickness:g} mm", color="positive")
+
+    with toolbar(full_width=True):
+        material_select = select(
+            {name: f"{name} ({values['thickness_mm']:g} mm)" for name, values in sorted(materials.items())},
+            value=settings.z_material or None,
+            label="On the bed",
+            on_change=lambda event: apply_named(str(event.value or "")),
+        )
+        thickness_field = number_control(
+            ctx.fields,
+            "z_material_mm",
+            label="Thickness mm",
+            value=float(settings.z_material_mm),
+            default=float(GUI_DEFAULTS["z_material_mm"]),
+            min_value=0,
+            step=0.1,
+            width_class="w-36",
+            tooltip="How much the bed has risen. Drawing and pen load lift by this much; pen-up does not.",
+            on_change=lambda: (
+                setattr(settings, "z_material_mm", float(ctx.fields["z_material_mm"].value or 0.0)),
+                ctx.persist_and_refresh(),
+                on_change(),
+            ),
+        )
+        name_input = ui.input("Save as", value=settings.z_material).props("dense outlined").classes("w-36")
+
+        def save_current() -> None:
+            name = str(name_input.value or "").strip()
+            if not name:
+                ui.notify("Name the material before saving", color="warning")
+                return
+            materials[name] = capture_material(float(settings.z_material_mm))
+            save_materials(materials)
+            settings.z_material = name
+            ctx.persist_and_refresh()
+            material_select.options = {
+                key: f"{key} ({values['thickness_mm']:g} mm)" for key, values in sorted(materials.items())
+            }
+            material_select.value = name
+            material_select.update()
+            ui.notify(f"Saved material '{name}'", color="positive")
+
+        def delete_current() -> None:
+            current = settings.z_material
+            try:
+                remaining = delete_material(current, materials)
+            except ValueError as exc:
+                ui.notify(str(exc), color="warning")
+                return
+            materials.clear()
+            materials.update(remaining)
+            settings.z_material = ""
+            ctx.persist_and_refresh()
+            material_select.options = {
+                key: f"{key} ({values['thickness_mm']:g} mm)" for key, values in sorted(materials.items())
+            }
+            material_select.value = None
+            material_select.update()
+            ui.notify(f"Deleted material '{current}'", color="positive")
+
+        primary_action_button("SAVE MATERIAL", save_current)
+        danger_action_button(
+            "DELETE",
+            lambda: ctx.confirm_action(
+                "DELETE MATERIAL",
+                f"Removes '{ctx.settings.z_material}' from the material library. The thickness on the bed stays as it is.",
+                delete_current,
+            ),
         )
 
 
@@ -609,8 +764,10 @@ def _build_z_tune_card(ctx: GuiContext) -> None:
         f"SAVE AS PROFILE above keeps both. Jogs stay inside {Z_ABSOLUTE_FLOOR_MM:g}..0 mm.",
     ):
         with toolbar(full_width=True):
+            # The tuner's own ladder (scripts/z_servo_tune.py): an SG90's dead band is 5-10us,
+            # so 1 and 2 are for settling a position and 10-50 for finding it.
             ctx.fields["z_step"] = select(
-                {0.1: "0.1", 0.25: "0.25", 0.5: "0.5", 1.0: "1", 5.0: "5"}, value=0.5, label="Z step mm"
+                {1: "1", 2: "2", 5: "5", 10: "10", 20: "20", 50: "50"}, value=10, label="Z step us"
             )
             safe_action_button("Z+", ctx.jog_z_up).tooltip("Raise the pen by one step")
             safe_action_button("Z−", ctx.jog_z_down).tooltip("Lower the pen by one step")

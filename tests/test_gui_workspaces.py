@@ -787,6 +787,9 @@ def test_z_tune_card_builds_with_step_jog_and_capture_controls(monkeypatch: pyte
         for text in (getattr(element, "text", None), element._props.get("label"))
         if text
     }
+    # Every position row carries the same pair, so the table reads down a column; the Z tune
+    # card keeps its own named captures for the jog-and-capture loop.
+    assert "GO TO" in rendered and "SET" in rendered
     for control in (
         "Z+",
         "Z−",
@@ -794,9 +797,6 @@ def test_z_tune_card_builds_with_step_jog_and_capture_controls(monkeypatch: pyte
         "SET AS TOP SOFT",
         "SET AS PEN LOAD",
         "GO TO LOAD",
-        "GO TO TOP SOFT",
-        "GO TO PEN LOAD",
-        "GO TO BOTTOM SOFT",
     ):
         assert any(control in text for text in rendered), control
 
@@ -820,6 +820,9 @@ def test_z_tune_card_explains_itself_without_a_z_servo(monkeypatch: pytest.Monke
 def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
+    from neje_oracle.shared.gui_settings import z_pulse_range
+    from neje_oracle.shared.z_positions import z_for_pulse
+
     ctx = _new_ctx(monkeypatch)
     with ui.column():
         calibration.build_sections(ctx)
@@ -842,11 +845,17 @@ def test_jog_z_sends_the_selected_step_and_refuses_the_floor(monkeypatch: pytest
     asyncio.run(ctx.jog_z_down())
     assert sent == [] and any("unknown" in n.lower() for n in notices)
 
-    # Known Z jogs by the selected step, downward.
+    # Known Z jogs by the selected step, downward. The step is in SERVO MICROSECONDS now,
+    # like the positions it tunes -- 10 us is one rung of the tuner's own ladder, and on the
+    # shipped 2100-2400 range it works out to 0.83 of the machine's (made-up) millimetres.
     ctx._machine_z = -10.0
-    ctx.fields["z_step"].value = 1.0
+    ctx.fields["z_step"].value = 10
     asyncio.run(ctx.jog_z_down())
-    assert sent == [("Z", -1.0, ctx.settings.z_feed_mm_min)]
+    pulses = z_pulse_range(ctx.settings)
+    expected_mm = abs(z_for_pulse(0, pulses) - z_for_pulse(10, pulses))
+    axis, distance, feed = sent[0]
+    assert axis == "Z" and feed == ctx.settings.z_feed_mm_min
+    assert distance == pytest.approx(-expected_mm, abs=0.001), (distance, expected_mm)
 
     # A jog that would pass the -25 floor (the servo's travel) is refused, and the
     # ceiling holds at 0.

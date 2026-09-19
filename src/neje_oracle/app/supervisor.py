@@ -772,6 +772,23 @@ class SupervisorService:
         result = self.transport_factory(self.plotter_settings).pen_down()
         return self._record_fluidnc_command(result, f"Pen down {self.plotter_settings.pen_down_command}")
 
+    def goto_z_fluidnc(self, z_mm: float) -> ComponentState:
+        """Move Z to an absolute target, for the Z positions card's GO TO buttons.
+
+        A fed G1 like every other Z move here, never a rapid: rapiding a servo into a stop
+        is what killed one in August. Clamped to the axis for the same reason the other
+        handlers clamp -- a target past the travel is refused by the board as an Alarm, and
+        an Alarm mid-tuning costs a re-home.
+        """
+        if not self._manual_control_allowed("go to Z"):
+            return self.runtime_store.load_component_state("fluidnc")
+        config = self.runtime_store.load_plotter_config()
+        z_feed = config.z_feed_mm_min if config.use_z_servo else self.plotter_settings.z_feed_mm_min
+        target = min(0.0, max(Z_ABSOLUTE_FLOOR_MM, float(z_mm)))
+        command = f"G1 Z{target:.3f} F{z_feed:.2f}"
+        result = self.transport_factory(self.plotter_settings).send_commands(["G21", "G90", "G54", command])
+        return self._record_fluidnc_command(result, f"Go to Z {command}")
+
     def pen_load_fluidnc(self) -> ComponentState:
         """Move Z to the pen-load position: the holder clamps the pen against a plate.
 

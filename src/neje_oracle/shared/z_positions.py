@@ -40,6 +40,13 @@ DEFAULT_TRAVEL_MM = 25.0
 PULSE_FLOOR_US = 400
 PULSE_CEILING_US = 2600
 
+# What the operator measured with a rule: the real pen travel across the sweep they measured
+# it over. 6.8 mm across the full 2100-2400 range was measured on 2026-09-09, which is where
+# the default comes from. The machine's own "millimetres" are fiction, so this is the only
+# honest way to read a position in a unit a pen and a sheet of paper share.
+DEFAULT_REAL_SPAN_MM = 6.8
+DEFAULT_REAL_SPAN_US = 300
+
 Z_TOP_MM = 0.0
 
 
@@ -115,3 +122,53 @@ class ZPositions:
         if self.bottom_soft_us > self.bottom_mech_us:
             found.append("drawing is past bottom mechanical -- the servo would stall against its stop")
         return found
+
+
+def mm_per_us(span_mm: float = DEFAULT_REAL_SPAN_MM, span_us: float = DEFAULT_REAL_SPAN_US) -> float:
+    """Real millimetres of pen travel per microsecond of pulse, from one measured sweep.
+
+    Measured rather than derived: the linkage turns a linear pulse ramp into an arc, so the
+    only number worth trusting is the one that came off a rule between two known positions.
+    """
+    if span_us == 0:
+        return 0.0
+    return abs(span_mm) / abs(span_us)
+
+
+def real_mm_between(from_us: float, to_us: float, span_mm: float, span_us: float) -> float:
+    """How far the pen really moves between two pulses, in millimetres.
+
+    Positive means the pen goes DOWN, matching the way a thickness adds to a stack.
+    """
+    return (to_us - from_us) * mm_per_us(span_mm, span_us)
+
+
+def pulse_for_real_mm(distance_mm: float, span_mm: float, span_us: float) -> int:
+    """The pulse offset that moves the pen `distance_mm` -- the inverse of real_mm_between.
+
+    This is how a material thickness becomes a Z correction: put a 2 mm mat on the bed and
+    the drawing position has to rise by 2 mm of real travel, which is this many microseconds.
+    """
+    scale = mm_per_us(span_mm, span_us)
+    if scale == 0:
+        return 0
+    return round(distance_mm / scale)
+
+
+def with_material(positions: ZPositions, material_us: int) -> ZPositions:
+    """The positions to actually command with a material of `material_us` on the bed.
+
+    Drawing and pen load rise by the thickness, because both are referenced to the surface
+    the pen meets. Pen-up deliberately does NOT move: it is referenced to the machine, and
+    lifting it further for every sheet of card would add pen-lift time to every stroke of
+    every plot -- and lifts are already about half of this machine's plot time.
+    """
+    if material_us <= 0:
+        return positions
+    return ZPositions(
+        top_mech_us=positions.top_mech_us,
+        top_soft_us=positions.top_soft_us,
+        load_us=max(PULSE_FLOOR_US, positions.load_us - material_us),
+        bottom_soft_us=max(PULSE_FLOOR_US, positions.bottom_soft_us - material_us),
+        bottom_mech_us=positions.bottom_mech_us,
+    )
