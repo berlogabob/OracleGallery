@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ from ....blocks.imaging.sheet import (
     frame_grid_capacity,
     image_aspect,
     images_to_sheet_polylines,
+    photo_filter,
 )
 from ....blocks.patterns import bank
 from ....blocks.patterns.ingest import DEFAULT_MODE as DEFAULT_MOTIF_MODE
@@ -76,6 +78,9 @@ STATE: dict[str, Any] = {
     "gamma": 1.0,
     "invert": False,
     "autocontrast": True,
+    # none | line | photo -- see ENHANCE_HELP. GRID has passed these two for a release;
+    # IMAGE passed neither, and plotted the whole sheet of the picture GRID fixed per cell.
+    "enhance": "none",
     "show_travel": True,
     # Percent of the source, per-picture and deliberately not sticky. Shared with MOTIF:
     # the crop is a property of the picture on screen, not of the job that consumes it.
@@ -134,6 +139,7 @@ _PERSISTED_IMAGE_KEYS = {
     "gamma": "image_gamma",
     "invert": "image_invert",
     "autocontrast": "image_autocontrast",
+    "enhance": "image_enhance",
     "show_travel": "image_show_travel",
     "wave_orientation": "wave_orientation",
     "wave_connect": "wave_connect",
@@ -216,6 +222,14 @@ ART_MODES = {
     )
 }
 MODE_HELP.update({name: module.HELP for name, module in ART_MODES.items()})
+
+# The three answers to "the plot came out as mud". Worded as what the picture IS, because
+# the operator knows that and does not know what normalize does to a coverage field.
+ENHANCE_HELP = {
+    "none": "The picture as it is. Gamma and autocontrast are yours to set.",
+    "line": "For drawings and scans: stretches the drawn coverage so thin line art reaches full black.",
+    "photo": "For photographs: crops flat bars, flattens the lighting so faces keep features, autocontrast off.",
+}
 
 
 # The quality fader, slowest last. Every row below is indexed by the same position, so a
@@ -671,6 +685,24 @@ def build_sections(
                     on_change=lambda e: set_field("autocontrast", bool(e.value)),
                 ).tooltip("Off for fabric photos: on, it stretches weave texture into ink.")
 
+            enhance_help = helper_text(ENHANCE_HELP[str(STATE["enhance"])])
+
+            def _set_enhance(event: Any) -> None:
+                choice = str(event.value)
+                # The switch is set rather than hidden or ignored: "photo" needs autocontrast
+                # off, and an override the operator cannot see is how a knob starts lying.
+                if choice == "photo" and bool(STATE["autocontrast"]):
+                    ctx.fields["image_autocontrast"].set_value(False)
+                set_field("enhance", choice)
+                enhance_help.set_text(ENHANCE_HELP[choice])
+
+            ctx.fields["image_enhance"] = oracle.select(
+                list(ENHANCE_HELP),
+                value=STATE["enhance"],
+                label="Enhance",
+                on_change=_set_enhance,
+            )
+
             with oracle.toolbar(full_width=True) as wave_controls:
                 ctx.fields["wave_orientation"] = oracle.select(
                     ["horizontal", "vertical"],
@@ -729,7 +761,7 @@ def build_sections(
             # The crop is applied first and the aspect measured after it: cropping to a
             # detail changes the shape of what is being fitted, and measuring the uncropped
             # file would fit a box the picture no longer has.
-            source = cropped_bytes()
+            source = prepared_bytes()
             art_w, art_h = fit_box(image_aspect(source), float(STATE["width_mm"]), float(STATE["height_mm"]))
             polylines = image_to_polylines(
                 source,
@@ -739,10 +771,10 @@ def build_sections(
                 cell_mm=float(STATE["cell_mm"]),
                 gamma=float(STATE["gamma"]),
                 invert=bool(STATE["invert"]),
-                autocontrast=bool(STATE["autocontrast"]),
                 max_segments=quality_max_segments(str(STATE["quality"])),
                 lift_budget=int(STATE["lift_budget"]),
                 min_stroke_mm=ctx.settings.pen_width_mm * 2.0,
+                **enhance_kwargs(),
                 **pen_param,
                 **wave_param,
                 **flow_param,
@@ -1005,23 +1037,65 @@ def cropped_bytes() -> bytes:
     return crop_image(bytes(STATE["bytes"]), crop)
 
 
+# A 25px Gaussian over a phone photo is the slowest thing on the preview path, and every
+# knob below it -- mode, cell, gamma, quality -- re-renders through it.
+# ponytail: two entries is the picture on screen and the one before it; raise it if the
+# operator starts flipping between more.
+@lru_cache(maxsize=2)
+def _filtered(data: bytes) -> bytes:
+    return photo_filter(data)
+
+
+def prepared_bytes() -> bytes:
+    """The cropped picture, with the enhancement the operator chose already applied.
+
+    One seam for both consumers and for the aspect measurement: photo_filter crops the
+    letterbox bars off, which changes the shape being fitted, so measuring before it would
+    fit a box the picture no longer has.
+    """
+    source = cropped_bytes()
+    if str(STATE["enhance"]) != "photo" or not source:
+        return source
+    try:
+        return _filtered(source)
+    except (OSError, ValueError):
+        # An unreadable picture is the converter's error to report, with its message.
+        return source
+
+
+def enhance_kwargs() -> dict[str, Any]:
+    """What the chosen enhancement means to image_to_polylines.
+
+    `normalize` stretches the coverage field the averaging produced, which line art does
+    not fill; autocontrast stretches the IMAGE, which lifts weave and JPEG noise into ink
+    and is why the photo path turns it off. GRID has hardcoded this pairing since it was
+    learned on a group photo (blocks/gui/workspaces/grid.py).
+    """
+    enhance = str(STATE["enhance"])
+    if enhance == "photo":
+        return {"autocontrast": False, "normalize": True}
+    if enhance == "line":
+        return {"autocontrast": bool(STATE["autocontrast"]), "normalize": True}
+    return {"autocontrast": bool(STATE["autocontrast"]), "normalize": False}
+
+
 def build_motif_svg() -> tuple[str, int, int]:
     """Trace the CREATE picture into a motif SVG. Returns (svg, strokes, points).
 
-    The picture, the crop and the tone knobs come from STATE: a motif is the same picture,
-    so a second set of the same knobs only bought two ways to be wrong. Mode and cell stay
-    MOTIF's, because they are answers about the 100 mm unit box, not about the picture.
+    The picture, the crop, the enhancement and the tone knobs come from STATE: a motif is
+    the same picture, so a second set of the same knobs only bought two ways to be wrong.
+    The crop is already inside prepared_bytes(), which is why no crop is passed here. Mode
+    and cell stay MOTIF's, because they are answers about the 100 mm unit box.
     """
     polylines = image_to_motif_polylines(
-        bytes(STATE["bytes"]),
+        prepared_bytes(),
         mode=str(MOTIF_STATE["mode"]),
-        crop=image_crop(),
         cell_mm=float(MOTIF_STATE["cell_mm"]),
         gamma=float(STATE["gamma"]),
         invert=bool(STATE["invert"]),
-        autocontrast=bool(STATE["autocontrast"]),
         despeckle_mm=float(MOTIF_STATE["despeckle_mm"]),
         simplify_mm=float(MOTIF_STATE["simplify_mm"]),
+        **enhance_kwargs(),
     )
     return motif_svg(polylines), len(polylines), sum(len(p) for p in polylines)
 

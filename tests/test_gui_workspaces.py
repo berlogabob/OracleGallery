@@ -325,6 +325,37 @@ def test_motif_card_reports_a_bad_crop_instead_of_raising(monkeypatch: pytest.Mo
         image_workspace.STATE.update(previous)
 
 
+def test_photo_enhance_crops_the_bars_and_turns_autocontrast_off() -> None:
+    """GRID's pairing, now reachable from IMAGE: bars cropped, lighting flattened,
+    autocontrast off because it lifts JPEG noise into ink on a photograph.
+
+    The bars are the visible half of it -- a 200x120 picture inside 200x200 of black is
+    what a phone screenshot of a photo looks like, and every tone mode filled those bars
+    with ink before the filter existed. The crop lands on the disc's own 61 rows, not on
+    the 120 of the band: a flat edge row is a bar whatever colour it is, which is what
+    makes the filter survive white-bar and transparent-bar versions of the same photo.
+    """
+    image = Image.new("L", (200, 200), 0)
+    ImageDraw.Draw(image).rectangle((0, 40, 199, 159), fill=255)
+    ImageDraw.Draw(image).ellipse((60, 70, 140, 130), fill=40)
+    previous = dict(image_workspace.STATE)
+    try:
+        image_workspace.STATE.update({"name": "photo.png", "bytes": _to_png(image), "enhance": "none"})
+        assert image_workspace.prepared_bytes() == image_workspace.STATE["bytes"]
+        assert image_workspace.enhance_kwargs() == {"autocontrast": True, "normalize": False}
+
+        image_workspace.STATE["enhance"] = "line"
+        assert image_workspace.enhance_kwargs() == {"autocontrast": True, "normalize": True}
+
+        image_workspace.STATE["enhance"] = "photo"
+        assert image_workspace.enhance_kwargs() == {"autocontrast": False, "normalize": True}
+        with Image.open(io.BytesIO(image_workspace.prepared_bytes())) as filtered:
+            assert filtered.height == 61, "every flat edge row goes; the disc's rows stay"
+    finally:
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
+
+
 def test_crop_reaches_both_the_image_render_and_the_motif(monkeypatch: pytest.MonkeyPatch) -> None:
     """The crop is the picture's, not the job's: one box, both consumers.
 

@@ -81,6 +81,7 @@ class GuiDefaults(TypedDict):
     image_gamma: float
     image_invert: bool
     image_autocontrast: bool
+    image_enhance: str
     image_show_travel: bool
     wave_orientation: str
     wave_connect: bool
@@ -235,6 +236,10 @@ GUI_DEFAULTS: GuiDefaults = {
     # image_to_polylines defaults this on; spelled out here because MOTIF's fabric photos
     # are the case that needs it off, and the knob is now shared.
     "image_autocontrast": True,
+    # none | line | photo. GRID learned on a group photo that a photograph needs the bars
+    # cropped, the lighting flattened and autocontrast OFF, while line art needs the
+    # coverage field stretched instead; "none" is what IMAGE did before it could say so.
+    "image_enhance": "none",
     "image_show_travel": True,
     "wave_orientation": "horizontal",
     "wave_connect": False,
@@ -338,6 +343,7 @@ class GuiSettings:
     image_gamma: float = GUI_DEFAULTS["image_gamma"]
     image_invert: bool = GUI_DEFAULTS["image_invert"]
     image_autocontrast: bool = GUI_DEFAULTS["image_autocontrast"]
+    image_enhance: str = GUI_DEFAULTS["image_enhance"]
     image_show_travel: bool = GUI_DEFAULTS["image_show_travel"]
     wave_orientation: str = GUI_DEFAULTS["wave_orientation"]
     wave_connect: bool = GUI_DEFAULTS["wave_connect"]
