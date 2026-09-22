@@ -75,6 +75,33 @@ def test_load_bank_skips_broken_svg_instead_of_failing(bank_dir: Path) -> None:
     assert sorted(bank.load_bank(bank_dir)) == ["square", "wide"]
 
 
+def test_unreadable_motifs_names_what_load_bank_swallowed(bank_dir: Path) -> None:
+    # The GUI's bank card is the only place a broken file can be seen, since the
+    # sketch draws an incomplete bank and a whole one identically.
+    (bank_dir / "broken.svg").write_text("not xml at all", encoding="utf-8")
+    assert bank.unreadable_motifs(bank_dir) == ["broken"]
+
+
+def test_rename_sanitises_and_avoids_collisions(bank_dir: Path) -> None:
+    assert bank.rename_motif("square", "shirt 2026/08/05 tribal", bank_dir=bank_dir) == "shirt-2026-08-05-tribal"
+    # Renaming onto an existing name must not overwrite it.
+    assert bank.rename_motif("shirt-2026-08-05-tribal", "wide", bank_dir=bank_dir) == "wide-2"
+    assert bank.list_motifs(bank_dir) == ["wide", "wide-2"]
+
+
+def test_delete_moves_the_motif_out_of_the_bank(bank_dir: Path) -> None:
+    target = bank.delete_motif("square", bank_dir=bank_dir)
+    assert target.parent == bank_dir / ".removed" and target.exists()
+    assert bank.list_motifs(bank_dir) == ["wide"]
+
+
+def test_rename_and_delete_reject_unknown_names(bank_dir: Path) -> None:
+    with pytest.raises(ValueError):
+        bank.rename_motif("absent", "x", bank_dir=bank_dir)
+    with pytest.raises(ValueError):
+        bank.delete_motif("absent", bank_dir=bank_dir)
+
+
 def test_shipped_bank_loads() -> None:
     motifs = bank.load_bank()
     assert motifs, "assets/patterns should ship a starter set"

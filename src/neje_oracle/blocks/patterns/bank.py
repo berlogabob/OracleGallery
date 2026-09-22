@@ -63,6 +63,81 @@ def load_bank(bank_dir: Path | None = None) -> dict[str, Polylines]:
     return motifs
 
 
+def unreadable_motifs(bank_dir: Path | None = None) -> list[str]:
+    """Files in the bank that do not load back as geometry.
+
+    load_bank() swallows them on purpose -- one bad SVG must not take the sketch down --
+    which means a broken file and a working bank look identical from the canvas. This is
+    what lets the GUI say "6 motifs, 1 unreadable" instead of quietly showing five.
+    """
+    directory = bank_dir or BANK_DIR
+    return sorted(set(list_motifs(directory)) - set(load_bank(directory)))
+
+
+def _safe_stem(name: str) -> str:
+    """A typed-in label as a filename stem. Same character class as _safe_upload_stem in
+    blocks/gcode/direct_svg.py, inlined because it is one regex and the fallback differs.
+
+    Deliberately NOT Path(name).stem: this is a label, not a path, and .stem would silently
+    throw away everything before a slash -- "shirt 2026/08/05 tribal" arrives as "05 tribal".
+    Sanitizing the whole string keeps the name and still cannot escape the directory, since
+    the result has no separators left.
+    """
+    raw = name.strip()
+    if raw.lower().endswith(".svg"):
+        raw = raw[:-4]
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip("._-") or "motif"
+
+
+def _free_path(directory: Path, stem: str) -> Path:
+    """`stem`.svg, suffixed until it does not collide. The stem is user-facing and
+    list_motifs() order is what the sketch's bank generator walks round-robin, so a
+    suffix beats a timestamp."""
+    target = directory / f"{stem}.svg"
+    counter = 2
+    while target.exists():
+        target = directory / f"{stem}-{counter}.svg"
+        counter += 1
+    return target
+
+
+def rename_motif(old: str, new: str, *, bank_dir: Path | None = None) -> str:
+    """Rename one motif, returning the name it ended up with.
+
+    Names come from photo filenames more often than not, so the bank fills up with
+    IMG_2938 unless it can be corrected in the place the motif is looked at.
+    """
+    directory = bank_dir or BANK_DIR
+    matches = [path for path in directory.glob("*.[sS][vV][gG]") if path.stem == old]
+    if not matches:
+        raise ValueError(f"unknown motif {old!r}")
+    stem = _safe_stem(new)
+    if stem == old:
+        return old
+    target = _free_path(directory, stem)
+    matches[0].rename(target)
+    return target.stem
+
+
+def delete_motif(name: str, *, bank_dir: Path | None = None) -> Path:
+    """Move a motif out of the bank, into `.removed/`. Returns where it went.
+
+    Moved rather than unlinked: a motif is a traced photo that took a crop, a mode and a
+    despeckle setting to get right, and the bank is a folder an operator edits live. The
+    glob only looks in the bank directory itself, so a dotted subfolder is out of the bank
+    by the only definition that matters here.
+    """
+    directory = bank_dir or BANK_DIR
+    matches = [path for path in directory.glob("*.[sS][vV][gG]") if path.stem == name]
+    if not matches:
+        raise ValueError(f"unknown motif {name!r}")
+    attic = directory / ".removed"
+    attic.mkdir(parents=True, exist_ok=True)
+    target = _free_path(attic, matches[0].stem)
+    matches[0].rename(target)
+    return target
+
+
 def save_motif(name: str, svg_text: str, *, bank_dir: Path | None = None) -> Path:
     """Write an SVG into the bank under a safe name, and prove it loads back.
 
@@ -71,27 +146,7 @@ def save_motif(name: str, svg_text: str, *, bank_dir: Path | None = None) -> Pat
     """
     directory = bank_dir or BANK_DIR
     directory.mkdir(parents=True, exist_ok=True)
-
-    # Same character class as _safe_upload_stem in blocks/gcode/direct_svg.py. Inlined
-    # rather than imported: it is one regex, and the fallback name differs.
-    #
-    # Deliberately NOT Path(name).stem: this is a typed-in label, not a path, and .stem
-    # would silently throw away everything before a slash -- "shirt 2026/08/05 tribal"
-    # arrives as "05 tribal". Sanitizing the whole string keeps the name and still
-    # cannot escape the directory, since the result has no separators left.
-    raw = name.strip()
-    if raw.lower().endswith(".svg"):
-        raw = raw[:-4]
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip("._-") or "motif"
-
-    # Suffix rather than timestamp: the stem is user-facing, and list_motifs() order is
-    # what the sketch's bank generator walks round-robin.
-    target = directory / f"{safe}.svg"
-    counter = 2
-    while target.exists():
-        target = directory / f"{safe}-{counter}.svg"
-        counter += 1
-
+    target = _free_path(directory, _safe_stem(name))
     target.write_text(svg_text, encoding="utf-8")
     try:
         motif_polylines(target.stem, directory)

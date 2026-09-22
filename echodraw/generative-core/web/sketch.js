@@ -323,6 +323,12 @@ const MOTIFS = {
 // ============================================================================
 let BANK_NAMES = []; // sorted; the bank generator walks these in order
 
+// Why a note rather than a console line: the canvas is the only surface the operator
+// watches, and an empty bank, a failed fetch and a healthy bank all draw a full field.
+// The `bank` generator falls back to procedural motifs at mix 0 (see below), so nothing
+// on screen distinguishes six motifs from none. Shown on the status line.
+let BANK_NOTE = '';
+
 function bankMotifFn(polylines) {
   return function(rng, cx, cy, size) {
     return polylines.map(function(points) {
@@ -345,6 +351,7 @@ function setBank(motifs) {
   for (const name of Object.keys(MOTIFS)) delete MOTIFS[name];
   Object.assign(MOTIFS, BUILTIN_MOTIFS);
   BANK_NAMES = Object.keys(motifs).sort();
+  BANK_NOTE = BANK_NAMES.length ? '' : 'pattern bank empty';
   for (const name of BANK_NAMES) {
     MOTIFS[name] = bankMotifFn(motifs[name]);
   }
@@ -354,7 +361,10 @@ function loadBank() {
   return fetch('/api/patterns/bank')
     .then(function(r) { return r.json(); })
     .then(function(payload) {
-      if (!payload || !payload.ok) return;
+      if (!payload || !payload.ok) {
+        BANK_NOTE = 'pattern bank unreadable';
+        return;
+      }
       setBank(payload.motifs || {});
       if (payload.canvas) {
         setCanvasMm(payload.canvas.width_mm, payload.canvas.height_mm);
@@ -362,7 +372,11 @@ function loadBank() {
       regenerateAll();
       redraw();
     })
-    .catch(function() { /* bank unavailable; built-in motifs still work */ });
+    .catch(function() {
+      // Built-in motifs still work, so the sketch keeps drawing -- but silently, which
+      // is what made a stale or missing bank impossible to spot.
+      BANK_NOTE = 'pattern bank unavailable';
+    });
 }
 
 function rotateShapes(shapes, cx, cy, radians) {
@@ -1143,6 +1157,9 @@ function regenerateAll() {
     let text = `${shapes.length} shapes, ${layers.length} layers`;
     if (subsampled) {
       text += ' (subsampled)';
+    }
+    if (BANK_NOTE) {
+      text += ' — ' + BANK_NOTE;
     }
     statusEl.textContent = text;
   }
