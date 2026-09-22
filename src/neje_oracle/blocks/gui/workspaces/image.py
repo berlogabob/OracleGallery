@@ -10,7 +10,9 @@ from typing import Any
 from nicegui import ui
 
 from ....blocks.imaging.art import ascii as art_ascii
+from ....blocks.imaging.art import barcode as art_barcode
 from ....blocks.imaging.art import bricks as art_bricks
+from ....blocks.imaging.art import circlepack as art_circlepack
 from ....blocks.imaging.art import circuit as art_circuit
 from ....blocks.imaging.art import dotdot as art_dotdot
 from ....blocks.imaging.art import edges as art_edges
@@ -21,6 +23,7 @@ from ....blocks.imaging.art import lowpoly as art_lowpoly
 from ....blocks.imaging.art import matrix as art_matrix
 from ....blocks.imaging.art import maze as art_maze
 from ....blocks.imaging.art import moire as art_moire
+from ....blocks.imaging.art import quadtree as art_quadtree
 from ....blocks.imaging.art import ridgeline as art_ridgeline
 from ....blocks.imaging.art import rings as art_rings
 from ....blocks.imaging.art import ripple as art_ripple
@@ -28,6 +31,7 @@ from ....blocks.imaging.art import scales as art_scales
 from ....blocks.imaging.art import scribble as art_scribble
 from ....blocks.imaging.art import shatter as art_shatter
 from ....blocks.imaging.art import stitch as art_stitch
+from ....blocks.imaging.art import stringart as art_stringart
 from ....blocks.imaging.art import sunburst as art_sunburst
 from ....blocks.imaging.art import truchet as art_truchet
 from ....blocks.imaging.art import tsp as art_tsp
@@ -219,6 +223,10 @@ ART_MODES = {
         art_bricks,
         art_stitch,
         art_guilloche,
+        art_barcode,
+        art_quadtree,
+        art_circlepack,
+        art_stringart,
     )
 }
 MODE_HELP.update({name: module.HELP for name, module in ART_MODES.items()})

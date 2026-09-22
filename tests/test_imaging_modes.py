@@ -111,6 +111,10 @@ def test_all_modes_registered() -> None:
         "truchet",
         "rings",
         "lowpoly",
+        "barcode",
+        "quadtree",
+        "circlepack",
+        "stringart",
     }
 
 
@@ -140,7 +144,11 @@ def test_monotonic_ink_vs_brightness() -> None:
         # VERTICAL STRIPS: its outermost strips are reached by only a narrow wedge of rays, so
         # the darkest strip reads slightly under its neighbour even though ink falls to zero
         # across the sheet. tests/test_mode_sunburst.py measures it with that geometry in mind.
-        if name in ("trace", "edges", "ridgeline", "dotdot", "sunburst"):
+        # stringart draws one thread from rim to rim: ink lands along a chord's whole length,
+        # including the paper it only crosses to reach the dark side, so a vertical strip
+        # counts through-traffic. tests/test_mode_stringart.py measures where the thread
+        # spends its length instead, which is the same claim without the geometry in the way.
+        if name in ("trace", "edges", "ridgeline", "dotdot", "sunburst", "stringart"):
             continue
         if name == "halftone":
             polylines = mode(tone, angle_deg=0.0)
