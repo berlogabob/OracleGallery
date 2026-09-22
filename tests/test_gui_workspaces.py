@@ -291,37 +291,68 @@ def test_a_wide_picture_keeps_its_shape_on_the_image_tab(monkeypatch: pytest.Mon
         image_workspace.STATE.update(previous)
 
 
-def test_motif_import_card_traces_a_real_preview(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Same trick as the preview test above: build() calls the card's refresh() once at
-    the end, so pre-seeding MOTIF_STATE runs the real crop -> trace -> unit-box -> svg
-    pipeline rather than the empty-state branch.
+def test_motif_card_traces_the_image_tabs_picture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Same trick as the preview test above: build() calls the card's refresh() once at the
+    end, so seeding STATE runs the real crop -> trace -> unit-box -> svg pipeline rather
+    than the empty-state branch. Seeding STATE and not MOTIF_STATE is the point: MOTIF has
+    no picture of its own any more.
     """
     image = Image.new("L", (200, 200), 255)
     ImageDraw.Draw(image).ellipse((60, 60, 140, 140), fill=0)
-    previous = dict(image_workspace.MOTIF_STATE)
+    previous = dict(image_workspace.STATE)
     try:
-        image_workspace.MOTIF_STATE.update({"name": "glyph.png", "bytes": _to_png(image)})
+        image_workspace.STATE.update({"name": "glyph.png", "bytes": _to_png(image)})
         ctx = _new_ctx(monkeypatch)
         with ui.column():
             image_workspace.build_sections(ctx)
         assert "<svg" in image_workspace.MOTIF_STATE["svg"]
     finally:
-        image_workspace.MOTIF_STATE.clear()
-        image_workspace.MOTIF_STATE.update(previous)
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
 
 
-def test_motif_import_card_reports_a_bad_crop_instead_of_raising(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_motif_card_reports_a_bad_crop_instead_of_raising(monkeypatch: pytest.MonkeyPatch) -> None:
     """A crop landing on blank paper is a normal operator outcome, not a crash."""
-    previous = dict(image_workspace.MOTIF_STATE)
+    previous = dict(image_workspace.STATE)
     try:
-        image_workspace.MOTIF_STATE.update({"name": "blank.png", "bytes": _to_png(Image.new("L", (200, 200), 255))})
+        image_workspace.STATE.update({"name": "blank.png", "bytes": _to_png(Image.new("L", (200, 200), 255))})
         ctx = _new_ctx(monkeypatch)
         with ui.column():
             image_workspace.build_sections(ctx)
         assert image_workspace.MOTIF_STATE["svg"] == ""
     finally:
-        image_workspace.MOTIF_STATE.clear()
-        image_workspace.MOTIF_STATE.update(previous)
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
+
+
+def test_crop_reaches_both_the_image_render_and_the_motif(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The crop is the picture's, not the job's: one box, both consumers.
+
+    The disc sits in the left half only, so the crop decides whether there is anything to
+    trace at all: the left half is a motif, the right half is blank paper and takes the
+    "no motif found" branch.
+    """
+    image = Image.new("L", (200, 200), 255)
+    ImageDraw.Draw(image).ellipse((20, 60, 80, 140), fill=0)
+    previous = dict(image_workspace.STATE)
+    try:
+        image_workspace.STATE.update({"name": "half.png", "bytes": _to_png(image)})
+        # The black half: both sides find ink.
+        image_workspace.STATE.update(crop_left=0.0, crop_width=50.0)
+        ctx = _new_ctx(monkeypatch)
+        with ui.column():
+            image_workspace.build_sections(ctx)
+        assert "<svg" in image_workspace.MOTIF_STATE["svg"]
+        assert len(image_workspace.cropped_bytes()) != len(image_workspace.STATE["bytes"])
+
+        # The white half: nothing to trace, reported rather than raised.
+        image_workspace.STATE.update(crop_left=50.0, crop_width=50.0)
+        with ui.column():
+            image_workspace.build_sections(ctx)
+        assert image_workspace.MOTIF_STATE["svg"] == ""
+    finally:
+        image_workspace.STATE.clear()
+        image_workspace.STATE.update(previous)
 
 
 def test_every_gui_control_survives_a_settings_round_trip(monkeypatch: pytest.MonkeyPatch) -> None:

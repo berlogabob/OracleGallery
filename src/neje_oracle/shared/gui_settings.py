@@ -80,6 +80,7 @@ class GuiDefaults(TypedDict):
     image_detail: float
     image_gamma: float
     image_invert: bool
+    image_autocontrast: bool
     image_show_travel: bool
     wave_orientation: str
     wave_connect: bool
@@ -89,11 +90,11 @@ class GuiDefaults(TypedDict):
     sheet_gap_mm: float
     sheet_padding_mm: float
     sheet_shape: str
+    # MOTIF traces IMAGE's picture through IMAGE's tone knobs. What it keeps is what the
+    # 100 mm unit box makes a different question: IMAGE's trace at its 0.10 mm pitch is
+    # 223k segments on a motif, and "trace" finds no outline at all at a motif pitch.
     motif_mode: str
     motif_cell_mm: float
-    motif_gamma: float
-    motif_autocontrast: bool
-    motif_invert: bool
     motif_despeckle_mm: float
     motif_simplify_mm: float
 
@@ -148,7 +149,6 @@ type NumericGuiDefaultKey = Literal[
     "sheet_gap_mm",
     "sheet_padding_mm",
     "motif_cell_mm",
-    "motif_gamma",
     "motif_despeckle_mm",
     "motif_simplify_mm",
 ]
@@ -221,8 +221,7 @@ GUI_DEFAULTS: GuiDefaults = {
     "direct_svg_origin_x_mm": 25.0,
     "direct_svg_origin_y_mm": 25.0,
     # Mirrors of image.py's STATE / SHEET_STATE / MOTIF_STATE defaults, promoted per the note
-    # there that they should move here once operators asked for sticky values. "contour" is
-    # patterns.ingest.DEFAULT_MODE, spelled out so shared/ keeps depending on nothing in blocks/.
+    # there that they should move here once operators asked for sticky values.
     "image_mode": "trace",
     "image_quality": "fine",
     "lift_budget": 1024,
@@ -233,6 +232,9 @@ GUI_DEFAULTS: GuiDefaults = {
     "image_detail": 1.0,
     "image_gamma": 1.0,
     "image_invert": False,
+    # image_to_polylines defaults this on; spelled out here because MOTIF's fabric photos
+    # are the case that needs it off, and the knob is now shared.
+    "image_autocontrast": True,
     "image_show_travel": True,
     "wave_orientation": "horizontal",
     "wave_connect": False,
@@ -242,11 +244,10 @@ GUI_DEFAULTS: GuiDefaults = {
     "sheet_gap_mm": 5.0,
     "sheet_padding_mm": 2.0,
     "sheet_shape": "rect",
+    # "contour" is patterns.ingest.DEFAULT_MODE, spelled out so shared/ keeps depending on
+    # nothing in blocks/.
     "motif_mode": "contour",
     "motif_cell_mm": 0.8,
-    "motif_gamma": 1.0,
-    "motif_autocontrast": True,
-    "motif_invert": False,
     "motif_despeckle_mm": 1.5,
     "motif_simplify_mm": 0.4,
 }
@@ -336,6 +337,7 @@ class GuiSettings:
     image_detail: float = GUI_DEFAULTS["image_detail"]
     image_gamma: float = GUI_DEFAULTS["image_gamma"]
     image_invert: bool = GUI_DEFAULTS["image_invert"]
+    image_autocontrast: bool = GUI_DEFAULTS["image_autocontrast"]
     image_show_travel: bool = GUI_DEFAULTS["image_show_travel"]
     wave_orientation: str = GUI_DEFAULTS["wave_orientation"]
     wave_connect: bool = GUI_DEFAULTS["wave_connect"]
@@ -347,9 +349,6 @@ class GuiSettings:
     sheet_shape: str = GUI_DEFAULTS["sheet_shape"]
     motif_mode: str = GUI_DEFAULTS["motif_mode"]
     motif_cell_mm: float = GUI_DEFAULTS["motif_cell_mm"]
-    motif_gamma: float = GUI_DEFAULTS["motif_gamma"]
-    motif_autocontrast: bool = GUI_DEFAULTS["motif_autocontrast"]
-    motif_invert: bool = GUI_DEFAULTS["motif_invert"]
     motif_despeckle_mm: float = GUI_DEFAULTS["motif_despeckle_mm"]
     motif_simplify_mm: float = GUI_DEFAULTS["motif_simplify_mm"]
     # CREATE -> GRID. The GRID pane writes these straight onto settings and never registers
