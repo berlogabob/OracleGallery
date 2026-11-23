@@ -21,12 +21,6 @@ from ...shared.gui_settings import (
 )
 from ...shared.models import SystemMode
 from ...shared.store import OracleRuntimeStore
-from ...shared.symbols import (
-    load_symbol_scales as load_symbol_scales,
-)
-from ...shared.symbols import (
-    save_symbol_scales as save_symbol_scales,
-)
 from ...shared.z_positions import PULSE_CEILING_US, PULSE_FLOOR_US, ZPulseRange, pulse_for_z
 from .support import default_gui_settings_path
 

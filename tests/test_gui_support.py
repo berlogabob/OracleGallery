@@ -16,9 +16,7 @@ from neje_oracle.blocks.gcode.layout import layout_capacity
 from neje_oracle.blocks.gui.preview import PREVIEW_PX_PER_MM, build_preview_svg, build_realtime_preview_svg
 from neje_oracle.blocks.gui.settings_io import (
     load_gui_settings,
-    load_symbol_scales,
     save_gui_settings,
-    save_symbol_scales,
 )
 from neje_oracle.blocks.gui.support import (
     _field_or_default,
@@ -29,6 +27,7 @@ from neje_oracle.blocks.gui.support import (
 from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.shared.gui_settings import GUI_DEFAULTS, GuiSettings, sync_z_from_pulses
 from neje_oracle.shared.models import RuntimeStatus, SystemMode
+from neje_oracle.shared.symbols import load_symbol_scales, save_symbol_scales
 
 SIMPLE_SYMBOL = (
     "<svg width='800' height='800' xmlns='http://www.w3.org/2000/svg'>"

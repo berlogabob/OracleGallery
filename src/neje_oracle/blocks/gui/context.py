@@ -28,7 +28,7 @@ from ...shared.gui_settings import GUI_DEFAULTS, gui_settings_to_plotter_config,
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.modes import mode_policy
 from ...shared.origin_markers import ALL_ORIGINS
-from ...shared.symbols import list_base_symbols
+from ...shared.symbols import list_base_symbols, load_symbol_scales, save_symbol_scales
 from ...shared.z_positions import ZPositions, pulse_for_z, real_mm_between, z_for_pulse
 from ..firebase.queue_status import read_queue_status
 from ..gcode.dry_run import generate_dry_run_sheet
@@ -38,10 +38,8 @@ from ..gcode.sampling import compute_effective_sample_step
 from .preview import build_preview_svg, build_realtime_preview_svg
 from .settings_io import (
     load_gui_settings,
-    load_symbol_scales,
     save_gui_settings,
     save_oracle_plotter_config,
-    save_symbol_scales,
 )
 from .support import (
     _field_or_default,

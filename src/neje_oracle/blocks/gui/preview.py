@@ -25,13 +25,12 @@ from ...shared.origin_markers import (
     marker_position_for_origin,
     normalize_origin,
 )
-from ...shared.symbols import list_fillable_symbols
+from ...shared.symbols import list_fillable_symbols, load_symbol_scales
 from ..gcode.layout import _build_layout_for_settings, layout_capacity
 from ..gcode.svg_gcode import ring_radii_mm, symbol_diameter_for_cell
 from ..symbols.session_generator import build_variant_svg
 from ..symbols.svg_normalizer import CANONICAL_BASE_DIAMETER, CANONICAL_CANVAS_SIZE, read_normalized_svg_metadata
 from . import tokens
-from .settings_io import load_symbol_scales
 
 PREVIEW_PX_PER_MM = 2.0
 
