@@ -8,12 +8,12 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 
 | Metric | Command | Baseline | Final |
 |---|---|---|---|
-| src lines | `git ls-files src \| xargs wc -l \| tail -1` | 29868 | |
-| tests | `uv run pytest -q` | 846 passed, 0 failed | |
-| coverage | `uv run coverage report` (gate >= 79) | 84% | |
-| dead-code hits | `uvx vulture src scripts --min-confidence 60 \| grep -v -cE 'unused (variable\|attribute)'` | 20 | |
-| ruff | `uv run ruff check . && uv run ruff format --check .` | clean | |
-| mypy | `uv run mypy src` | 12 errors in 5 files (pre-existing; gate: no more than 12) | |
+| src lines | `git ls-files src \| xargs wc -l \| tail -1` | 29868 | 29721 (-147) |
+| tests | `uv run pytest -q` | 846 passed, 0 failed | 846 passed, 0 failed |
+| coverage | `uv run coverage report` (gate >= 79) | 84% | 84%, gate passes |
+| dead-code hits | `uvx vulture src scripts --min-confidence 60 \| grep -v -cE 'unused (variable\|attribute)'` | 20 | 16 (-4) |
+| ruff | `uv run ruff check . && uv run ruff format --check .` | clean | clean |
+| mypy | `uv run mypy src` | 12 errors in 5 files (pre-existing; gate: no more than 12) | 12 errors in 5 files (unchanged) |
 
 ## Tasks
 
@@ -37,12 +37,13 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 | M3 | `capture_z` in `gui/context.py` | Hardware path with one other reference |
 | M4 | `ModePolicy.dry_run` / `real_output_required` are constant across modes | Removing them changes a public shape |
 | M5 | 4-line `start_*.command` wrappers | Referenced by launcher installers; 8 lines |
+| M6 | 4 of the 12 baseline mypy errors: `gui/context.py` ~284-288 reads `motif_gamma`, `motif_autocontrast`, `motif_invert`, which `GuiSettings` does not declare | Correctness, outside an over-engineering audit; needs a normal review. Present at cb6741d. |
 
 ## New issues found during the loops
 
 | | ID | Found in | Issue | Disposition | Done when | Commit |
 |---|---|---|---|---|---|---|
-| [ ] | N1 | T6a | `gui/settings_io.py` itself re-exports `load_symbol_scales` / `save_symbol_scales` from `shared/symbols.py` | MERGE | `grep -n "symbol_scales as" src/neje_oracle/blocks/gui/settings_io.py` = 0; importers use `shared.symbols`; pytest green | |
+| [x] | N1 | T6a | `gui/settings_io.py` itself re-exports `load_symbol_scales` / `save_symbol_scales` from `shared/symbols.py` | MERGE | `grep -n "symbol_scales as" src/neje_oracle/blocks/gui/settings_io.py` = 0; importers use `shared.symbols`; pytest green | e27da2f (grep 0; 92 tests; 5 gui modules import alone) |
 | [x] | N2 | T6a | `python -c "import neje_oracle.blocks.gui.preview"` alone fails with a circular ImportError; present at cb6741d, masked because `support` is always imported first | MERGE (expected to fall out of T6b) | that import exits 0 in a fresh process | aacfef4 (import exits 0) |
 
 ## Loop log
@@ -59,3 +60,14 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 | 6b | T6b, N2 | haiku | pass (aacfef4): 4 preview names re-pointed in 3 files, 27-line block deleted, support.py 272 -> 245; all five gui modules import alone; 120 tests pass, ruff clean, mypy 12. N2 closed. |
 | 6c | T6 | haiku | pass: 16 names re-pointed in 10 files, imports only. Worker ran rm -f on a mistyped path in the main checkout (.mypy_tail.txt); main checkout git status verified identical to session start. |
 | 7 | T7 | haiku | pass first try |
+| 8 | N1 | haiku | pass (e27da2f): 2 forwarding imports removed from settings_io, 3 importers re-pointed. Worker left 7 log files in /tmp; coordinator removed them. |
+| 9 | final gate | coordinator | 846 passed; coverage 84%; ruff clean; mypy 12; dead-code hits 16; src 29721. No BLOCKED rows. Open: M1-M6 (decisions), merge of `ponytail-cuts`, `graphify update .` after merge. |
+
+## Result
+
+All T and N rows are closed; none blocked. Against `cb6741d`, excluding `planning/`: 30 files changed, 59 insertions, 393
+deletions (src alone: 15 files, +25/-172). Three files removed (`gui/modes.py`, `realtime_preview/__init__.py`, its README),
+one duplicate asset removed, two files moved to `archive/`. `gui.preview` now imports on its own, which it did not before.
+
+Estimates that were off: the plan said about -130 src lines (actual -147), dead-code hits 19 to 15 (actual 20 to 16), and
+`shared/modes.py` <= 50 lines (actual 52).
