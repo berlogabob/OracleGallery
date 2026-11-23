@@ -31,6 +31,7 @@ from ...shared.origin_markers import ALL_ORIGINS
 from ...shared.z_positions import ZPositions, pulse_for_z, real_mm_between, z_for_pulse
 from ..firebase.queue_status import read_queue_status
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
+from .preview import build_preview_svg, build_realtime_preview_svg
 from .settings_io import (
     load_gui_settings,
     load_symbol_scales,
@@ -41,8 +42,6 @@ from .settings_io import (
 from .support import (
     GUI_DEFAULTS,
     _field_or_default,
-    build_preview_svg,
-    build_realtime_preview_svg,
     compute_effective_sample_step,
     generate_dry_run_sheet,
     generate_pen_cal_sheet,

@@ -10,6 +10,7 @@ import pytest
 from nicegui.elements.upload_files import SmallFileUpload
 
 from neje_oracle.blocks.firebase.queue_status import read_queue_status
+from neje_oracle.blocks.gui.preview import PREVIEW_PX_PER_MM, build_preview_svg, build_realtime_preview_svg
 from neje_oracle.blocks.gui.settings_io import (
     load_gui_settings,
     load_symbol_scales,
@@ -18,11 +19,8 @@ from neje_oracle.blocks.gui.settings_io import (
 )
 from neje_oracle.blocks.gui.support import (
     GUI_DEFAULTS,
-    PREVIEW_PX_PER_MM,
     GuiSettings,
     _field_or_default,
-    build_preview_svg,
-    build_realtime_preview_svg,
     create_direct_svg_print_job_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
@@ -559,7 +557,7 @@ def test_symbol_preview_draws_the_stored_geometry_untouched(tmp_path: Path) -> N
     session_generator from its own defaults. So the slider only ever changed the picture on
     screen. The preview now renders the symbol exactly as stored, which is what prints.
     """
-    from neje_oracle.blocks.gui.support import build_symbol_preview_svg
+    from neje_oracle.blocks.gui.preview import build_symbol_preview_svg
 
     root = _symbol_root(tmp_path)
     preview = build_symbol_preview_svg(

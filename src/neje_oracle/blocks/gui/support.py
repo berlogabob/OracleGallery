@@ -243,30 +243,3 @@ def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:
     user = sum(1 for item in items if item.get("source_kind") == "user")
     idle = len(items) - user
     return {"user": user, "idle": idle, "total": len(items)}
-
-
-# Preview-svg rendering moved to preview.py; re-exported so callers/tests keep
-# importing from `support`. Imported last so preview.py's own `from .support
-# import ...` sees a fully-populated module (avoids a circular-import failure).
-from .preview import (  # noqa: E402,F401
-    PREVIEW_PX_PER_MM,
-    LivePreviewItem,
-    _build_live_preview_svg,
-    _empty_preview_svg,
-    _live_preview_items,
-    _manifest_live_preview_item,
-    _manifest_preview_items,
-    _next_preview_ghost,
-    _pending_user_queue_count,
-    _placement_row_lookup,
-    _preview_image_size,
-    _preview_item_placement,
-    _preview_rotation_transform,
-    _preview_scale,
-    _preview_symbol_images,
-    _preview_symbol_index,
-    _svg_file_data_uri,
-    build_preview_svg,
-    build_realtime_preview_svg,
-    build_symbol_preview_svg,
-)

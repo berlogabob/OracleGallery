@@ -21,7 +21,7 @@ from pathlib import Path
 
 from neje_oracle.blocks.gcode.layout import _build_layout_for_settings
 from neje_oracle.blocks.gcode.svg_gcode import generate_sheet_gcode, ring_radii_mm
-from neje_oracle.blocks.gui.support import PREVIEW_PX_PER_MM, build_preview_svg
+from neje_oracle.blocks.gui.preview import PREVIEW_PX_PER_MM, build_preview_svg
 from neje_oracle.blocks.symbols.svg_normalizer import MAX_SCALE
 from neje_oracle.shared.gui_settings import GuiSettings, gui_settings_to_plotter_config
 from neje_oracle.shared.models import SheetItem
