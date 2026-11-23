@@ -6,4 +6,5 @@ Current contents:
 
 - exported chat / planning brief
 - screenshot of the earlier file structure
+- Grok chat exports from the ESP32 thermal-printer and button-bridge prototyping
 
