@@ -21,7 +21,7 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 |---|---|---|---|---|---|---|---|
 | [x] | T0 | Worktree, baseline, tracker, register rows | n/a | baseline filled, suite green | this commit | 29868 | 846 passed |
 | [x] | T1 | Delete `public_storage_url`, `default_filler_package_root`, `texture_to_svg`, `load_system_mode` | DELETE | `grep -rnw <name> src tests scripts` = 0 each; pytest, ruff green | 595b5fe | 29842 (-26) | greps 0/0/0/0; ruff clean; mypy 12; 198 passed |
-| [ ] | T2 | Delete `blocks/realtime_preview/` | DELETE | dir gone; `grep -rn realtime_preview src README.md RUNBOOK.md pyproject.toml` = 0; pytest green | | | |
+| [x] | T2 | Delete `blocks/realtime_preview/` | DELETE | dir gone; `grep -rn realtime_preview src README.md RUNBOOK.md pyproject.toml` = 0; pytest green | 27a5d85 | 29836 (-6) | dir gone; grep 0; ruff clean; 96 passed |
 | [ ] | T3 | Delete duplicate `assets/WebsiteWireframe/Oracle Website Wireframes _standalone_.html` | DELETE | surviving copy md5 `bb1a4d0f02fb3be88b3e52f39ca7c384`; no reference to removed name | | | |
 | [ ] | T4 | Remove `gui/modes.py`; importers use `shared.modes` | MERGE | file gone; `grep -rnE "gui\.modes\|from \.modes" src tests scripts` = 0; pytest green | | | |
 | [ ] | T5 | Collapse `mode_policy()` to one return | MERGE | `test_gui_modes.py`, `test_system_checks.py` pass unedited; `shared/modes.py` <= 50 lines | | | |
@@ -49,3 +49,4 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 |---|---|---|---|
 | 0 | T0 | coordinator | baseline recorded |
 | 1 | T1 | haiku | pass first try; 2 orphaned imports in texture.py removed with it |
+| 2 | T2 | haiku | pass first try; 3 doc mentions removed, roadmap sentence kept |
