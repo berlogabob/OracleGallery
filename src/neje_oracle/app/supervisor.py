@@ -164,7 +164,17 @@ class SupervisorService:
     def reset_run_baseline(self) -> ComponentState:
         started_at = datetime.now(tz=UTC)
         self.runtime_store.save_run_started_at(started_at)
-        self.runtime_store.save_plotter_readiness(PlotterReadinessState(message="New run baseline created"))
+        # A new run is a queue boundary, not a machine one: G54 lives in controller flash,
+        # so work zero and any homing requirement carry over instead of resetting.
+        previous = self.runtime_store.load_plotter_readiness()
+        self.runtime_store.save_plotter_readiness(
+            PlotterReadinessState(
+                work_zero_set=previous.work_zero_set,
+                plotter_ready=previous.plotter_ready,
+                homing_required=previous.homing_required,
+                message="New run baseline created",
+            )
+        )
         skipped = 0
         try:
             skipped = self.remote_factory().skip_pending_before(started_at)

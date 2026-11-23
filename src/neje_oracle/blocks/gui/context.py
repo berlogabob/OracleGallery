@@ -685,8 +685,16 @@ class GuiContext:
         self.pull_settings_from_fields()
         self._save_settings()
         await run.io_bound(self.supervisor.start_system, gui_settings_to_plotter_config(self.settings))
-        ui.notify("System supervisor started in safe mode", color="positive")
-        self.refresh_status()
+        # START SYSTEM means print: the queue runs until the operator presses STOP.
+        # start_print still refuses (and says why) without work zero, homing or an Idle controller.
+        await self.start_print()
+
+    async def _start_print_if_system_running(self) -> None:
+        """Work zero was the last blocker once the system is up; don't make the operator ask twice."""
+        system = self.supervisor.runtime_store.load_component_state("system")
+        control = self.supervisor.runtime_store.load_print_control()
+        if system.status in {ComponentStatus.RUNNING, ComponentStatus.WARNING} and not control.print_enabled:
+            await self.start_print()
 
     @_instrumented("stop_system")
     async def stop_system(self) -> None:
@@ -1015,10 +1023,13 @@ class GuiContext:
         self.confirm_action(
             "SET WORK ZERO",
             "Current XY becomes G54 X0 Y0. Z is not zeroed; Z moves use absolute configured values. Use after placing the tool at the upper-left origin.",
-            lambda: self.fluidnc_action(
-                "set work zero", self.supervisor.set_work_zero, success_message="Work zero set"
-            ),
+            self._set_work_zero_then_print,
         )
+
+    async def _set_work_zero_then_print(self) -> None:
+        await self.fluidnc_action("set work zero", self.supervisor.set_work_zero, success_message="Work zero set")
+        if self.supervisor.runtime_store.load_plotter_readiness().work_zero_set:
+            await self._start_print_if_system_running()
 
     def home_xy(self) -> None:
         self.confirm_action(
@@ -1170,10 +1181,7 @@ class GuiContext:
             # ctx.settings holds exactly the last value that DID commit -- persist_and_refresh
             # only ever runs from the success branch below -- so it is the correct value to
             # revert the widget to, with no separate "last known good" bookkeeping needed.
-            # This reassignment re-enters here once (nicegui fires on_value_change from the
-            # value setter itself, not only from a browser event): the other four fields are
-            # unchanged, so the recursive candidate is exactly the last committed set, always
-            # valid, and it terminates there.
+            # The Z fields commit on blur/Enter, so this reassignment does not re-enter.
             fields[key].value = getattr(self.settings, key)
             fields[key].update()
             ui.notify(problems[0], color="negative")

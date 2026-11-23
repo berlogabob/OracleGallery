@@ -1043,12 +1043,10 @@ def test_an_out_of_order_pulse_set_is_refused_and_the_old_value_stays(monkeypatc
 
     old_value = ctx.settings.z_bottom_soft_us
     bad_value = ctx.settings.z_bottom_mech_us + 50
-    # The assignment itself fires the field's on_change (nicegui calls every registered
-    # on_value_change handler from the value setter, not only from a real browser event --
-    # see ValueElement._handle_value_change), exactly as a real edit would. No separate
-    # call is needed, and calling commit_z_position again here would just re-validate the
-    # already-reverted value and report the wrong thing.
+    # Z fields commit on blur/Enter, not per keystroke: typing alone must not commit.
     ctx.fields["z_bottom_soft_us"].value = bad_value
+    assert notices == []
+    ctx.commit_z_position("z_bottom_soft_us")
 
     assert any("mechanical" in n for n in notices)
     # Refused, not clamped: the widget is put back to the last value that DID commit,

@@ -204,13 +204,23 @@ def number_control(
     value: float,
     default: float,
     min_value: float,
+    max_value: float | None = None,
     step: float = 1.0,
     width_class: str = "oracle-field",
     tooltip: str = "",
     on_change: Callable[[], Any],
+    commit_on_blur: bool = False,
 ) -> Any:
-    control = ui.number(label, value=value, min=min_value, step=step).props(_FIELD_PROPS).classes(width_class)
-    control.on_value_change(on_change)
+    control = (
+        ui.number(label, value=value, min=min_value, max=max_value, step=step).props(_FIELD_PROPS).classes(width_class)
+    )
+    if commit_on_blur:
+        # For validated fields: per-keystroke commits see "2" on the way to "2450" and
+        # refuse it, so the operator can never finish typing.
+        control.on("blur", lambda _: on_change())
+        control.on("keydown.enter", lambda _: on_change())
+    else:
+        control.on_value_change(on_change)
     control.on("dblclick", lambda _: _reset_control(control, default, on_change))
     if tooltip:
         control.tooltip(tooltip)

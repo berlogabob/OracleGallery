@@ -519,6 +519,20 @@ def test_set_work_zero_sets_ready_state(tmp_path: Path) -> None:
     assert readiness.plotter_ready is True
 
 
+def test_new_run_keeps_work_zero(tmp_path: Path) -> None:
+    # NEW RUN used to wipe work zero, so START PRINT refused after it (2026-09-25).
+    supervisor = _supervisor(tmp_path)
+    supervisor.runtime_store.save_plotter_readiness(
+        PlotterReadinessState(work_zero_set=True, plotter_ready=True, message="ready")
+    )
+
+    supervisor.reset_run_baseline()
+
+    readiness = supervisor.runtime_store.load_plotter_readiness()
+    assert readiness.work_zero_set is True
+    assert readiness.plotter_ready is True
+
+
 def test_home_recovers_when_fluidnc_closes_connection_during_homing(tmp_path: Path) -> None:
     settings = OracleSupervisorSettings(runtime_db_path=tmp_path / "oracle.sqlite3")
     plotter_settings = _plotter_settings(tmp_path)

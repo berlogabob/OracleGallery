@@ -562,11 +562,15 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
                 value=getattr(settings, key),
                 default=float(GUI_DEFAULTS[key]),
                 min_value=_PULSE_FLOOR_US,
+                # A real number, not .props("max=..."): a string max crashes NiceGUI's
+                # blur-time sanitize and the edit never commits.
+                max_value=_PULSE_CEILING_US,
                 step=1,
                 width_class="w-40",
                 tooltip=tooltip,
                 on_change=on_change,
-            ).props(f"max={_PULSE_CEILING_US}")
+                commit_on_blur=True,
+            )
             safe_action_button("GO TO", lambda key=key: ctx.goto_z_position(key)).tooltip(f"Move the servo to {label}.")
             safe_action_button("SET", lambda key=key: ctx.capture_z_us(key)).tooltip(
                 f"Store the machine's current Z as {label}."
