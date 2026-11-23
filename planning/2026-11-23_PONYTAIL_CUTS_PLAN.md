@@ -43,7 +43,7 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 | | ID | Found in | Issue | Disposition | Done when | Commit |
 |---|---|---|---|---|---|---|
 | [ ] | N1 | T6a | `gui/settings_io.py` itself re-exports `load_symbol_scales` / `save_symbol_scales` from `shared/symbols.py` | MERGE | `grep -n "symbol_scales as" src/neje_oracle/blocks/gui/settings_io.py` = 0; importers use `shared.symbols`; pytest green | |
-| [ ] | N2 | T6a | `python -c "import neje_oracle.blocks.gui.preview"` alone fails with a circular ImportError; present at cb6741d, masked because `support` is always imported first | MERGE (expected to fall out of T6b) | that import exits 0 in a fresh process | |
+| [x] | N2 | T6a | `python -c "import neje_oracle.blocks.gui.preview"` alone fails with a circular ImportError; present at cb6741d, masked because `support` is always imported first | MERGE (expected to fall out of T6b) | that import exits 0 in a fresh process | aacfef4 (import exits 0) |
 
 ## Loop log
 
@@ -56,3 +56,4 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 | 4 | T4 | haiku | pass first try; acceptance pattern corrected by coordinator |
 | 5 | T5 | haiku | pass; line threshold missed by 2 (estimate error, not worker error) |
 | 6a | T6a | haiku | pass (957854a): 6 names re-pointed in 8 files, block deleted, support.py 288 -> 272; 123 tests pass, ruff clean, mypy 12. Raised N1 and N2. |
+| 6b | T6b, N2 | haiku | pass (aacfef4): 4 preview names re-pointed in 3 files, 27-line block deleted, support.py 272 -> 245; all five gui modules import alone; 120 tests pass, ruff clean, mypy 12. N2 closed. |
