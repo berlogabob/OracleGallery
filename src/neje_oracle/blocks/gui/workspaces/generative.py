@@ -16,7 +16,7 @@ from ....blocks.text import shx
 from ....shared.gui_settings import GUI_DEFAULTS
 from .. import ui as oracle
 from ..context import GuiContext
-from ..support import load_gui_settings
+from ..settings_io import load_gui_settings
 from ..ui import card, client_timer, helper_text
 
 STREAM: dict = {"enabled": False, "busy": False}

@@ -9,7 +9,13 @@ from types import SimpleNamespace
 import pytest
 from nicegui.elements.upload_files import SmallFileUpload
 
-from neje_oracle.blocks.gui import support as gui_support
+from neje_oracle.blocks.firebase.queue_status import read_queue_status
+from neje_oracle.blocks.gui.settings_io import (
+    load_gui_settings,
+    load_symbol_scales,
+    save_gui_settings,
+    save_symbol_scales,
+)
 from neje_oracle.blocks.gui.support import (
     GUI_DEFAULTS,
     PREVIEW_PX_PER_MM,
@@ -20,13 +26,9 @@ from neje_oracle.blocks.gui.support import (
     create_direct_svg_print_job_from_gui,
     generate_dry_run_sheet,
     layout_capacity,
-    load_gui_settings,
-    load_symbol_scales,
     read_plotter_status,
     read_upload_content_bytes,
     read_upload_event_payload,
-    save_gui_settings,
-    save_symbol_scales,
 )
 from neje_oracle.shared.config import PlotterSettings
 from neje_oracle.shared.gui_settings import sync_z_from_pulses
@@ -780,7 +782,7 @@ def test_read_queue_status_fetches_on_cold_cache(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(queue_status, "OracleRuntimeStore", lambda _: store)
     monkeypatch.setattr(queue_status, "FirebaseRemoteRepository", lambda _: remote)
 
-    result = gui_support.read_queue_status()
+    result = read_queue_status()
 
     assert result == {"online": True, "total": 3, "runStartedAt": ""}
 
@@ -851,7 +853,8 @@ def test_compute_effective_sample_step_clamps_to_max():
 
 
 def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
-    from neje_oracle.blocks.gui.support import GuiSettings, load_gui_settings, save_gui_settings
+    from neje_oracle.blocks.gui.settings_io import load_gui_settings, save_gui_settings
+    from neje_oracle.blocks.gui.support import GuiSettings
 
     settings_path = tmp_path / "gui_settings.json"
     settings = GuiSettings(

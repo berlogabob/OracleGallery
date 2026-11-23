@@ -245,18 +245,6 @@ def _manifest_item_counts(manifest_path: Path | None) -> dict[str, int]:
     return {"user": user, "idle": idle, "total": len(items)}
 
 
-# Settings persistence moved to settings_io.py; re-exported so callers/tests keep
-# importing from `support`. Imported before preview.py: preview's own
-# `from .support import ...` needs load_symbol_scales already bound here.
-from .settings_io import (  # noqa: E402,F401
-    load_gui_settings,
-    load_symbol_scales,
-    save_gui_settings,
-    save_oracle_plotter_config,
-    save_symbol_scales,
-)
-from ..firebase.queue_status import read_queue_status  # noqa: E402,F401
-
 # Preview-svg rendering moved to preview.py; re-exported so callers/tests keep
 # importing from `support`. Imported last so preview.py's own `from .support
 # import ...` sees a fully-populated module (avoids a circular-import failure).

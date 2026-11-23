@@ -28,7 +28,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from neje_oracle.blocks.gcode.estimate import estimate, limits_for  # noqa: E402
 from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode, svg_to_polylines_mm  # noqa: E402
-from neje_oracle.blocks.gui.support import load_gui_settings  # noqa: E402
+from neje_oracle.blocks.gui.settings_io import load_gui_settings  # noqa: E402
 from neje_oracle.blocks.gui.workspaces.generative import sketch_canvas_mm  # noqa: E402
 from neje_oracle.blocks.imaging.modes import travel_length_mm  # noqa: E402
 from neje_oracle.blocks.patterns import bank  # noqa: E402

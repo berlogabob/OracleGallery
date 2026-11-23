@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from neje_oracle.blocks.gcode.pen_cal import generate_z_range_sheet  # noqa: E402
-from neje_oracle.blocks.gui.support import load_gui_settings  # noqa: E402
+from neje_oracle.blocks.gui.settings_io import load_gui_settings  # noqa: E402
 
 
 def main() -> None:
