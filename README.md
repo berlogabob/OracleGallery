@@ -17,7 +17,7 @@ EchoDraw (by Andrey Dyakov) and Neje Oracle are now one project. EchoDraw contri
 Machine geometry source of truth: [echodraw/hardware/GEOMETRY.md](echodraw/hardware/GEOMETRY.md).
 
 - **Module 1 — Hardware/FluidNC plotter:** superseded by the working plotter stack here; hardware docs, FluidNC config, pen-holder designs and BOM are in `echodraw/hardware/` and `echodraw/bom/`.
-- **Module 2 — Generative core** (p5.js pattern generator): live, embedded as the `SKETCH` mode of the operator GUI's `CREATE` screen. Webcam/ML-driven generation is still a roadmap item; the reserved block for it is `src/neje_oracle/blocks/realtime_preview/`. See "Pattern generator, line text, and image-to-line-art" below.
+- **Module 2 — Generative core** (p5.js pattern generator): live, embedded as the `SKETCH` mode of the operator GUI's `CREATE` screen. Webcam/ML-driven generation is still a roadmap item. See "Pattern generator, line text, and image-to-line-art" below.
 - **Module 3 — Flutter wrapper:** covered by the existing `public_gallery/` Flutter app.
 
 ## Pattern generator, line text, and image-to-line-art
@@ -214,7 +214,6 @@ Day-to-day start/operate docs:
 
 Subsystem/module docs:
 - `src/neje_oracle/blocks/README.md` — modular-monolith block architecture and import/dependency rules.
-- `src/neje_oracle/blocks/realtime_preview/README.md` — status of the live drawing preview block (future home for webcam/ML generative work).
 - `public_gallery/README.md` — Flutter Web public gallery: responsibilities, build, routes.
 - `echodraw/README.md` — what's curated from the original EchoDraw project and where it lives.
 - `echodraw/hardware/README.md` / `echodraw/hardware/GEOMETRY.md` — NEJE hardware spec; GEOMETRY.md is the single source of truth for machine dimensions.

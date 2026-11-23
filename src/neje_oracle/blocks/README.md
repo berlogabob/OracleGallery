@@ -26,7 +26,6 @@ and exposes a small import surface through its package and service modules.
 - `thermal_printer`: thermal autoprint and ESP32 receipt-printer integration.
 - `plotter`: plotter daemon loop, sheet materialization, and progress tracking.
 - `gui`: NiceGUI shell, GUI components, workspaces, modes, and UI state.
-- `realtime_preview`: target home for live drawing preview projection.
 
 `public_gallery/` remains the Flutter source app. `docs/` remains the committed
 GitHub Pages build output and should only change when the Flutter app or its web
