@@ -2,8 +2,8 @@ import json
 from pathlib import Path
 
 from neje_oracle.app.supervisor import SupervisorService
-from neje_oracle.blocks.gui.support import GuiSettings
 from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings
+from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.models import (
     ComponentStatus,
     FluidNCCommandResult,

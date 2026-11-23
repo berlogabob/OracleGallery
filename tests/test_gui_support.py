@@ -10,6 +10,9 @@ import pytest
 from nicegui.elements.upload_files import SmallFileUpload
 
 from neje_oracle.blocks.firebase.queue_status import read_queue_status
+from neje_oracle.blocks.gcode.direct_svg import create_direct_svg_print_job_from_gui
+from neje_oracle.blocks.gcode.dry_run import generate_dry_run_sheet
+from neje_oracle.blocks.gcode.layout import layout_capacity
 from neje_oracle.blocks.gui.preview import PREVIEW_PX_PER_MM, build_preview_svg, build_realtime_preview_svg
 from neje_oracle.blocks.gui.settings_io import (
     load_gui_settings,
@@ -18,18 +21,13 @@ from neje_oracle.blocks.gui.settings_io import (
     save_symbol_scales,
 )
 from neje_oracle.blocks.gui.support import (
-    GUI_DEFAULTS,
-    GuiSettings,
     _field_or_default,
-    create_direct_svg_print_job_from_gui,
-    generate_dry_run_sheet,
-    layout_capacity,
     read_plotter_status,
     read_upload_content_bytes,
     read_upload_event_payload,
 )
 from neje_oracle.shared.config import PlotterSettings
-from neje_oracle.shared.gui_settings import sync_z_from_pulses
+from neje_oracle.shared.gui_settings import GUI_DEFAULTS, GuiSettings, sync_z_from_pulses
 from neje_oracle.shared.models import RuntimeStatus, SystemMode
 
 SIMPLE_SYMBOL = (
@@ -786,7 +784,7 @@ def test_read_queue_status_fetches_on_cold_cache(monkeypatch: pytest.MonkeyPatch
 
 
 def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter():
-    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gcode.sampling import compute_effective_sample_step as fn
 
     result = fn(
         sample_step_mm=1.0,
@@ -800,7 +798,7 @@ def test_compute_effective_sample_step_defaults_to_sample_step_at_ref_diameter()
 
 
 def test_compute_effective_sample_step_bigger_cell_denser_gcode():
-    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gcode.sampling import compute_effective_sample_step as fn
 
     ref_result = fn(
         sample_step_mm=1.0,
@@ -823,7 +821,7 @@ def test_compute_effective_sample_step_bigger_cell_denser_gcode():
 
 
 def test_compute_effective_sample_step_clamps_to_min():
-    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gcode.sampling import compute_effective_sample_step as fn
 
     result = fn(
         sample_step_mm=0.1,
@@ -837,7 +835,7 @@ def test_compute_effective_sample_step_clamps_to_min():
 
 
 def test_compute_effective_sample_step_clamps_to_max():
-    from neje_oracle.blocks.gui.support import compute_effective_sample_step as fn
+    from neje_oracle.blocks.gcode.sampling import compute_effective_sample_step as fn
 
     result = fn(
         sample_step_mm=5.0,
@@ -852,7 +850,7 @@ def test_compute_effective_sample_step_clamps_to_max():
 
 def test_gui_optimisation_settings_persist_and_load(tmp_path: Path):
     from neje_oracle.blocks.gui.settings_io import load_gui_settings, save_gui_settings
-    from neje_oracle.blocks.gui.support import GuiSettings
+    from neje_oracle.shared.gui_settings import GuiSettings
 
     settings_path = tmp_path / "gui_settings.json"
     settings = GuiSettings(
@@ -897,7 +895,7 @@ def test_gui_optimisation_settings_preserve_zero_xy_acceleration(tmp_path: Path)
 
 
 def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
-    from neje_oracle.blocks.gui.support import GuiSettings, gui_settings_to_plotter_config
+    from neje_oracle.shared.gui_settings import GuiSettings, gui_settings_to_plotter_config
     from neje_oracle.shared.models import PlotterRuntimeConfig
 
     settings = GuiSettings(
@@ -932,10 +930,8 @@ def test_gui_settings_to_plotter_config_carries_optimisation(tmp_path: Path):
 
 
 def test_dry_run_manifest_includes_optimisation_settings(tmp_path: Path):
-    from neje_oracle.blocks.gui.support import (
-        GuiSettings,
-        generate_dry_run_sheet,
-    )
+    from neje_oracle.blocks.gcode.dry_run import generate_dry_run_sheet
+    from neje_oracle.shared.gui_settings import GuiSettings
 
     symbol_root = tmp_path / "symbols"
     symbol_root.mkdir()

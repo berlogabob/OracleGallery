@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from neje_oracle.blocks.gcode.direct_svg import create_direct_svg_print_job_from_gui
 from neje_oracle.blocks.gcode.svg_gcode import generate_absolute_svg_gcode
-from neje_oracle.blocks.gui.support import GuiSettings, create_direct_svg_print_job_from_gui
 from neje_oracle.shared.config import PlotterSettings
+from neje_oracle.shared.gui_settings import GuiSettings
 
 
 def test_oversized_svg_is_refused_x_axis(tmp_path: Path) -> None:

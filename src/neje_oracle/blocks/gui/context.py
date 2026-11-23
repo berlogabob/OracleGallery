@@ -24,13 +24,17 @@ from nicegui import run, ui
 from ...app.supervisor import SupervisorService
 from ...shared import telemetry
 from ...shared.config import ensure_dir
-from ...shared.gui_settings import z_pulse_range
+from ...shared.gui_settings import GUI_DEFAULTS, gui_settings_to_plotter_config, z_pulse_range
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
 from ...shared.modes import mode_policy
 from ...shared.origin_markers import ALL_ORIGINS
+from ...shared.symbols import list_base_symbols
 from ...shared.z_positions import ZPositions, pulse_for_z, real_mm_between, z_for_pulse
 from ..firebase.queue_status import read_queue_status
-from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
+from ..gcode.dry_run import generate_dry_run_sheet
+from ..gcode.layout import layout_capacity
+from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_pen_cal_sheet, generate_z_range_sheet, outline_gcode
+from ..gcode.sampling import compute_effective_sample_step
 from .preview import build_preview_svg, build_realtime_preview_svg
 from .settings_io import (
     load_gui_settings,
@@ -40,14 +44,7 @@ from .settings_io import (
     save_symbol_scales,
 )
 from .support import (
-    GUI_DEFAULTS,
     _field_or_default,
-    compute_effective_sample_step,
-    generate_dry_run_sheet,
-    generate_pen_cal_sheet,
-    gui_settings_to_plotter_config,
-    layout_capacity,
-    list_base_symbols,
     read_plotter_status,
     read_upload_event_payload,
 )

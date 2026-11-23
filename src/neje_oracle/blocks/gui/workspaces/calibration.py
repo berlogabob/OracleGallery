@@ -11,7 +11,7 @@ from typing import Any
 
 from nicegui import ui
 
-from ....shared.gui_settings import NumericGuiDefaultKey
+from ....shared.gui_settings import GUI_DEFAULTS, NumericGuiDefaultKey
 from ....shared.materials import (
     apply_material,
     capture_material,
@@ -32,7 +32,6 @@ from ....shared.pen_profiles import (
 )
 from ....shared.z_positions import is_measured, mm_per_us, real_mm_between
 from ..context import GuiContext
-from ..support import GUI_DEFAULTS
 from ..ui import (
     Section,
     card,

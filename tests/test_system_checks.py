@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from neje_oracle.app.system_checks import SystemCheckService
-from neje_oracle.blocks.gui.support import GuiSettings
 from neje_oracle.shared.config import FirebaseSettings, OracleSupervisorSettings, PlotterSettings, UploaderSettings
+from neje_oracle.shared.gui_settings import GuiSettings
 from neje_oracle.shared.models import SystemCheckLevel, SystemMode
 
 

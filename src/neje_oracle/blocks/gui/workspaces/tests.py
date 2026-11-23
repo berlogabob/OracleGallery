@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from nicegui import ui
 
+from ....shared.gui_settings import GUI_DEFAULTS
 from ...gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM
 from ..context import GuiContext
-from ..support import GUI_DEFAULTS
 from ..ui import (
     card,
     file_upload,

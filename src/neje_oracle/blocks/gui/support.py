@@ -1,5 +1,3 @@
-# ruff: noqa: I001 - import order here is load-bearing: the bottom-of-file
-# settings_io/preview imports break a real cycle and must stay last.
 from __future__ import annotations
 
 import contextlib
@@ -12,47 +10,11 @@ from pathlib import Path
 from typing import Any, Protocol, cast
 
 from ...shared.config import OracleSupervisorSettings, PlotterSettings, _repo_root
-from ...shared.gui_settings import (
-    GUI_DEFAULTS as GUI_DEFAULTS,
-)
-from ...shared.gui_settings import (
-    GuiSettings as GuiSettings,
-)
-from ...shared.gui_settings import (
-    NumericGuiDefaultKey,
-)
-from ...shared.gui_settings import (
-    _repair_xy_acceleration as _repair_xy_acceleration,
-)
-from ...shared.gui_settings import (
-    gui_settings_to_plotter_config as gui_settings_to_plotter_config,
-)
+from ...shared.gui_settings import GUI_DEFAULTS, GuiSettings, NumericGuiDefaultKey
 from ...shared.store import OracleRuntimeStore, PlotterStore
+from ..gcode.direct_svg import build_svg_gcode
 from ..gcode.estimate import estimate, limits_for
 from ..imaging.modes import Polylines, polylines_to_svg
-from ...shared.symbols import (
-    default_idle_root as default_idle_root,
-)
-from ...shared.symbols import (
-    default_scale_config_path as default_scale_config_path,
-)
-from ...shared.symbols import (
-    default_symbol_root as default_symbol_root,
-)
-from ...shared.symbols import (
-    list_base_symbols as list_base_symbols,
-)
-from ...shared.symbols import (
-    list_fillable_symbols as list_fillable_symbols,
-)
-from ..gcode.direct_svg import DirectSvgPrintJob as DirectSvgPrintJob
-from ..gcode.direct_svg import build_svg_gcode
-from ..gcode.direct_svg import create_direct_svg_print_job_from_gui as create_direct_svg_print_job_from_gui
-from ..gcode.dry_run import generate_dry_run_sheet as generate_dry_run_sheet
-from ..gcode.pen_cal import generate_pen_cal_sheet as generate_pen_cal_sheet
-from ..gcode.layout import _build_layout_for_settings as _build_layout_for_settings
-from ..gcode.layout import layout_capacity as layout_capacity
-from ..gcode.sampling import compute_effective_sample_step as compute_effective_sample_step
 
 
 class _NumericField(Protocol):
