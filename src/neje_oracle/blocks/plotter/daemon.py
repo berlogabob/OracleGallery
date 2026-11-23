@@ -124,6 +124,9 @@ class PlotterDaemon:
         # so the simulation runs once per blob instead of once per line.
         self._stream_line_times: list[float] = []
         self._stream_sent_indices: list[int] = []
+        # Rows already on the paper: the next sheet starts after them, once. Set by
+        # scripts/continue_sheet.py to finish a sheet the operator stopped part-way.
+        self.skip_rows_once = 0
         ensure_dir(self.settings.placeholder_root)
         ensure_dir(self.settings.spool_root)
 
@@ -293,9 +296,14 @@ class PlotterDaemon:
                 return
             rows_printed, cells_completed, last_gcode_path = stream_result
         else:
+            skip_rows, self.skip_rows_once = self.skip_rows_once, 0
             for row_index, row_placements in enumerate(layout_rows, start=1):
                 if self.stop_event.is_set():
                     return
+                if row_index <= skip_rows:
+                    rows_printed += 1
+                    cells_completed += len(row_placements)
+                    continue
                 control = self._load_control_state()
                 if not control.print_enabled:
                     self._set_state(RuntimeStatus.OPERATOR_PAUSED, "Print paused by operator mid-sheet")

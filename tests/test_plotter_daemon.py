@@ -958,3 +958,38 @@ def test_plotter_pen_up_and_pauses_when_stream_stops_mid_row(tmp_path: Path) -> 
     assert daemon.get_state().status == RuntimeStatus.OPERATOR_PAUSED
     assert any(any(cmd.startswith("G0 Z") for cmd in batch) for batch in transport.command_batches)
     assert transport.soft_resets == 0
+
+
+def test_plotter_skips_rows_already_on_paper_once(tmp_path: Path) -> None:
+    placeholder_root = tmp_path / "placeholders"
+    placeholder_root.mkdir(parents=True)
+    (placeholder_root / "idle.svg").write_text(SVG, encoding="utf-8")
+    settings = _settings(tmp_path)
+    oracle_store = _seeded_oracle_store(
+        tmp_path, sheet_width_mm=80, sheet_height_mm=240, sheet_margin_mm=0, cell_diameter_mm=80, layout_mode="grid"
+    )
+    oracle_store.save_print_control(
+        PlotterControlState(print_enabled=True, operator_paused=False, run_mode="test", dry_run=True)
+    )
+    rows: list[str] = []
+
+    class RecordingTransport:
+        def send(self, *, gcode, sheet_id, dry_run, progress_callback, should_stop=None):
+            rows.append(sheet_id)
+            path = settings.spool_root / f"{sheet_id}.gcode"
+            path.write_text(gcode, encoding="utf-8")
+            return path
+
+    daemon = PlotterDaemon(
+        settings,
+        PlotterStore(settings.db_path),
+        FakeRemoteRepository(),
+        RecordingTransport(),
+        oracle_store=oracle_store,
+    )  # type: ignore[arg-type]
+    daemon.skip_rows_once = 2
+
+    daemon.run_cycle()
+
+    assert [name.rsplit("_row_", 1)[1] for name in rows if "_row_" in name] == ["03"]
+    assert daemon.skip_rows_once == 0
