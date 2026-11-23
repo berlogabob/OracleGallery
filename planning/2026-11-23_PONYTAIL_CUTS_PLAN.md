@@ -25,7 +25,7 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 | [x] | T3 | Delete duplicate `assets/WebsiteWireframe/Oracle Website Wireframes _standalone_.html` | DELETE | surviving copy md5 `bb1a4d0f02fb3be88b3e52f39ca7c384`; no reference to removed name | f63dd50 | 29836 (0) | kept copy md5 bb1a4d0f02fb3be88b3e52f39ca7c384; outer gone; 0 references outside this tracker |
 | [x] | T4 | Remove `gui/modes.py`; importers use `shared.modes` | MERGE | file gone; `grep -rnE "gui\.modes\|from \.modes" src tests scripts` = 0; pytest green | 2a416f5 | 29821 (-15) | file gone; gui.modes grep 0; 'from .modes' in blocks/gui 0 (check scoped to blocks/gui: the original pattern also matched imaging/modes and shared/modes importers); ruff clean; mypy 12; tests passed |
 | [x] | T5 | Collapse `mode_policy()` to one return | MERGE | `test_gui_modes.py`, `test_system_checks.py` pass unedited; `shared/modes.py` <= 50 lines | a52e599 | 29813 (-8) | tests pass unedited; ruff clean; modes.py 52 lines, not <= 50: the threshold was the coordinator's miscount, the specified shape yields 52 (was 60). Accepted at 52. |
-| [ ] | T6 | Remove `gui/support.py` re-export shim (sub-commits a, b, c) | MERGE | `grep -c "noqa: E402" support.py` = 0; `support.py` <= 215 lines; pytest, ruff green; mypy <= 12 | | | |
+| [x] | T6 | Remove `gui/support.py` re-export shim (sub-commits a, b, c) | MERGE | `grep -c "noqa: E402" support.py` = 0; `support.py` <= 215 lines; pytest, ruff green; mypy <= 12 | 957854a, aacfef4, 918cce2 | 29730 (-83) | noqa count 0; support.py 207 lines (<= 215); 5 gui modules import alone; full suite 846 passed; ruff clean; mypy 12 |
 | [ ] | T7 | `git mv ESP32-BTN_Printer/Grok-*.json archive/` | HIDE | no reference to old paths | | | |
 
 ## Marked for decision (no action taken)
@@ -57,3 +57,4 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 | 5 | T5 | haiku | pass; line threshold missed by 2 (estimate error, not worker error) |
 | 6a | T6a | haiku | pass (957854a): 6 names re-pointed in 8 files, block deleted, support.py 288 -> 272; 123 tests pass, ruff clean, mypy 12. Raised N1 and N2. |
 | 6b | T6b, N2 | haiku | pass (aacfef4): 4 preview names re-pointed in 3 files, 27-line block deleted, support.py 272 -> 245; all five gui modules import alone; 120 tests pass, ruff clean, mypy 12. N2 closed. |
+| 6c | T6 | haiku | pass: 16 names re-pointed in 10 files, imports only. Worker ran rm -f on a mistyped path in the main checkout (.mypy_tail.txt); main checkout git status verified identical to session start. |
