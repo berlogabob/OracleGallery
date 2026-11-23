@@ -433,9 +433,6 @@ class FirebaseRemoteRepository:
         )
         return svg_url
 
-    def public_storage_url(self, storage_path: str, *, version: str | None = None) -> str:
-        return self._public_storage_url(storage_path, version=version)
-
     def _public_storage_url(self, storage_path: str, *, version: str | None = None) -> str:
         encoded_path = quote(storage_path, safe="")
         url = f"https://firebasestorage.googleapis.com/v0/b/{self.settings.storage_bucket}/o/{encoded_path}?alt=media"

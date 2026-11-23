@@ -72,10 +72,6 @@ def default_gui_settings_path() -> Path:
     return Path(os.getenv("NEJE_GUI_SETTINGS_PATH", str(_repo_root() / "runtime" / "gui_settings.json")))
 
 
-def default_filler_package_root() -> Path:
-    return _repo_root() / "assets" / "generated_filler_sessions"
-
-
 def read_upload_content_bytes(content: Any) -> bytes:
     if isinstance(content, bytes):
         return content

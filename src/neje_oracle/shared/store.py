@@ -416,10 +416,6 @@ class OracleRuntimeStore(_SQLiteStore):
     def save_system_mode(self, mode: SystemMode) -> None:
         self.save_json("system_mode", {"mode": mode.value, "updated_at": datetime.now(tz=UTC).isoformat()})
 
-    def load_system_mode(self, default: SystemMode = SystemMode.EXHIBITION) -> SystemMode:
-        payload = self.load_json("system_mode", {"mode": default.value})
-        return SystemMode(payload.get("mode", default.value))
-
     def save_system_check_result(self, result: SystemCheckResult) -> None:
         self.save_json("system_check_result", result.to_dict())
 

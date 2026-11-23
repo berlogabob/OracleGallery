@@ -26,10 +26,8 @@ from PIL import Image, UnidentifiedImageError
 
 from .modes import (
     MAX_SEGMENTS_DEFAULT,
-    PEN_WIDTH_MM_DEFAULT,
     Polylines,
     ToneGrid,
-    polylines_to_svg,
     tone_to_polylines,
 )
 
@@ -960,19 +958,6 @@ def texture_to_polylines(
 ) -> Polylines:
     tone = evaluate(graph, width_mm=width_mm, height_mm=height_mm, cell_mm=cell_mm, seed=seed)
     return tone_to_polylines(tone, mode=mode, max_segments=max_segments, min_stroke_mm=min_stroke_mm, **params)
-
-
-def texture_to_svg(
-    graph: TextureGraph | Mapping[str, Any],
-    *,
-    mode: str,
-    width_mm: float,
-    height_mm: float,
-    pen_width_mm: float = PEN_WIDTH_MM_DEFAULT,
-    **kwargs: Any,
-) -> str:
-    polylines = texture_to_polylines(graph, mode=mode, width_mm=width_mm, height_mm=height_mm, **kwargs)
-    return polylines_to_svg(polylines, width_mm=width_mm, height_mm=height_mm, pen_width_mm=pen_width_mm)
 
 
 # ---------------------------------------------------------------------------
