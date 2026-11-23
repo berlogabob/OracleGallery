@@ -32,17 +32,19 @@ the approved plan of 2026-11-23; dispositions are mirrored in `DISPOSITION_REGIS
 
 | ID | Item | Why it is not cut |
 |---|---|---|
-| M1 | `ESP32_BTN_Printer.ino` (942 lines) vs `ESP32_PrinterOnly.ino` | 29 of 64 functions overlap by name; which sketch is flashed is a hardware fact, not a code fact |
-| M2 | Test-only production functions: `is_printing`, `check_connection`, `parse_cell_progress_markers`, `preview_svg` (image.py), `_triangle_area`, `image_to_svg`, `png_to_field`, `image_to_motif_svg`, `text_svg`, `rename_material`, `get_session` | Tested capability; not certainly dead |
+| M1 | `ESP32_BTN_Printer.ino` (942 lines) vs `ESP32_PrinterOnly.ino` | 29 of 64 functions overlap by name; which sketch is flashed is a hardware fact, not a code fact || M1 | `ESP32_BTN_Printer.ino` (942 lines) vs `ESP32_PrinterOnly.ino` | 29 of 64 functions overlap by name; which sketch is flashed is a hardware fact, not a code fact **Resolved: KEEP.** README documents it as the only sketch with the button and UDP START; PrinterOnly is the protocol-finding tool. |
+| M2 | Test-only production functions: `is_printing`, `check_connection`, `parse_cell_progress_markers`, `preview_svg` (image.py), `_triangle_area`, `image_to_svg`, `png_to_field`, `image_to_motif_svg`, `text_svg`, `rename_material`, `get_session` | Tested capability; not certainly dead **Reviewed: 10 KEEP, 1 cut (N4).** Kept: public conveniences (`image_to_svg`, `text_svg`, `image_to_motif_svg`, `png_to_field`), test oracles (`parse_cell_progress_markers`, `_triangle_area`, `get_session`), guarded write (`rename_material`), `preview_svg`, `is_printing`. Note: `tests/test_gui_workspaces.py:653,671` monkeypatch `supervisor.is_printing`, which no production code calls, so those patches do nothing. |
 | M3 | `capture_z` in `gui/context.py` | Hardware path with one other reference |
 | M4 | `ModePolicy.dry_run` / `real_output_required` are constant across modes | Removing them changes a public shape |
 | M5 | 4-line `start_*.command` wrappers | Referenced by launcher installers; 8 lines |
-| M6 | 4 of the 12 baseline mypy errors: `gui/context.py` ~284-288 reads `motif_gamma`, `motif_autocontrast`, `motif_invert`, which `GuiSettings` does not declare | Correctness, outside an over-engineering audit; needs a normal review. Present at cb6741d. |
+| M6 | 4 of the 12 baseline mypy errors: `gui/context.py` ~284-288 reads `motif_gamma`, `motif_autocontrast`, `motif_invert`, which `GuiSettings` does not declare | Correctness, outside an over-engineering audit; needs a normal review. Present at cb6741d. **Closed by N3.** |
 
 ## New issues found during the loops
 
 | | ID | Found in | Issue | Disposition | Done when | Commit |
 |---|---|---|---|---|---|---|
+| [x] | N3 | M6 review | Six lines in `gui/context.py` read `motif_gamma` / `motif_autocontrast` / `motif_invert`; bc0c9ca removed those settings and their controls, so the lines were unreachable | DELETE | grep for the three names = 0; mypy 12 -> 8 | 57a6639 |
+| [x] | N4 | M2 review | `check_connection` in `fluidnc/transport.py`: no caller; its only test reference was an uncalled method on a fake | DELETE | `grep -rnw check_connection src tests scripts ESP32-BTN_Printer` = 0; 177 tests pass | 57a6639 |
 | [x] | N1 | T6a | `gui/settings_io.py` itself re-exports `load_symbol_scales` / `save_symbol_scales` from `shared/symbols.py` | MERGE | `grep -n "symbol_scales as" src/neje_oracle/blocks/gui/settings_io.py` = 0; importers use `shared.symbols`; pytest green | e27da2f (grep 0; 92 tests; 5 gui modules import alone) |
 | [x] | N2 | T6a | `python -c "import neje_oracle.blocks.gui.preview"` alone fails with a circular ImportError; present at cb6741d, masked because `support` is always imported first | MERGE (expected to fall out of T6b) | that import exits 0 in a fresh process | aacfef4 (import exits 0) |
 
@@ -71,3 +73,4 @@ one duplicate asset removed, two files moved to `archive/`. `gui.preview` now im
 
 Estimates that were off: the plan said about -130 src lines (actual -147), dead-code hits 19 to 15 (actual 20 to 16), and
 `shared/modes.py` <= 50 lines (actual 52).
+| 10 | N3, N4 | haiku | pass (57a6639): 13 lines removed in 3 files; mypy 12 -> 8; 177 tests pass. M1 resolved KEEP from the firmware README; M2 reviewed. |
