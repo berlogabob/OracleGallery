@@ -26,10 +26,10 @@ from ...shared import telemetry
 from ...shared.config import ensure_dir
 from ...shared.gui_settings import z_pulse_range
 from ...shared.models import ComponentStatus, RuntimeStatus, SystemCheckLevel, SystemMode
+from ...shared.modes import mode_policy
 from ...shared.origin_markers import ALL_ORIGINS
 from ...shared.z_positions import ZPositions, pulse_for_z, real_mm_between, z_for_pulse
 from ..gcode.pen_cal import Z_ABSOLUTE_FLOOR_MM, generate_z_range_sheet, outline_gcode
-from .modes import mode_policy
 from .support import (
     GUI_DEFAULTS,
     _field_or_default,
