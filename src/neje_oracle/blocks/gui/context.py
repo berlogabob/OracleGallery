@@ -280,12 +280,6 @@ class GuiContext:
             settings.motif_mode = str(control.value)
         if (control := fields.get("motif_cell_mm")) is not None:
             settings.motif_cell_mm = float(control.value or GUI_DEFAULTS["motif_cell_mm"])
-        if (control := fields.get("motif_gamma")) is not None:
-            settings.motif_gamma = float(control.value or GUI_DEFAULTS["motif_gamma"])
-        if (control := fields.get("motif_autocontrast")) is not None:
-            settings.motif_autocontrast = bool(control.value)
-        if (control := fields.get("motif_invert")) is not None:
-            settings.motif_invert = bool(control.value)
         if (control := fields.get("motif_despeckle_mm")) is not None:
             # Same zero-is-meaningful case: 0 mm is "keep every speck".
             settings.motif_despeckle_mm = float(

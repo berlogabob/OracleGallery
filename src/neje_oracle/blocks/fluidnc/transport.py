@@ -195,10 +195,6 @@ class FluidNCTransport:
         result.message = self._probe_message(result)
         return result
 
-    def check_connection(self, *, timeout_seconds: float = 2.0) -> tuple[bool, str]:
-        probe = self.probe(timeout_seconds=timeout_seconds)
-        return probe.online, probe.message
-
     def send_command(
         self, command: str, *, wait_for_ok: bool = True, timeout_seconds: float | None = None
     ) -> FluidNCCommandResult:

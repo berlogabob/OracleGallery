@@ -39,9 +39,6 @@ class DryTransport:
         self.settings = settings
         self.commands: list[str] = []
 
-    def check_connection(self, *, timeout_seconds: float = 2.0):
-        return True, "fake fluidnc online"
-
     def probe(self, *, timeout_seconds: float = 2.0):
         return FluidNCProbeResult(
             http_online=True,
