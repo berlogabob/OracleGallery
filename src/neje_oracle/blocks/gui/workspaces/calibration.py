@@ -534,7 +534,7 @@ def _build_z_positions_card(ctx: GuiContext) -> None:
         control = fields.get(key)
         return float(control.value if control is not None else getattr(ctx.settings, key)) or 0.0
 
-    def build_row(key: str, label: str, tooltip: str) -> None:
+    def build_row(key: NumericGuiDefaultKey, label: str, tooltip: str) -> None:
         with toolbar(full_width=True):
             real_label = mini_metric("mm")
 
@@ -702,6 +702,12 @@ def _build_material_row(ctx: GuiContext, on_change: Callable[[], None]) -> None:
             label="On the bed",
             on_change=lambda event: apply_named(str(event.value or "")),
         )
+
+        def thickness_changed() -> None:
+            settings.z_material_mm = float(ctx.fields["z_material_mm"].value or 0.0)
+            ctx.persist_and_refresh()
+            on_change()
+
         thickness_field = number_control(
             ctx.fields,
             "z_material_mm",
@@ -712,11 +718,7 @@ def _build_material_row(ctx: GuiContext, on_change: Callable[[], None]) -> None:
             step=0.1,
             width_class="w-36",
             tooltip="How much the bed has risen. Drawing and pen load lift by this much; pen-up does not.",
-            on_change=lambda: (
-                setattr(settings, "z_material_mm", float(ctx.fields["z_material_mm"].value or 0.0)),
-                ctx.persist_and_refresh(),
-                on_change(),
-            ),
+            on_change=thickness_changed,
         )
         name_input = ui.input("Save as", value=settings.z_material).props("dense outlined").classes("w-36")
 

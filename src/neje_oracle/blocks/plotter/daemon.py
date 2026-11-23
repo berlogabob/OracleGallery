@@ -532,7 +532,7 @@ class PlotterDaemon:
             if now - last["checked_at"] >= 0.5:
                 last["checked_at"] = now
                 last["stop"] = not self._load_control_state().print_enabled
-            return last["stop"]
+            return bool(last["stop"])
 
         return should_stop
 

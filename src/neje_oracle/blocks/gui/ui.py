@@ -490,6 +490,8 @@ def render_card(
                 while True:
                     pending["dirty"] = False
                     outcome = await run.io_bound(compute)
+                    if outcome is None:  # app is shutting down; nothing to show
+                        return
                     if not pending["dirty"]:  # stale results are dropped, not flashed
                         apply(outcome)
                         return
@@ -511,7 +513,9 @@ def render_card(
             # A refresh still running means handle.svg belongs to the previous knob values;
             # printing it would put the old size on paper. Wait for the current values instead.
             if pending["busy"] or not handle.svg:
-                apply(await run.io_bound(compute))
+                outcome = await run.io_bound(compute)
+                if outcome is not None:
+                    apply(outcome)
             if not handle.svg:
                 ui.notify("Nothing to print yet.", color="warning")
                 return False

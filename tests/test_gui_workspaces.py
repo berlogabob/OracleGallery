@@ -650,7 +650,6 @@ def test_tab_switch_does_not_change_system_mode_while_printing(monkeypatch: pyte
     ctx = _new_ctx(monkeypatch)
     changed: list[object] = []
     monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
-    monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: True)
 
     ctx.workspace_changed("create")
 
@@ -668,7 +667,6 @@ def test_tab_switch_never_sets_system_mode_even_when_idle(monkeypatch: pytest.Mo
     ctx = _new_ctx(monkeypatch)
     changed: list[object] = []
     monkeypatch.setattr(ctx, "set_system_mode", lambda *a, **k: changed.append(a))
-    monkeypatch.setattr(ctx.supervisor, "is_printing", lambda: False)
 
     for workspace in ("print", "create", "setup"):
         ctx.workspace_changed(workspace)

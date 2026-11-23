@@ -197,7 +197,7 @@ def _build_ramp() -> tuple[tuple[float, tuple[Glyph, ...]], ...]:
     for glyph in _alphabet():
         ink = round(sum(_stroke_length(stroke) for stroke in glyph), _INK_ROUND)
         buckets.setdefault(ink, []).append(glyph)
-    return tuple(sorted(buckets.items()))
+    return tuple(sorted((ink, tuple(glyphs)) for ink, glyphs in buckets.items()))
 
 
 def _pick_glyph(
