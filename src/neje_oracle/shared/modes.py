@@ -24,22 +24,14 @@ class ModePolicy:
 
 def mode_policy(mode: SystemMode | str) -> ModePolicy:
     resolved = SystemMode(mode)
-    if resolved == SystemMode.TEST:
-        return ModePolicy(
-            mode=resolved,
-            label=MODE_LABELS[resolved],
-            run_mode="test",
-            dry_run=False,
-            real_output_required=True,
-            firebase_required=False,
-        )
+    is_test = resolved == SystemMode.TEST
     return ModePolicy(
         mode=resolved,
         label=MODE_LABELS[resolved],
-        run_mode="exhibition",
+        run_mode="test" if is_test else "exhibition",
         dry_run=False,
         real_output_required=True,
-        firebase_required=True,
+        firebase_required=not is_test,
     )
 
 
